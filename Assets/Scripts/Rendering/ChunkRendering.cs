@@ -44,5 +44,37 @@ public class ChunkRendering : MonoBehaviour
         meshRenderer.sharedMaterial = Resources.Load<Material>("Materials/AtlasMaterial");
     }
 
+    // modified chunk of your ChunkRendering class
+    public void ApplyMeshData(MeshData meshData)
+    {
+        if (meshData == null) return;
+
+        var renderMesh = new Mesh();
+        renderMesh.Clear();
+        renderMesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+        renderMesh.SetVertices(meshData.vertices);
+        renderMesh.SetTriangles(meshData.triangles, 0);
+        renderMesh.SetUVs(0, meshData.uvs);
+        renderMesh.SetUVs(1, meshData.uvMeta);
+        renderMesh.RecalculateNormals();
+        renderMesh.RecalculateTangents();
+        renderMesh.RecalculateBounds();
+
+        meshFilter.sharedMesh = renderMesh;
+
+        var colliderMesh = new Mesh();
+        colliderMesh.Clear();
+        colliderMesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+        colliderMesh.SetVertices(meshData.colliderVertices);
+        colliderMesh.SetTriangles(meshData.colliderTriangles, 0);
+        colliderMesh.RecalculateNormals();
+        colliderMesh.RecalculateTangents();
+        colliderMesh.RecalculateBounds();
+
+        meshCollider.sharedMesh = colliderMesh;
+
+        meshRenderer.sharedMaterial = Resources.Load<Material>("Materials/AtlasMaterial");
+    }
+
     
 }

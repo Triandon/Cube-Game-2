@@ -22,56 +22,7 @@ namespace Core
         {
             meshGenerator = new ChunkMeshGenerator();
         }
-
-        public void GenerateTestData()
-        {
-            // Initialize the blocks array
-            blocks = new byte[CHUNK_SIZE, CHUNK_SIZE, CHUNK_SIZE];
         
-            //If chunk is over y 0 then it should be empty
-            if (coord.y > 0)
-            {
-                return;
-            }
-        
-            //List of all blocks
-            List<Block.Block> blockList = new List<Block.Block>
-            {
-                BlockRegistry.GetBlock("Grass_Block"),
-                BlockRegistry.GetBlock("Dirt_Block"),
-                BlockRegistry.GetBlock("Stone_Block")
-            };
-
-            int totalBlocks = blockList.Count;
-            System.Random random = new Random();
-
-            for(int x = 0; x < CHUNK_SIZE; x++)
-            for(int y = 0; y < CHUNK_SIZE; y++)
-            for(int z = 0; z < CHUNK_SIZE; z++)
-            {
-                if (y == 0)
-                {
-                    blocks[x, y, z] = BlockRegistry.GetBlock("Stone_Block").id;
-                }
-                else if(y < 11)
-                {
-                    bool placeBlock = random.NextDouble() < 0.99f;
-                    if (placeBlock)
-                    {
-                        Block.Block randomBlock = blockList[random.Next(totalBlocks)];
-                        blocks[x, y, z] = randomBlock.id;
-                    }
-                    else
-                    {
-                        blocks[x, y, z] = 0;
-                    }
-                }
-            }
-        
-            Debug.Log("Block at (0,0,0): " + blocks[0,0,0]); // bottom
-            Debug.Log("Block at (0,7,0): " + blocks[0,7,0]); // grass/dirt
-
-        }
 
         public void BuildMesh()
         {
