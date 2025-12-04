@@ -31,12 +31,13 @@ namespace Core
         public bool IsChunkInsideOfWorld(Vector3Int coord)
         {
             int halfXZ = worldSize / 2;
-            int halfY = worldSizeY / 2;
-        
-            return coord.x >= -halfXZ && coord.x <= halfXZ &&
-                   coord.y >= 0 && coord.y < halfY &&
-                   coord.z >= -halfXZ && coord.z <= halfXZ;
+
+            return
+                coord.x >= -halfXZ && coord.x < halfXZ &&
+                coord.z >= -halfXZ && coord.z < halfXZ &&
+                coord.y >= 0 && coord.y < worldSizeY;
         }
+
 
         //Check if neighbor chunk exist inside world
         public bool HasChunk(Vector3Int coord)

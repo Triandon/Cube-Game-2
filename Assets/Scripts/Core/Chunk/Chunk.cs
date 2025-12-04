@@ -134,9 +134,15 @@ namespace Core
 
             isDirty = true;
 
-            // Mesh updates
-            chunkManager.meshQue.Add(this);
-            chunkManager.EnqueueNeighborUpdates(coord, localPos);
+            if (chunkManager != null)
+            {
+                // Mesh updates
+                chunkManager.meshQue.Add(this);
+                
+                //ask chunk manager to also add neighbto chunks if it was on the border change
+                chunkManager.EnqueueNeighborUpdates(coord,new Vector3Int(x,y,z));
+            }
+            
         }
 
         public bool IsAir(byte id)

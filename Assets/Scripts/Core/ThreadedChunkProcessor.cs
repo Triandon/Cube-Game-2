@@ -8,6 +8,7 @@ public static class ThreadedChunkProcessor
     private const int CHUNK_SIZE = Chunk.CHUNK_SIZE;
 
     //Entry point for the worker thread
+    // Entry point for the worker thread
     public static ChunkGenResult ProcessRequest(ChunkGenRequest req)
     {
         const int S = CHUNK_SIZE;
@@ -16,39 +17,38 @@ public static class ThreadedChunkProcessor
         // ------------------------------------
         // 1. PREPARE PADDED BLOCKS
         // ------------------------------------
-        // We want: padded size = (S+2)^3
+        // padded expected size = (S+2)^3, center located at [1..S] on each axis
         byte[,,] padded = req.paddedBlocks;
-        bool needGenerate = false;
+        bool paddedValid = padded != null &&
+                           padded.GetLength(0) == S + 2 &&
+                           padded.GetLength(1) == S + 2 &&
+                           padded.GetLength(2) == S + 2;
 
-        if (padded == null ||
-            padded.GetLength(0) != S + 2 ||
-            padded.GetLength(1) != S + 2 ||
-            padded.GetLength(2) != S + 2)
+        if (!paddedValid)
         {
-            needGenerate = true;
-        }
-
-        if (needGenerate)
-        {
+            // No valid padded provided -> generate center (thread-safe)
             padded = new byte[S + 2, S + 2, S + 2];
-
-            // Generate center chunk from noise
             byte[,,] gen = GenerateChunkBlocks(coord);
 
-            // Insert center into padded at [1..S]
             for (int x = 0; x < S; x++)
             for (int y = 0; y < S; y++)
             for (int z = 0; z < S; z++)
                 padded[x + 1, y + 1, z + 1] = gen[x, y, z];
 
-            // Neighbors remain air (0)
+            // neighbors remain 0 (air) if not present
+            Debug.Log($"ThreadedChunkProcessor: generated center for chunk {coord} (no padded provided).");
+        }
+        else
+        {
+            // Useful debug to verify padded used
+            // (comment out in production if too chatty)
+            // Debug.Log($"ThreadedChunkProcessor: using provided padded for chunk {coord}.");
         }
 
         // ------------------------------------
         // 2. MAKE CENTER ARRAY (RETURNED TO CHUNK)
         // ------------------------------------
         byte[,,] center = new byte[S, S, S];
-
         for (int x = 0; x < S; x++)
         for (int y = 0; y < S; y++)
         for (int z = 0; z < S; z++)
@@ -64,26 +64,38 @@ public static class ThreadedChunkProcessor
                 int idx = kv.Key;
                 byte id = kv.Value;
 
+                // inverse of PosToIndex: x + S*(y + S*z)
                 int x = idx % S;
                 int y = (idx / S) % S;
                 int z = idx / (S * S);
 
-                center[x, y, z] = id;
-                padded[x + 1, y + 1, z + 1] = id; // Keep mesher consistent.
+                // Bounds sanity check (defensive)
+                if (x >= 0 && x < S && y >= 0 && y < S && z >= 0 && z < S)
+                {
+                    center[x, y, z] = id;
+                    padded[x + 1, y + 1, z + 1] = id; // keep mesher consistent with saved changes
+                }
+                else
+                {
+                    // Shouldn't happen, but log in case of corrupted save data
+                    Debug.LogWarning(
+                        $"ThreadedChunkProcessor: saved change out of range for {coord} idx={idx} -> ({x},{y},{z})");
+                }
             }
         }
 
         // ------------------------------------
         // 4. THREAD-SAFE BLOCK QUERY
         // ------------------------------------
-        // Mesher queries local coords [-1..S], we map to padded [0..S+1]
+        // Mesher queries local coords in [-1 .. S] inclusive, map to padded [0 .. S+1]
         Func<int, int, int, byte> getBlock = (lx, ly, lz) =>
         {
             int px = lx + 1;
             int py = ly + 1;
             int pz = lz + 1;
 
-            if ((uint)px >= S + 2 || (uint)py >= S + 2 || (uint)pz >= S + 2)
+            // unsigned check to catch negative or beyond bounds quickly
+            if ((uint)px >= (uint)(S + 2) || (uint)py >= (uint)(S + 2) || (uint)pz >= (uint)(S + 2))
                 return 0;
 
             return padded[px, py, pz];
@@ -93,7 +105,6 @@ public static class ThreadedChunkProcessor
         // 5. MESH GENERATION
         // ------------------------------------
         MeshData meshData;
-
         try
         {
             meshData = ChunkMeshGeneratorThreaded.GenerateMeshData(getBlock);
@@ -101,7 +112,7 @@ public static class ThreadedChunkProcessor
         catch (Exception e)
         {
             Debug.LogError($"ThreadedChunkProcessor: mesher exception at {coord}: {e}");
-            meshData = new MeshData(); // empty mesh to prevent main-thread crash
+            meshData = new MeshData(); // return empty mesh to avoid main-thread crash
         }
 
         // ------------------------------------
@@ -111,9 +122,10 @@ public static class ThreadedChunkProcessor
     }
 
 
+
     // Use same noise & rules as your Chunk.GenerateHeightMapData()
     // This function is only used if no padded blocks were passed in.
-    private static byte[,,] GenerateChunkBlocks(Vector3Int coord)
+    public static byte[,,] GenerateChunkBlocks(Vector3Int coord)
     {
         var b = new byte[CHUNK_SIZE, CHUNK_SIZE, CHUNK_SIZE];
 
