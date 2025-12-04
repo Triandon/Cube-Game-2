@@ -189,24 +189,29 @@ namespace Core
             var chunkRender = chunk.GetComponent<ChunkRendering>();
             if (chunkRender != null && res.meshData != null)
             {
-                try
+                // Only apply worker mesh if neighbors exist (or they're outside world)
+                if (HasAllNeighbors(res.coord))
                 {
-                    chunkRender.ApplyMeshData(res.meshData);
+                    try
+                    {
+                        chunkRender.ApplyMeshData(res.meshData);
+                    }
+                    catch (Exception e)
+                    {
+                        Debug.LogWarning($"ChunkManager: ApplyMeshData exception for {res.coord}: {e}");
+                        // fallback: schedule chunk for main-thread mesh generation (older path)
+                        meshQue.Add(chunk);
+                    }
                 }
-                catch (Exception e)
-                {
-                    Debug.LogWarning($"ChunkManager: ApplyMeshData exception for {res.coord}: {e}");
-                    // fallback: schedule chunk for main-thread mesh generation (older path)
-                    meshQue.Add(chunk);
-                }
+                
+                EnqueueChunkBorderUpdates(chunk.coord);
+                
             }
             else
             {
                 // No renderer or no meshdata -> schedule for main-thread meshing
                 meshQue.Add(chunk);
             }
-
-            EnqueueChunkBorderUpdates(chunk.coord);
             
             // Remove from pending requests set so future generates are allowed
             pendingRequests.Remove(res.coord);
@@ -254,7 +259,7 @@ namespace Core
 
             // Determine which chunks should exist
             for (int x = -viewDistance; x <= viewDistance; x++)
-            for (int y = -viewDistance; y <= viewDistance+3; y++)
+            for (int y = -viewDistance; y <= viewDistance; y++)
             for (int z = -viewDistance; z <= viewDistance; z++)
             {
                 Vector3Int logicalCoord = playerChunkCord + new Vector3Int(x, y, z);
@@ -352,8 +357,6 @@ namespace Core
                 chunk.GenerateHeightMapData();
                 meshQue.Add(chunk);
             }
-            
-            EnqueueChunkBorderUpdates(coord);
 
             return chunk;
         }
@@ -617,12 +620,58 @@ namespace Core
 
         private IEnumerator BuildChunkMeshNextFrame(Chunk chunk)
         {
-            yield return null;
-            if (chunk != null && chunk.gameObject != null)
+
+            if (HasAllNeighbors(chunk.coord))
             {
-                chunk.BuildMesh();
+                yield return null;
+                if (chunk != null && chunk.gameObject != null)
+                {
+                    chunk.BuildMesh();
+                }
+            }
+            else
+            {
+                meshQue.Add(chunk);
             }
         }
+        
+        bool HasAllNeighbors(Vector3Int coord)
+        {
+            if (IsHorizonChunk(coord)) return true;
+            
+            Vector3Int[] dirs =
+            {
+                Vector3Int.right, Vector3Int.left,
+                Vector3Int.up,    Vector3Int.down,
+                new Vector3Int(0,0,1),
+                new Vector3Int(0,0,-1)
+            };
+
+            foreach (Vector3Int d in dirs)
+            {
+                Vector3Int nc = coord + d;
+
+                // Outside world = treat as air, valid
+                if (!World.Instance.IsChunkInsideOfWorld(nc))
+                    continue;
+
+                // Inside world = must exist
+                if (!chunks.ContainsKey(nc))
+                    return false;
+            }
+            return true;
+        }
+        
+        bool IsHorizonChunk(Vector3Int coord)
+        {
+            int dx = Mathf.Abs(coord.x - playerChunkCord.x);
+            int dy = Mathf.Abs(coord.y - playerChunkCord.y);
+            int dz = Mathf.Abs(coord.z - playerChunkCord.z);
+
+            return dx == viewDistance || dy == viewDistance || dz == viewDistance;
+        }
+
+
         
         public void EnqueueNeighborUpdates(Vector3Int coord, Vector3Int localPos)
         {

@@ -318,6 +318,7 @@ public static class ChunkMeshGeneratorThreaded
 
 public class ChunkMeshGenerator
 {
+    
     // Internal threaded mesher uses delegate getBlock. For compatibility we provide a simple wrapper that
     // uses the chunk.GetBlock method on the main thread (same behavior as original).
     public ChunkRendering.ChunkMeshData GenerateMesh(byte[,,] blocks, Chunk owner)

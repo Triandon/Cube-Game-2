@@ -20,6 +20,11 @@ namespace Core
     
         private void Awake()
         {
+            if (blocks == null)
+            {
+                blocks = new byte[CHUNK_SIZE, CHUNK_SIZE, CHUNK_SIZE];
+            }
+            
             meshGenerator = new ChunkMeshGenerator();
         }
         
@@ -83,10 +88,12 @@ namespace Core
                 return blocks[localX, localY, localZ];
             }
 
+            if (!World.Instance.IsChunkInsideOfWorld(neighborCoord)) return 0;
+            
             Chunk neighbor = chunkManager.GetChunk(neighborCoord);
             if (neighbor == null) return 0;
 
-            if (!World.Instance.IsChunkInsideOfWorld(neighborCoord)) return 0;
+            
 
             return neighbor.GetBlock(localX, localY, localZ);
 
