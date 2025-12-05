@@ -33,6 +33,10 @@ namespace Core
         // --- new: track pending requests so we don't enqueue duplicates
         private HashSet<Vector3Int> pendingRequests = new HashSet<Vector3Int>();
         private HashSet<Vector3Int> generationQue = new HashSet<Vector3Int>();
+        
+        //Que for checked chunks
+        private HashSet<Vector3Int> meshWaitList = new HashSet<Vector3Int>();
+        private HashSet<Vector3Int> readyForBuild = new HashSet<Vector3Int>();
 
         private void Awake()
         {
@@ -82,58 +86,8 @@ namespace Core
                 playerChunkCord = currentPlayerChunk;
                 UpdateChunks();
             }
-            // Remove null/destroyed chunks first
-            meshQue.RemoveWhere(c => c == null || c.gameObject == null);
             
-            int buildChunksThisFrame = Mathf.Min(chunksPerFrame, meshQue.Count);
-            int generatingChunksThisFrame = Math.Min(chunksPerFrame, generationQue.Count);
-            
-            //Generate list limeted number
-            var toGenerate = generationQue
-                .OrderBy(c => Vector3.Distance(player.position, c * Chunk.CHUNK_SIZE))
-                .Take(generatingChunksThisFrame)
-                .ToList();
-            
-            // Before generating chunks in Update()
-            generationQue.RemoveWhere(coord => 
-                Mathf.Abs(coord.x - playerChunkCord.x) > viewDistance ||
-                Mathf.Abs(coord.y - playerChunkCord.y) > viewDistance ||
-                Mathf.Abs(coord.z - playerChunkCord.z) > viewDistance);
-            
-            meshQue.RemoveWhere(c => 
-                Mathf.Abs(c.coord.x - playerChunkCord.x) > viewDistance ||
-                Mathf.Abs(c.coord.y - playerChunkCord.y) > viewDistance ||
-                Mathf.Abs(c.coord.z - playerChunkCord.z) > viewDistance);
-
-
-            foreach (var coord in toGenerate)
-            {
-                generationQue.Remove(coord);
-                chunkCount++;
-                GenerateChunk(coord, chunkCount);
-            }
-
-            // Build meshes from meshQue (distance prioritized)
-            if (meshQue.Count > 0 && chunksPerFrame > 0)
-            {
-                List<Chunk> sortedChunks = meshQue
-                    .OrderBy(c => Vector3.Distance(player.position, c.transform.position))
-                    .ToList();
-
-                // Build closest chunks first
-                for (int i = 0; i < buildChunksThisFrame; i++)
-                {
-                    Chunk chunkToBuild = sortedChunks[i];
-                    if (chunkToBuild != null && chunkToBuild.gameObject != null &&
-                        chunkToBuild.gameObject.activeInHierarchy)
-                    {
-                        StartCoroutine(BuildChunkMeshNextFrame(chunkToBuild));
-                    }
-
-                    // Remove from queue regardless (we're attempting to build it)
-                    meshQue.Remove(chunkToBuild);
-                }
-            }
+            SortChunksLists();
         }
 
         private void OnDestroy()
@@ -176,6 +130,7 @@ namespace Core
             {
                 // clear pendingRequests entry in case it still exists
                 pendingRequests.Remove(res.coord);
+                ResolveWaitListNeighbors(res.coord);
                 return;
             }
 
@@ -194,6 +149,7 @@ namespace Core
                 {
                     try
                     {
+                        readyForBuild.Add(res.coord);
                         chunkRender.ApplyMeshData(res.meshData);
                     }
                     catch (Exception e)
@@ -210,7 +166,7 @@ namespace Core
             else
             {
                 // No renderer or no meshdata -> schedule for main-thread meshing
-                meshQue.Add(chunk);
+                meshWaitList.Add(res.coord);
             }
             
             // Remove from pending requests set so future generates are allowed
@@ -230,27 +186,6 @@ namespace Core
         private void UpdatePlayerChunkCoord()
         {
             playerChunkCord = GetPlayerChunkCoord();
-        }
-
-        // Generate some small local area (kept for compatibility if you want to call it)
-        private void GenerateWorld()
-        {
-            List<Chunk> newChunks = new List<Chunk>();
-
-            for (int x = 0; x <= 4; x++)
-            for (int y = 0; y <= 2; y++)
-            for (int z = 0; z <= 4; z++)
-            {
-                Vector3Int chunkCord =
-                    new Vector3Int(playerChunkCord.x + x, playerChunkCord.y + y, playerChunkCord.z + z);
-
-                if (!chunks.ContainsKey(chunkCord))
-                {
-                    chunkCount++;
-                    Chunk chunk = GenerateChunk(chunkCord, chunkCount);
-                    newChunks.Add(chunk);
-                }
-            }
         }
 
         public void UpdateChunks()
@@ -295,6 +230,30 @@ namespace Core
                 RemoveChunk(chunk, key);
             }
         }
+        
+        private static readonly Vector3Int[] dirs =
+        {
+            Vector3Int.right, Vector3Int.left,
+            Vector3Int.up, Vector3Int.down,
+            new Vector3Int(0,0,1), new Vector3Int(0,0,-1)
+        };
+
+        private void ResolveWaitListNeighbors(Vector3Int newlyLoadedChunk)
+        {
+            foreach (var d in dirs)
+            {
+                Vector3Int c = newlyLoadedChunk + d;
+                if (meshWaitList.Contains(c) && HasAllNeighbors(c))
+                {
+                    meshWaitList.Remove(c);
+                    readyForBuild.Add(c);
+
+                    // Now this chunk can be meshed safely
+                    meshQue.Add(chunks[c]);
+                }
+            }
+        }
+
 
         private Chunk GenerateChunk(Vector3Int coord, int chunkNumber)
         {
@@ -383,6 +342,8 @@ namespace Core
 
             // Make sure to remove any pending request marker
             pendingRequests.Remove(coord);
+            meshWaitList.Remove(coord);
+            readyForBuild.Remove(coord);
 
             chunks.Remove(coord);
             chunkCount--;
@@ -620,19 +581,8 @@ namespace Core
 
         private IEnumerator BuildChunkMeshNextFrame(Chunk chunk)
         {
-
-            if (HasAllNeighbors(chunk.coord))
-            {
-                yield return null;
-                if (chunk != null && chunk.gameObject != null)
-                {
-                    chunk.BuildMesh();
-                }
-            }
-            else
-            {
-                meshQue.Add(chunk);
-            }
+            yield return null;
+            chunk.BuildMesh();
         }
         
         bool HasAllNeighbors(Vector3Int coord)
@@ -721,7 +671,83 @@ namespace Core
             }
         }
 
+        private void SortChunksLists()
+        {
+            // Remove null/destroyed chunks first
+            meshQue.RemoveWhere(c => c == null || c.gameObject == null);
+            
+            int buildChunksThisFrame = Mathf.Min(chunksPerFrame, meshQue.Count);
+            int generatingChunksThisFrame = Math.Min(chunksPerFrame, generationQue.Count);
+            
+            //Generate list limited number
+            List<Vector3Int> toGenerate = new List<Vector3Int>(generatingChunksThisFrame);
+            Vector3Int best;
+            float bestDistance;
+            
+            for (int i = 0; i < generatingChunksThisFrame; i++)
+            {
+                bestDistance = float.MaxValue;
+                best = default;
 
+                foreach (var c in generationQue)
+                {
+                    float dx = player.position.x - c.x * Chunk.CHUNK_SIZE;
+                    float dy = player.position.y - c.y * Chunk.CHUNK_SIZE;
+                    float dz = player.position.z - c.z * Chunk.CHUNK_SIZE;
+                    float dist = dx * dx + dy * dy + dz * dz;
+
+                    if (dist < bestDistance)
+                    {
+                        bestDistance = dist;
+                        best = c;
+                    }
+                }
+                toGenerate.Add(best);
+                generationQue.Remove(best);
+            }
+            
+            
+            // Before generating chunks in Update()
+            generationQue.RemoveWhere(coord => 
+                Mathf.Abs(coord.x - playerChunkCord.x) > viewDistance ||
+                Mathf.Abs(coord.y - playerChunkCord.y) > viewDistance ||
+                Mathf.Abs(coord.z - playerChunkCord.z) > viewDistance);
+            
+            meshQue.RemoveWhere(c => 
+                Mathf.Abs(c.coord.x - playerChunkCord.x) > viewDistance ||
+                Mathf.Abs(c.coord.y - playerChunkCord.y) > viewDistance ||
+                Mathf.Abs(c.coord.z - playerChunkCord.z) > viewDistance);
+
+
+            foreach (var coord in toGenerate)
+            {
+                generationQue.Remove(coord);
+                chunkCount++;
+                GenerateChunk(coord, chunkCount);
+            }
+
+            // Build meshes from meshQue (distance prioritized)
+            if (meshQue.Count > 0 && chunksPerFrame > 0)
+            {
+                List<Chunk> sortedChunks = meshQue
+                    .OrderBy(c => Vector3.Distance(player.position, c.transform.position))
+                    .ToList();
+
+                // Build closest chunks first
+                for (int i = 0; i < buildChunksThisFrame; i++)
+                {
+                    Chunk chunkToBuild = sortedChunks[i];
+                    if (chunkToBuild != null && chunkToBuild.gameObject != null &&
+                        chunkToBuild.gameObject.activeInHierarchy)
+                    {
+                        StartCoroutine(BuildChunkMeshNextFrame(chunkToBuild));
+                    }
+
+                    // Remove from queue regardless (we're attempting to build it)
+                    meshQue.Remove(chunkToBuild);
+                }
+            }
+        }
 
     }
 }
