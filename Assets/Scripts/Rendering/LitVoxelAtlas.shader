@@ -1,4 +1,4 @@
-Shader "Custom/Lit"
+Shader "Custom/MyLitShader"
 {
     Properties
     {
@@ -104,19 +104,17 @@ Shader "Custom/Lit"
     AlphaToMask [_AlphaToMask]
 
     HLSLPROGRAM
+
     #pragma vertex vert
     #pragma fragment frag
 
-    // Enable URP lighting system
     #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE
     #pragma multi_compile _ _ADDITIONAL_LIGHTS_VERTEX _ADDITIONAL_LIGHTS
     #pragma multi_compile _ _ADDITIONAL_LIGHT_SHADOWS
     #pragma multi_compile_fragment _ _SHADOWS_SOFT
-
     #pragma multi_compile _ _FORWARD_PLUS
     #pragma multi_compile _ _CLUSTER_LIGHT_LOOP
 
-    // Normal maps, specular/metallic, etc.
     #pragma shader_feature_local _NORMALMAP
     #pragma shader_feature_local _METALLICSPECGLOSSMAP
     #pragma shader_feature_local _SPECGLOSSMAP
@@ -133,85 +131,107 @@ Shader "Custom/Lit"
     struct appdata
     {
         float4 vertex : POSITION;
-        float2 uv : TEXCOORD0;
-        float4 uv1 : TEXCOORD1;
+        float2 uv : TEXCOORD0;       // Local tile UV
+        float4 uv1 : TEXCOORD1;      // (baseUV.xy, tileSize.xy)
         float3 normal : NORMAL;
         float4 tangent : TANGENT;
     };
 
     struct v2f
     {
-        float4 pos : SV_POSITION;
-        float2 uv0 : TEXCOORD0;
-        float4 meta : TEXCOORD1;
-        float3 posWS : TEXCOORD2;
-        float3 normalWS : TEXCOORD3;
+        float4 posCS : SV_POSITION;
+        float3 posWS : TEXCOORD0;
+        float3 normalWS : TEXCOORD1;
+        float3 tangentWS : TEXCOORD2;
+        float tangentSign : TEXCOORD3;
+        float2 uvLocal : TEXCOORD4;
+        float4 atlasMeta : TEXCOORD5;
     };
 
     v2f vert(appdata v)
     {
         v2f o;
-        VertexPositionInputs pos = GetVertexPositionInputs(v.vertex.xyz);
-        VertexNormalInputs n = GetVertexNormalInputs(v.normal, v.tangent);
 
-        o.pos = pos.positionCS;
-        o.posWS = pos.positionWS;
-        o.normalWS = n.normalWS;
+        // Position + normal transform from URP helpers
+        VertexPositionInputs posInputs = GetVertexPositionInputs(v.vertex.xyz);
+        VertexNormalInputs nInputs = GetVertexNormalInputs(v.normal, v.tangent);
 
-        o.uv0 = v.uv;
-        o.meta = v.uv1;
+        o.posCS = posInputs.positionCS;
+        o.posWS = posInputs.positionWS;
+        o.normalWS = nInputs.normalWS;
+        o.tangentWS = nInputs.tangentWS;
+        o.tangentSign = v.tangent.w;
+
+        o.uvLocal = v.uv;
+        o.atlasMeta = v.uv1;
+
         return o;
     }
 
-    //The important part: feed atlas UV into URP's lighting system
-    half4 frag(v2f i) : SV_Target
+half4 frag(v2f i) : SV_Target
 {
-    // Build atlas UV
-    float2 tileLocal = frac(i.uv0);
-    float2 baseUV = i.meta.xy;
-    float2 tileSize = i.meta.zw;
+    // --- Atlas UV ---
+    float2 tileLocal = frac(i.uvLocal);
+    float2 baseUV = i.atlasMeta.xy;
+    float2 tileSize = i.atlasMeta.zw;
     float2 atlasUV = baseUV + tileLocal * tileSize;
 
-    // --- Construct SurfaceData manually ---
-    SurfaceData surfaceData;
-    surfaceData.albedo = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, atlasUV).rgb * _BaseColor.rgb;
-    surfaceData.alpha = _BaseColor.a;
-    surfaceData.metallic = _Metallic;
-    surfaceData.specular = _SpecColor.rgb;
-    surfaceData.smoothness = _Smoothness;
-    surfaceData.normalTS = float3(0,0,1);
-    surfaceData.occlusion = 1.0;
-    surfaceData.emission = float3(0,0,0);
-    surfaceData.clearCoatMask = 0;
-    surfaceData.clearCoatSmoothness = 0;
+    // --- Sample BaseMap manually ---
+    half4 albedo = _BaseMap.Sample(sampler_BaseMap, atlasUV) * _BaseColor;
 
-    // --- Construct InputData manually ---
+    // --- Input data ---
     InputData inputData;
-    inputData.positionWS = i.posWS;
-    inputData.normalWS = normalize(i.normalWS);
-    inputData.viewDirectionWS = GetWorldSpaceViewDir(i.posWS);
 
-    // URP requires this:
-    inputData.shadowCoord = TransformWorldToShadowCoord(i.posWS);
+// World + Clip space positions
+inputData.positionWS = i.posWS;
+inputData.positionCS = i.posCS;
 
-    // Needed for fog:
-    inputData.fogCoord = ComputeFogFactor(i.posWS);
+// Normals
+inputData.normalWS = normalize(i.normalWS);
 
-    // Used by some additional light features
-    inputData.bakedGI = 0;
+// View direction
+inputData.viewDirectionWS = normalize(GetWorldSpaceNormalizeViewDir(i.posWS));
 
-    // Lightmap UV (not used)
-    inputData.normalizedScreenSpaceUV = GetNormalizedScreenSpaceUV(i.pos);
+// Shadow
+inputData.shadowCoord = TransformWorldToShadowCoord(i.posWS);
 
-    // --- Do the final PBR ---
-    return UniversalFragmentPBR(inputData, surfaceData);
+// Fog
+inputData.fogCoord = ComputeFogFactor(i.posWS).x;
+
+// Tangent space
+float3 tangentWS = normalize(i.tangentWS);
+float3 bitangentWS = normalize(cross(i.normalWS, tangentWS) * i.tangentSign);
+inputData.tangentToWorld = float3x3(tangentWS, bitangentWS, i.normalWS);
+
+// Vertex lighting / baked GI (optional, set to 1 for full light if no maps)
+inputData.vertexLighting = 1;
+inputData.bakedGI = 1;
+
+// Normalized screen UV
+inputData.normalizedScreenSpaceUV = float2(0,0);
+
+// Shadow mask (optional)
+inputData.shadowMask = half4(1,1,1,1);
+    
+
+    // --- Call the overload that accepts all surface parameters manually ---
+    return UniversalFragmentPBR(
+        inputData,
+        albedo.rgb,          // albedo
+        _Metallic,           // metallic
+        _SpecColor.rgb,      // specular
+        _Smoothness,         // smoothness
+        1.0,                 // occlusion (set 1 if no map)
+        _EmissionColor.rgb,  // emission
+        albedo.a             // alpha
+    );
+    
+    //TODO
+    //Add fog, and other variables.
 }
-
 
     ENDHLSL
 }
-
-
 
         Pass
         {
