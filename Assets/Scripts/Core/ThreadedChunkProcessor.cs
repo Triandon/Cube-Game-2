@@ -151,20 +151,19 @@ public static class ThreadedChunkProcessor
                 }
                 else if (worldY == height)
                 {
-                    // Use thread-safe ID constants — avoids BlockRegistry on worker thread.
-                    b[x, y, z] = ThreadConstants.GrassID;
+                    b[x, y, z] = BlockDataBase.GrassBlock.id;
                 }
                 else if (worldY > height - 3)
                 {
-                    b[x, y, z] = ThreadConstants.DirtID;
+                    b[x, y, z] = BlockDataBase.DirtBlock.id;
                 }
                 else
                 {
-                    b[x, y, z] = ThreadConstants.StoneID;
+                    b[x, y, z] = BlockDataBase.StoneBlock.id;
                 }
 
                 if (worldY == 0)
-                    b[x, y, z] = ThreadConstants.StoneID;
+                    b[x, y, z] = BlockDataBase.StoneBlock.id;
             }
         }
 

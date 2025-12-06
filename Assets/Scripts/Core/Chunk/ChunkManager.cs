@@ -38,6 +38,9 @@ namespace Core
         private HashSet<Vector3Int> meshWaitList = new HashSet<Vector3Int>();
         private HashSet<Vector3Int> readyForBuild = new HashSet<Vector3Int>();
 
+        private Queue<(Chunk chunk, Vector3Int tragetPos)> transformQueue =
+            new Queue<(Chunk chunk, Vector3Int tragetPos)>();
+
         private void Awake()
         {
             fpsCounter = FindAnyObjectByType<FPSCounter>();
@@ -55,7 +58,6 @@ namespace Core
         void Start()
         {
             BlockRegistry.BuildThreadLookup();
-            ThreadConstants.PrepareCommonBlockIDs();
 
             // start worker threads (use processorCount -1 or 1 minimum)
             threadedWorker = new ThreadedChunkWorker(Math.Max(1, SystemInfo.processorCount - 1));
@@ -282,8 +284,13 @@ namespace Core
 
             Vector3Int worldPos = new Vector3Int(coord.x * Chunk.CHUNK_SIZE, coord.y * Chunk.CHUNK_SIZE,
                 coord.z * Chunk.CHUNK_SIZE);
-            chunk.transform.position = worldPos;
-
+            
+            //chunk.transform.position = worldPos;
+            if (chunk.transform.position != worldPos)
+            {
+                transformQueue.Enqueue((chunk,worldPos));
+            }
+            
             chunks.Add(coord, chunk);
 
             // Load saved changes on main thread
@@ -746,6 +753,15 @@ namespace Core
                     // Remove from queue regardless (we're attempting to build it)
                     meshQue.Remove(chunkToBuild);
                 }
+            }
+            
+            int transformChunksThisFrame = Mathf.Min(chunksPerFrame, transformQueue.Count);
+            
+            //Transform que
+            for (int i = 0; i < transformChunksThisFrame; i++)
+            {
+                var item = transformQueue.Dequeue();
+                item.chunk.transform.position = item.tragetPos;
             }
         }
 

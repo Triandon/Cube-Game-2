@@ -11,11 +11,11 @@ namespace Core.Block
         // Optional: store by name as well
         private static Dictionary<string, Block> blocksByName = new Dictionary<string, Block>();
 
-        public static BlockInfo[] ThreadBlockInfo
+        public static Block[] ThreadBlockInfo
         {
             get;
             private set;
-        } = new BlockInfo[256];
+        } = new Block[256];
         
 
         // Register a block
@@ -52,14 +52,14 @@ namespace Core.Block
         // Call this once on main thread after all blocks are registered (e.g. at game start)
         public static void BuildThreadLookup()
         {
-            var arr = new BlockInfo[256];
+            var arr = new Block[256];
             foreach (var kv in blocksById)
             {
                 int key = kv.Key;
                 Block b = kv.Value;
                 if (key >= 0 && key < 256)
                 {
-                    arr[key] = new BlockInfo(b.id, b.topIndex, b.sideIndex, b.bottomIndex, b.isTransparent);
+                    arr[key] = new Block(b.id, b.blockName, b.topIndex, b.sideIndex, b.bottomIndex);
                 }
 
                 ThreadBlockInfo = arr;

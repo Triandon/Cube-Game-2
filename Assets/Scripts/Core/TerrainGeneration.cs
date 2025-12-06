@@ -11,10 +11,10 @@ namespace Core
         public byte[,,] GenerateHeightMapData(Vector3Int coord)
         {
             byte[,,] blocks = new byte[CHUNK_SIZE, CHUNK_SIZE, CHUNK_SIZE];
-            
-            byte grass = BlockId.Grass;
-            byte dirt  = BlockId.Dirt;
-            byte stone = BlockId.Stone;
+
+            byte grass = BlockDataBase.GrassBlock.id;
+            byte dirt = BlockDataBase.GetBlock(BlockDataBase.DirtBlock);
+            byte stone = BlockDataBase.StoneBlock.id;
 
         
             for(int x = 0; x < CHUNK_SIZE; x++)

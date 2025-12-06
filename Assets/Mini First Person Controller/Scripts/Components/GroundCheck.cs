@@ -1,64 +1,52 @@
 ﻿using UnityEngine;
 
-[ExecuteInEditMode]
 public class GroundCheck : MonoBehaviour
 {
-    [Tooltip("Maximum distance from the ground.")]
-    public float distanceThreshold = .15f;
+    [Tooltip("Layers considered as ground.")]
+    public LayerMask groundLayer;
 
-    [Tooltip("Whether this transform is grounded now.")]
-    public bool isGrounded = true;
-    /// <summary>
-    /// Called when the ground is touched again.
-    /// </summary>
-    public event System.Action Grounded;
-
-    private BoxCollider playerCollider;
-    private LayerMask groundMask;
+    [Tooltip("Height of the ground check box (slightly below feet).")]
     public float extraHeight = 0.1f;
 
+    [Tooltip("Width and depth of the ground check box.")]
+    public Vector3 boxSize = new Vector3(0.5f, 0.1f, 0.5f);
+
+    public bool isGrounded;
+
+    private Collider col;
 
     void Awake()
     {
-        playerCollider = GetComponent<BoxCollider>();
-        // Set the layer mask to Default (or whatever layer your ground uses)
-        groundMask = LayerMask.GetMask("Default");
+        col = GetComponent<Collider>();
+        if (!col)
+            Debug.LogError("GroundCheck requires a Collider on the same GameObject.");
     }
 
-    void LateUpdate()
+    public bool CheckGround()
     {
-        if (!playerCollider) return;
+        if (!col) return false;
 
-        // Calculate box position and size
-        Vector3 boxCenter = playerCollider.bounds.center;
-        Vector3 boxHalfExtents = new Vector3(playerCollider.size.x / 2, extraHeight / 2, playerCollider.size.z / 2);
-
-        // Move box just below the player
-        boxCenter.y = playerCollider.bounds.min.y - extraHeight / 2;
+        // Position the check box at the bottom of the collider
+        Vector3 center = col.bounds.center;
+        center.y = col.bounds.min.y + extraHeight / 2f;
 
         // Check for overlaps
-        Collider[] hits = Physics.OverlapBox(boxCenter, boxHalfExtents, Quaternion.identity, groundMask, QueryTriggerInteraction.Ignore);
-        bool isGroundedNow = hits.Length > 0;
-
-        // Call event if we just hit the ground
-        if (isGroundedNow && !isGrounded)
-        {
-            Grounded?.Invoke();
-        }
-
-        isGrounded = isGroundedNow;
+        isGrounded = Physics.CheckBox(center, boxSize / 2f, Quaternion.identity, groundLayer);
+        return isGrounded;
     }
 
+    void Update()
+    {
+        CheckGround();
+    }
+
+    // Visualize in editor
     void OnDrawGizmosSelected()
     {
-        if (!playerCollider) playerCollider = GetComponent<BoxCollider>();
-        if (!playerCollider) return;
-
-        Vector3 boxCenter = playerCollider.bounds.center;
-        Vector3 boxSize = new Vector3(playerCollider.size.x, extraHeight, playerCollider.size.z);
-        boxCenter.y = playerCollider.bounds.min.y - extraHeight / 2;
-
+        if (!col) return;
+        Vector3 center = col.bounds.center;
+        center.y = col.bounds.min.y + extraHeight / 2f;
         Gizmos.color = isGrounded ? Color.green : Color.red;
-        Gizmos.DrawWireCube(boxCenter, boxSize);
+        Gizmos.DrawWireCube(center, boxSize);
     }
 }

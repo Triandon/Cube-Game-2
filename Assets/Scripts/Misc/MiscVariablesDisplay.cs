@@ -7,10 +7,12 @@ public class MiscVariablesDisplay : MonoBehaviour
     public TextMeshProUGUI ChunkCountText;
     public TextMeshProUGUI RenderDistanceText;
     public TextMeshProUGUI chunkBuilding;
+    public TextMeshProUGUI playerCordsText;
     private ChunkManager chunkManager;
     private int chunkCount;
     private int renderDistance;
     private int chunksCurrentlyBuilding;
+    private Vector3Int playerPos;
 
     public Transform player;
     
@@ -26,10 +28,12 @@ public class MiscVariablesDisplay : MonoBehaviour
         chunkCount = chunkManager.chunkCount;
         renderDistance = chunkManager.viewDistance;
         chunksCurrentlyBuilding = chunkManager.chunksPerFrame;
+        playerPos = Vector3Int.FloorToInt(player.position);
         
         ChunkCountText.text = $"Chunk Count: {chunkCount}";
         RenderDistanceText.text = $"Render Distance: {renderDistance}";
         chunkBuilding.text = $"Chunks currently building: {chunksCurrentlyBuilding}";
+        playerCordsText.text = "Coords: " + playerPos;
 
         if (Input.GetKeyDown(KeyCode.I))
         {
