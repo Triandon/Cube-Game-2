@@ -519,6 +519,7 @@ namespace Core
         }
 
         // Build padded blocks to send to worker. padded size = [S+2,S+2,S+2] with center at [1..S]
+        //This can be potensionaly added to an other thread
         public byte[,,] BuildPaddedBlocks(Vector3Int coord)
         {
             int S = Chunk.CHUNK_SIZE;
@@ -754,15 +755,27 @@ namespace Core
                     meshQue.Remove(chunkToBuild);
                 }
             }
-            
-            int transformChunksThisFrame = Mathf.Min(chunksPerFrame, transformQueue.Count);
-            
-            //Transform que
-            for (int i = 0; i < transformChunksThisFrame; i++)
+
+            if (transformQueue.Count > 0)
             {
-                var item = transformQueue.Dequeue();
-                item.chunk.transform.position = item.tragetPos;
+                var testChunkPos = transformQueue.Dequeue();
+                if (testChunkPos.chunk != null || testChunkPos.chunk.gameObject != null)
+                {
+                    transformQueue.Enqueue(testChunkPos);
+                }
+                
+                int transformChunksThisFrame = Mathf.Min(chunksPerFrame, transformQueue.Count);
+                transformChunksThisFrame = Mathf.Clamp(transformChunksThisFrame/2, 1, transformQueue.Count);
+            
+                //Transform que
+                for (int i = 0; i < transformChunksThisFrame; i++)
+                {
+                    var t = transformQueue.Dequeue();
+                    t.chunk.transform.position = t.tragetPos;
+                }
             }
+            
+            
         }
 
     }
