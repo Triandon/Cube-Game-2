@@ -7,6 +7,7 @@ namespace Core
 {
     public class Chunk : MonoBehaviour
     {
+        //Chunk
         public const int CHUNK_SIZE = 16;
     
         public Vector3Int coord;
