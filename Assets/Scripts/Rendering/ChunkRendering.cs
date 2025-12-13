@@ -22,9 +22,13 @@ public class ChunkRendering : MonoBehaviour
         meshFilter = GetComponent<MeshFilter>();
         meshRenderer = GetComponent<MeshRenderer>();
         meshCollider = GetComponent<MeshCollider>();
-        chunk = GetComponent<Chunk>();
-
+        
         meshGenerator = new ChunkMeshGenerator();
+    }
+
+    public void SetChunkData(Chunk chunkData)
+    {
+        chunk = chunkData;
     }
 
     public void BuildChunkMesh()

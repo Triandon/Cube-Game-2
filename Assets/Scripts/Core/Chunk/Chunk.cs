@@ -5,35 +5,26 @@ using Random = System.Random;
 
 namespace Core
 {
-    public class Chunk : MonoBehaviour
+    public class Chunk
     {
         //Chunk
         public const int CHUNK_SIZE = 16;
     
         public Vector3Int coord;
-        public ChunkManager chunkManager;
-
         public byte[,,] blocks;
-        private ChunkMeshGenerator meshGenerator;
-
-        public Dictionary<int, byte> changedBlocks = new Dictionary<int, byte>();
         public bool isDirty = false;
-    
-        private void Awake()
-        {
-            if (blocks == null)
-            {
-                blocks = new byte[CHUNK_SIZE, CHUNK_SIZE, CHUNK_SIZE];
-            }
-            
-            meshGenerator = new ChunkMeshGenerator();
-        }
+        public Dictionary<int, byte> changedBlocks = new Dictionary<int, byte>();
         
+        public ChunkManager chunkManager;
+        public ChunkRendering renderer;
 
-        public void BuildMesh()
+        public Chunk(Vector3Int coord)
         {
-            GetComponent<ChunkRendering>().BuildChunkMesh();
+            this.coord = coord;
+            blocks = new byte[CHUNK_SIZE, CHUNK_SIZE, CHUNK_SIZE];
         }
+
+        
 
         public byte GetBlock(int x, int y, int z)
         {

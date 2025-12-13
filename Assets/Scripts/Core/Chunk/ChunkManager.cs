@@ -18,7 +18,7 @@ namespace Core
         public int chunkCount;
 
         public HashSet<Chunk> meshQue = new HashSet<Chunk>();
-        private Queue<Chunk> chunkPool = new Queue<Chunk>();
+        private Queue<GameObject> chunkPool = new Queue<GameObject>();
 
         // How many chunks should be building at once.
         public int chunksPerFrame = 4;
@@ -40,6 +40,9 @@ namespace Core
 
         private Queue<(Chunk chunk, Vector3Int tragetPos)> transformQueue =
             new Queue<(Chunk chunk, Vector3Int tragetPos)>();
+        
+        //If a player moves (so the chunks also moves), then if the player increase render distance new chunks
+        //gets generated and there forms a line where moved chunks arent getting re rendered :(
 
         private void Awake()
         {
@@ -51,7 +54,7 @@ namespace Core
             {
                 GameObject go = Instantiate(chunkPrefab, Vector3.zero, Quaternion.identity, transform);
                 go.SetActive(false);
-                chunkPool.Enqueue(go.GetComponent<Chunk>());
+                chunkPool.Enqueue(go);
             }
         }
 
@@ -143,7 +146,7 @@ namespace Core
             chunk.isDirty = chunk.changedBlocks.Count > 0;
 
             // Apply the worker mesh data to the chunk's ChunkRendering (main thread only)
-            var chunkRender = chunk.GetComponent<ChunkRendering>();
+            var chunkRender = chunk.renderer;
             if (chunkRender != null && res.meshData != null)
             {
                 // Only apply worker mesh if neighbors exist (or they're outside world)
@@ -245,54 +248,68 @@ namespace Core
             foreach (var d in dirs)
             {
                 Vector3Int c = newlyLoadedChunk + d;
-                if (meshWaitList.Contains(c) && HasAllNeighbors(c))
-                {
-                    meshWaitList.Remove(c);
-                    readyForBuild.Add(c);
+                
+                if(!meshWaitList.Contains(c)) continue;
+                
+                if(!chunks.TryGetValue(c,out Chunk chunk)) continue;
+                
+                if(!HasAllNeighbors(c)) continue;
 
-                    // Now this chunk can be meshed safely
-                    meshQue.Add(chunks[c]);
-                }
+                meshWaitList.Remove(c);
+                readyForBuild.Add(c);
+                meshQue.Add(chunk);
             }
         }
 
 
         private Chunk GenerateChunk(Vector3Int coord, int chunkNumber)
         {
-            Chunk chunk;
+            Chunk chunk = new Chunk(coord);
+            GameObject go;
+            Vector3Int worldPos = new Vector3Int(coord.x * Chunk.CHUNK_SIZE, coord.y * Chunk.CHUNK_SIZE,
+                coord.z * Chunk.CHUNK_SIZE);
+            
             if (chunkPool.Count > 0)
             {
-                chunk = chunkPool.Dequeue();
-                chunk.gameObject.SetActive(true);
+                go = chunkPool.Dequeue();
                 chunk.coord = coord;
                 chunk.chunkManager = this;
-                chunk.name = "Chunk_" + coord.x + "_" + coord.y + "_" + coord.z + "_chunk_nr" + chunkNumber;
+                go.name = "Chunk_" + coord.x + "_" + coord.y + "_" + coord.z + "_chunk_nr" + chunkNumber;
 
                 // Reset old data
                 chunk.blocks = new byte[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
                 chunk.changedBlocks.Clear();
                 chunk.isDirty = false;
+                
+                go.SetActive(false);
+                if (go.transform.position != worldPos)
+                {
+                    transformQueue.Enqueue((chunk,worldPos));
+                }
+                
             }
             else
             {
-                GameObject gameObject = Instantiate(chunkPrefab, Vector3.zero, Quaternion.identity, transform);
-                chunk = gameObject.GetComponent<Chunk>();
+                go = Instantiate(chunkPrefab, Vector3.zero, Quaternion.identity, transform);
                 chunk.coord = coord;
                 chunk.chunkManager = this;
-                chunk.name = "Chunk_" + coord.x + "_" + coord.y + "_" + coord.z + "_chunk_nr" + chunkNumber;
+                go.name = "Chunk_" + coord.x + "_" + coord.y + "_" + coord.z + "_chunk_nr" + chunkNumber;
+                go.transform.position = worldPos;
+                go.SetActive(true);
             }
 
-            Vector3Int worldPos = new Vector3Int(coord.x * Chunk.CHUNK_SIZE, coord.y * Chunk.CHUNK_SIZE,
-                coord.z * Chunk.CHUNK_SIZE);
+            ChunkRendering rendering = go.GetComponent<ChunkRendering>();
+            chunk.renderer = rendering;
+            rendering.SetChunkData(chunk);
             
             //chunk.transform.position = worldPos;
-            if (chunk.transform.position != worldPos)
-            {
-                transformQueue.Enqueue((chunk,worldPos));
-            }
+            //if (go.transform.position != worldPos)
+            //{
+                //transformQueue.Enqueue((chunk,worldPos));
+            //}
             
             chunks.Add(coord, chunk);
-
+            
             // Load saved changes on main thread
             Dictionary<int, byte> savedChanges = null;
             if (WorldSaveSystem.ChunkSaveExist(coord))
@@ -338,11 +355,11 @@ namespace Core
             // Reset chunk state before returning to pool
             chunk.blocks = new byte[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
             chunk.changedBlocks.Clear();
-            chunk.name = $"Chunk_{coord.x}_{coord.y}_{coord.z}_chunk_nr{chunkCount}";
+            //chunk.name = $"Chunk_{coord.x}_{coord.y}_{coord.z}_chunk_nr{chunkCount}";
 
             // return to pool
-            chunk.gameObject.SetActive(false);
-            chunkPool.Enqueue(chunk);
+            chunk.renderer.gameObject.SetActive(false);
+            chunkPool.Enqueue(chunk.renderer.gameObject);
 
             meshQue.Remove(chunk);
             generationQue.Remove(coord);
@@ -376,11 +393,11 @@ namespace Core
                     {
                         // Save changes before removing
                         WorldSaveSystem.SaveChunk(coord, chunk.changedBlocks);
-                        Destroy(chunk.gameObject);
+                        Destroy(chunk.renderer.gameObject);
                     }
                     else
                     {
-                        Destroy(chunk.gameObject);
+                        Destroy(chunk.renderer.gameObject);
                     }
 
                     meshQue.Remove(chunk);
@@ -590,7 +607,7 @@ namespace Core
         private IEnumerator BuildChunkMeshNextFrame(Chunk chunk)
         {
             yield return null;
-            chunk.BuildMesh();
+            chunk.renderer.BuildChunkMesh();
         }
         
         bool HasAllNeighbors(Vector3Int coord)
@@ -646,7 +663,7 @@ namespace Core
 
         private void AddIfExists(Vector3Int c)
         {
-            if (chunks.TryGetValue(c, out Chunk n) && n != null && n.gameObject != null)
+            if (chunks.TryGetValue(c, out Chunk n) && n != null && n.renderer.gameObject != null)
                 meshQue.Add(n);
         }
         
@@ -682,7 +699,7 @@ namespace Core
         private void SortChunksLists()
         {
             // Remove null/destroyed chunks first
-            meshQue.RemoveWhere(c => c == null || c.gameObject == null);
+            meshQue.RemoveWhere(c => c == null || c.renderer.gameObject == null);
             
             int buildChunksThisFrame = Mathf.Min(chunksPerFrame, meshQue.Count);
             int generatingChunksThisFrame = Math.Min(chunksPerFrame, generationQue.Count);
@@ -733,20 +750,55 @@ namespace Core
                 chunkCount++;
                 GenerateChunk(coord, chunkCount);
             }
+            
+            if (transformQueue.Count > 0)
+            {
+                int transformChunksThisFrame = Mathf.Min(chunksPerFrame, transformQueue.Count);
+                transformChunksThisFrame = Mathf.Clamp(transformChunksThisFrame/2, 1, transformQueue.Count);
+            
+                //Transform que
+                for (int i = 0; i < transformChunksThisFrame; i++)
+                {
+                    var t = transformQueue.Dequeue();
+                    if (t.chunk != null && t.chunk.renderer.gameObject != null)
+                    {
+                        t.chunk.renderer.transform.position = t.tragetPos;
+                        t.chunk.renderer.gameObject.SetActive(true);
+
+                        if (!meshWaitList.Contains(t.chunk.coord))
+                        {
+                            meshWaitList.Add(t.chunk.coord);
+                        }
+                        
+                        ResolveWaitListNeighbors(t.chunk.coord);
+                    }
+                }
+            }
 
             // Build meshes from meshQue (distance prioritized)
             if (meshQue.Count > 0 && chunksPerFrame > 0)
             {
+                // Sort by distance to player using chunk coordinates
                 List<Chunk> sortedChunks = meshQue
-                    .OrderBy(c => Vector3.Distance(player.position, c.transform.position))
+                    .Where(c => c != null)
+                    .OrderBy(c =>
+                    {
+                        // Compute world position from coord
+                        Vector3 worldPos = new Vector3(
+                            c.coord.x * Chunk.CHUNK_SIZE,
+                            c.coord.y * Chunk.CHUNK_SIZE,
+                            c.coord.z * Chunk.CHUNK_SIZE
+                        );
+                        return Vector3.SqrMagnitude(player.position - worldPos);
+                    })
                     .ToList();
 
                 // Build closest chunks first
                 for (int i = 0; i < buildChunksThisFrame; i++)
                 {
                     Chunk chunkToBuild = sortedChunks[i];
-                    if (chunkToBuild != null && chunkToBuild.gameObject != null &&
-                        chunkToBuild.gameObject.activeInHierarchy)
+                    if (chunkToBuild != null && chunkToBuild.renderer.gameObject != null &&
+                        chunkToBuild.renderer.gameObject.activeInHierarchy)
                     {
                         StartCoroutine(BuildChunkMeshNextFrame(chunkToBuild));
                     }
@@ -756,24 +808,7 @@ namespace Core
                 }
             }
 
-            if (transformQueue.Count > 0)
-            {
-                var testChunkPos = transformQueue.Dequeue();
-                if (testChunkPos.chunk != null || testChunkPos.chunk.gameObject != null)
-                {
-                    transformQueue.Enqueue(testChunkPos);
-                }
-                
-                int transformChunksThisFrame = Mathf.Min(chunksPerFrame, transformQueue.Count);
-                transformChunksThisFrame = Mathf.Clamp(transformChunksThisFrame/2, 1, transformQueue.Count);
             
-                //Transform que
-                for (int i = 0; i < transformChunksThisFrame; i++)
-                {
-                    var t = transformQueue.Dequeue();
-                    t.chunk.transform.position = t.tragetPos;
-                }
-            }
             
             
         }
