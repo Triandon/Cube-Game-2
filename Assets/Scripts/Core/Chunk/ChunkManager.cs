@@ -29,6 +29,7 @@ namespace Core
         public int initialPoolSize = 20; // pre-instantiate this many chunks
 
         private ThreadedChunkWorker threadedWorker;
+        private ThreadedPaddedBlockBuilder paddedBlockBuilder;
 
         // --- new: track pending requests so we don't enqueue duplicates
         private HashSet<Vector3Int> pendingRequests = new HashSet<Vector3Int>();
@@ -65,6 +66,7 @@ namespace Core
             // start worker threads (use processorCount -1 or 1 minimum)
             threadedWorker = new ThreadedChunkWorker(Math.Max(1, SystemInfo.processorCount - 1));
             threadedWorker.Start();
+            
 
             // Always spawn first chunk at 0,0,0 if missing
             if (!chunks.ContainsKey(Vector3Int.zero))
@@ -326,10 +328,10 @@ namespace Core
             }
 
             // Build padded blocks (center maybe empty — worker will generate center blocks or use padded center)
-            byte[,,] padded = BuildPaddedBlocks(coord);
+            var snapshots = CaptureNeighborSnapshots(coord);
 
             // Create request with padded array and saved changes
-            var req = new ChunkGenRequest(coord, savedChanges, padded);
+            var req = new ChunkGenRequest(coord, savedChanges, snapshots);
 
             // Mark request pending and enqueue
             pendingRequests.Add(coord);
@@ -535,73 +537,24 @@ namespace Core
             Debug.Log("World saved successfully!");
         }
 
-        // Build padded blocks to send to worker. padded size = [S+2,S+2,S+2] with center at [1..S]
-        //This can be potensionaly added to an other thread
-        public byte[,,] BuildPaddedBlocks(Vector3Int coord)
+        private Dictionary<Vector3Int, byte[,,]> CaptureNeighborSnapshots(Vector3Int coord)
         {
-            int S = Chunk.CHUNK_SIZE;
-            int P = S + 2;
-            byte[,,] padded = new byte[P, P, P];
-
-            // For offsets -1..+1 in x,y,z
+            var dict = new Dictionary<Vector3Int, byte[,,]>();
+            
             for (int ox = -1; ox <= 1; ox++)
             for (int oy = -1; oy <= 1; oy++)
             for (int oz = -1; oz <= 1; oz++)
             {
-                Vector3Int neighborCoord = coord + new Vector3Int(ox, oy, oz);
-                if (!chunks.TryGetValue(neighborCoord, out Chunk neighbor) || neighbor.blocks == null)
+                Vector3Int nc = coord + new Vector3Int(ox, oy, oz);
+
+                if (!chunks.TryGetValue(nc, out Chunk c) || c.blocks == null)
                     continue;
 
-                byte[,,] src = neighbor.blocks;
-
-                // Destination origin in the large 3xS grid: (-1->0, 0->S, +1->2S)
-                int baseDstX = (ox + 1) * S;
-                int baseDstY = (oy + 1) * S;
-                int baseDstZ = (oz + 1) * S;
-
-                for (int x = 0; x < S; x++)
-                for (int y = 0; y < S; y++)
-                for (int z = 0; z < S; z++)
-                {
-                    int bigX = baseDstX + x;
-                    int bigY = baseDstY + y;
-                    int bigZ = baseDstZ + z;
-
-                    // Map the 3xS^3 -> compact [1..S] by subtracting S and adding 1
-                    int cx = bigX - S + 1;
-                    int cy = bigY - S + 1;
-                    int cz = bigZ - S + 1;
-
-                    if (cx >= 0 && cx < P && cy >= 0 && cy < P && cz >= 0 && cz < P)
-                        padded[cx, cy, cz] = src[x, y, z];
-                }
+                // SNAPSHOT (important!)
+                dict[nc] = (byte[,,])c.blocks.Clone();
             }
 
-            // --- Ensure the center is always filled ---
-            bool centerEmpty = true;
-            for (int x = 1; x <= S; x++)
-            for (int y = 1; y <= S; y++)
-            for (int z = 1; z <= S; z++)
-            {
-                if (padded[x, y, z] != 0)
-                {
-                    centerEmpty = false;
-                    break;
-                }
-            }
-
-            if (centerEmpty)
-            {
-                // Use the existing thread-safe generator from ThreadedChunkProcessor
-                byte[,,] generated = ThreadedChunkProcessor.GenerateChunkBlocks(coord);
-                for (int x = 0; x < S; x++)
-                for (int y = 0; y < S; y++)
-                for (int z = 0; z < S; z++)
-                    padded[x + 1, y + 1, z + 1] = generated[x, y, z];
-            }
- 
-
-            return padded;
+            return dict;
         }
 
         private IEnumerator BuildChunkMeshNextFrame(Chunk chunk)

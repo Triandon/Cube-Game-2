@@ -7,12 +7,12 @@ public class ChunkGenRequest
     public Dictionary<int, byte> savedChanges;
     // paddedBlocks: [CHUNK_SIZE + 2, CHUNK_SIZE + 2, CHUNK_SIZE + 2]
     // center chunk is at offset +1 in each axis.
-    public byte[,,] paddedBlocks;
+    public Dictionary<Vector3Int, byte[,,]> neighborSnapshots;
 
-    public ChunkGenRequest(Vector3Int coord, Dictionary<int, byte> savedChanges, byte[,,] paddedBlocks)
+    public ChunkGenRequest(Vector3Int coord, Dictionary<int, byte> savedChanges, Dictionary<Vector3Int, byte[,,]> neighborSnapshots)
     {
         this.coord = coord;
         this.savedChanges = savedChanges;
-        this.paddedBlocks = paddedBlocks;
+        this.neighborSnapshots = neighborSnapshots;
     }
 }

@@ -2,6 +2,7 @@ using Core;
 using Core.Block;
 using UnityEngine;
 using System;
+using System.Collections.Generic;
 
 public static class ThreadedChunkProcessor
 {
@@ -18,15 +19,15 @@ public static class ThreadedChunkProcessor
         // 1. PREPARE PADDED BLOCKS
         // ------------------------------------
         // padded expected size = (S+2)^3, center located at [1..S] on each axis
-        byte[,,] padded = req.paddedBlocks;
-        bool paddedValid = padded != null &&
-                           padded.GetLength(0) == S + 2 &&
-                           padded.GetLength(1) == S + 2 &&
-                           padded.GetLength(2) == S + 2;
+        byte[,,] padded = null;
 
-        if (!paddedValid)
+        if (req.neighborSnapshots != null && req.neighborSnapshots.Count > 0)
         {
-            // No valid padded provided -> generate center (thread-safe)
+            padded = BuildPaddedBlocks(req.coord, req.neighborSnapshots);
+        }
+
+        if (padded == null)
+        {
             padded = new byte[S + 2, S + 2, S + 2];
             byte[,,] gen = GenerateChunkBlocks(coord);
 
@@ -34,15 +35,8 @@ public static class ThreadedChunkProcessor
             for (int y = 0; y < S; y++)
             for (int z = 0; z < S; z++)
                 padded[x + 1, y + 1, z + 1] = gen[x, y, z];
-
-            // neighbors remain 0 (air) if not present
+            
             Debug.Log($"ThreadedChunkProcessor: generated center for chunk {coord} (no padded provided).");
-        }
-        else
-        {
-            // Useful debug to verify padded used
-            // (comment out in production if too chatty)
-            // Debug.Log($"ThreadedChunkProcessor: using provided padded for chunk {coord}.");
         }
 
         // ------------------------------------
@@ -121,7 +115,60 @@ public static class ThreadedChunkProcessor
         return new ChunkGenResult(coord, center, meshData);
     }
 
+    private static byte[,,] BuildPaddedBlocks(
+        Vector3Int coord, Dictionary<Vector3Int, byte[,,]> neighbors)
+    {
+        int S = Chunk.CHUNK_SIZE;
+        int P = S + 2;
 
+        byte[,,] padded = new byte[P, P, P];
+
+        foreach (var kv in neighbors)
+        {
+            Vector3Int delta = kv.Key - coord;
+            byte[,,] src = kv.Value;
+
+            int baseX = (delta.x + 1) * S;
+            int baseY = (delta.y + 1) * S;
+            int baseZ = (delta.z + 1) * S;
+
+            for (int x = 0; x < S; x++)
+            for (int y = 0; y < S; y++)
+            for (int z = 0; z < S; z++)
+            {
+                int px = baseX + x - S + 1;
+                int py = baseY + y - S + 1;
+                int pz = baseZ + z - S + 1;
+
+                if ((uint)px < P && (uint)py < P && (uint)pz < P)
+                    padded[px, py, pz] = src[x, y, z];
+            }
+        }
+        
+        bool centerEmpty = true;
+        for (int x = 1; x <= S && centerEmpty; x++)
+        for (int y = 1; y <= S && centerEmpty; y++)
+        for (int z = 1; z <= S; z++)
+        {
+            if (padded[x, y, z] != 0)
+            {
+                centerEmpty = false;
+                break;
+            }
+        }
+
+        if (centerEmpty)
+        {
+            byte[,,] gen = GenerateChunkBlocks(coord);
+            for (int x = 0; x < S; x++)
+            for (int y = 0; y < S; y++)
+            for (int z = 0; z < S; z++)
+                padded[x + 1, y + 1, z + 1] = gen[x, y, z];
+        }
+
+
+        return padded;
+    }
 
     // Use same noise & rules as your Chunk.GenerateHeightMapData()
     // This function is only used if no padded blocks were passed in.
