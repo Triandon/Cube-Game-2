@@ -10,6 +10,7 @@ namespace Core.Block
         public static Block DirtBlock;
         public static Block StoneBlock;
         public static Block Sigma;
+        public static Block ChestBlock;
         
         static BlockDataBase()
         {
@@ -33,6 +34,10 @@ namespace Core.Block
             //Sigma Block 
             Sigma = new Block(4, "Sigma_Block", top: 4, side: 4, bottom: 4);
             BlockRegistry.RegisterBlock(Sigma);
+            
+            //Chest Block 
+            ChestBlock = new Block(5, "Chest_Block", top: 5, side: 5, bottom: 5);
+            BlockRegistry.RegisterBlock(ChestBlock);
 
             Debug.Log("Blocks registered (static)");
         }

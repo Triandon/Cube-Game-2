@@ -533,8 +533,6 @@ namespace Core
                     chunk.isDirty = false;
                 }
             }
-
-            Debug.Log("World saved successfully!");
         }
 
         private Dictionary<Vector3Int, byte[,,]> CaptureNeighborSnapshots(Vector3Int coord)

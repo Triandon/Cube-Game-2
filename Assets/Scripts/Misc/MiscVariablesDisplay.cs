@@ -1,13 +1,14 @@
 using Core;
 using TMPro;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 public class MiscVariablesDisplay : MonoBehaviour
 {
     public TextMeshProUGUI ChunkCountText;
     public TextMeshProUGUI RenderDistanceText;
     public TextMeshProUGUI chunkBuilding;
-    public TextMeshProUGUI playerCordsText;
+    public TextMeshProUGUI playerCordsText, usernameDisplayText;
     private ChunkManager chunkManager;
     private int chunkCount;
     private int renderDistance;
@@ -15,11 +16,18 @@ public class MiscVariablesDisplay : MonoBehaviour
     private Vector3Int playerPos;
 
     public Transform player;
+
+    private Settings settings;
     
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
     {
         chunkManager = FindAnyObjectByType<ChunkManager>();
+        settings = Settings.Instance;
+        if (settings != null)
+        {
+            usernameDisplayText.text = settings.userName;
+        }
     }
 
     // Update is called once per frame
@@ -57,11 +65,22 @@ public class MiscVariablesDisplay : MonoBehaviour
         if (Input.GetKeyDown(KeyCode.Z))
         {
             chunkManager.SaveWorld();
+            InventoryHolder[] allHolders = FindObjectsOfType<InventoryHolder>();
+            foreach (var holder in allHolders)
+            {
+                holder.SaveInventory();
+            }
         }
         
         if (Input.GetKeyDown(KeyCode.R))
         {
             player.position = new Vector3(2.5f, 108f, 2.6f);
+        }
+
+        if (Input.GetKeyDown(KeyCode.Escape))
+        {
+            Cursor.lockState = CursorLockMode.None;
+            SceneManager.LoadScene("Scenes/Menu");
         }
     }
 }

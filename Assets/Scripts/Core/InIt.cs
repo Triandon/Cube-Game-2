@@ -9,6 +9,13 @@ namespace Core
         private void Awake()
         {
             BlockDataBase.Init();
+            // Load atlas
+            Material itemAtlas = Resources.Load<Material>("Materials/AtlasMaterial");
+            ItemRegistry.InitAtlas(
+                atlasMaterial: itemAtlas,
+                atlasSize: 256,
+                tileSize: 16
+            );
             ItemDatabase.Init();
         }
 

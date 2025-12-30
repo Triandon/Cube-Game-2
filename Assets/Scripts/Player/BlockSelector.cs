@@ -26,7 +26,8 @@ public class BlockSelector : MonoBehaviour
     {
         chunkManager = FindAnyObjectByType<ChunkManager>();
         hotBar = FindAnyObjectByType<HotBar>();
-        inventory = GetComponent<Inventory>();
+        InventoryHolder holder = GetComponent<InventoryHolder>();
+        inventory = holder.Inventory;
         GenerateSelectorCube();
     }
 
@@ -89,7 +90,7 @@ public class BlockSelector : MonoBehaviour
 
                 if (item != null)
                 {
-                    inventory.AddItem(item.id, 1);
+                    inventory.AddItem(item.id, 1,item.itemName);
 
                 }
             }
@@ -108,7 +109,7 @@ public class BlockSelector : MonoBehaviour
                 {
                     ModifyBlock(target,stack.Item.blockId);
 
-                    stack.RemoveItemToStack(1);
+                    inventory.RemoveItemFromSlot(hotBar.selectedSlot, 1);
                 }
             }
         }

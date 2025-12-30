@@ -7,20 +7,34 @@ using Image = UnityEngine.UI.Image;
 
 public class HotBar : MonoBehaviour
 {
-
+    [SerializeField] private InventoryHolder playerInventoryHolder;
+    
     private Inventory inventory;
     public int selectedSlot = 0;
-    
-    public Image[] slotIcons;
     public Image[] slots;
-    public Sprite blackIcon;
 
     public TextMeshProUGUI[] slotsCount;
-    private void Awake()
+
+    private void Start()
     {
-        inventory = GetComponent<Inventory>();
+        inventory = playerInventoryHolder.Inventory;
+        inventory.OnInventoryChanged += Refresh;
+        Refresh();
     }
 
+    private void OnDestroy()
+    {
+        if (inventory != null)
+        {
+            inventory.OnInventoryChanged -= Refresh;
+        }
+    }
+    private void Refresh()
+    {
+        UpdateIcons();
+        UpdateItemStackCount();
+    }
+    
     // Update is called once per frame
     void Update()
     {
@@ -37,9 +51,7 @@ public class HotBar : MonoBehaviour
         if (Input.GetKeyDown(KeyCode.Alpha2)) selectedSlot = 1;
         if (Input.GetKeyDown(KeyCode.Alpha3)) selectedSlot = 2;
         
-        UpdateIcons();
         UpdateSelectedSlot();
-        UpdateItemStackCount();
     }
 
     public ItemStack GetSelectedStack()
@@ -59,17 +71,17 @@ public class HotBar : MonoBehaviour
 
     private void UpdateIcons()
     {
-        for (int i = 0; i < slotIcons.Length; i++)
+        for (int i = 0; i < slots.Length; i++)
         {
             ItemStack stack = inventory.slots[i];
 
-            if (!stack.IsEmpty && stack.Item.iconSprite != null)
+            if (!stack.IsEmpty && stack.Item.textureIndex != -1)
             {
-                slotIcons[i].sprite = stack.Item.iconSprite;
+                slots[i].sprite = ItemRegistry.GetItemSprite(stack.itemId);
             }
             else
             {
-                slotIcons[i].sprite = null;
+                slots[i].sprite = null;
             }
         }
     }

@@ -12,16 +12,16 @@ namespace Core.Item
         private static void RegisterItems()
         {
             //Grass item
-            Texture2D grassTex = Resources.Load<Texture2D>("Textures/Dirt 1");
-            ItemRegistry.RegisterItem(new Item(id:1,itemName:"Grass_Item",isBlock:true,blockId:1,grassTex));
+            ItemRegistry.RegisterItem(new Item(id:1,itemName:"Grass_Item",isBlock:true,blockId:1,textureIndex:1,64));
         
             //Dirt Item
-            Texture2D dirtTex = Resources.Load<Texture2D>("Textures/FirtilSoil");
-            ItemRegistry.RegisterItem(new Item(id:2,itemName:"Dirt_Item",isBlock:true,blockId:2,dirtTex));
+            ItemRegistry.RegisterItem(new Item(id:2,itemName:"Dirt_Item",isBlock:true,blockId:2,textureIndex:0,12));
         
             //Stone item
-            Texture2D stoneTex = Resources.Load<Texture2D>("Textures/SteinTekstur");
-            ItemRegistry.RegisterItem(new Item(id:3,itemName:"Stone_Item",isBlock:true,blockId:3,stoneTex));
+            ItemRegistry.RegisterItem(new Item(id:3,itemName:"Stone_Item",isBlock:true,blockId:3,textureIndex:3,999));
+            
+            //Chest Item
+            ItemRegistry.RegisterItem(new Item(id:5, itemName:"Chest", isBlock:true, blockId:5, textureIndex:5,1));
         }
     
         public static void Init(){}

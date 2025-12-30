@@ -2,19 +2,24 @@ using System;
 using Core.Item;
 using UnityEngine;
 
-public class Inventory : MonoBehaviour
+[System.Serializable]
+public class Inventory
 {
-    public ItemStack[] slots = new ItemStack[3];
+    public ItemStack[] slots;
+    public int Size => slots.Length;
 
-    private void Awake()
+    public event Action OnInventoryChanged;
+
+    public Inventory(int size)
     {
+        slots = new ItemStack[size];
         for (int i = 0; i < slots.Length; i++)
         {
-            slots[i] = new ItemStack(0,0);
+            slots[i] = new ItemStack(0,0,"");
         }
     }
 
-    public bool AddItem(int itemId, int amount)
+    public bool AddItem(int itemId, int amount, string displayName)
     {
         //Fllis existing stacks
         for (int i = 0; i < slots.Length && amount > 0; i++)
@@ -22,6 +27,7 @@ public class Inventory : MonoBehaviour
             if (slots[i].itemId == itemId)
             {
                 amount = slots[i].AddItemToStack(amount);
+                slots[i].displayName = displayName;
             }
         }
         
@@ -32,9 +38,11 @@ public class Inventory : MonoBehaviour
             {
                 slots[i].itemId = itemId;
                 amount = slots[i].AddItemToStack(amount);
+                slots[i].displayName = displayName;
             }
         }
 
+        OnInventoryChanged?.Invoke();
         return amount == 0;
     }
 
@@ -48,6 +56,23 @@ public class Inventory : MonoBehaviour
             }
         }
 
+        OnInventoryChanged?.Invoke();
         return amount == 0;
     }
+    
+    public bool RemoveItemFromSlot(int slotIndex, int amount)
+    {
+        if (slotIndex < 0 || slotIndex >= slots.Length) return false;
+
+        amount = slots[slotIndex].RemoveItemToStack(amount);
+
+        OnInventoryChanged?.Invoke();
+        return amount == 0;
+    }
+
+    public void InventoryChanged()
+    {
+        OnInventoryChanged?.Invoke();
+    }
+
 }
