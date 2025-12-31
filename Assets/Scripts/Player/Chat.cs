@@ -1,6 +1,6 @@
 using System.Collections.Generic;
+using Core.Item;
 using TMPro;
-using UnityEditor.VersionControl;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UI;
@@ -37,6 +37,10 @@ public class Chat : MonoBehaviour
 	    {
 		    if (Input.GetKeyDown(KeyCode.Return))
 		    {
+			    if (chatBox.text.StartsWith("/"))
+			    {
+				    ChatCommands.HandleCommand(chatBox.text,this);
+			    }
 			    SendMessageToChat(userName + ": "+ chatBox.text,Message.MessageType.playerMessage);
 			    chatBox.text = "";
 		    }
@@ -75,7 +79,7 @@ public class Chat : MonoBehaviour
 	    
 	    messageList.Add(newMessage);
     }
-
+    
     Color MessageTypeColor(Message.MessageType messageType)
     {
 	    Color color = info;
