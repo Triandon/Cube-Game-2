@@ -19,6 +19,9 @@ namespace Core
 
         public HashSet<Chunk> meshQue = new HashSet<Chunk>();
         private Queue<GameObject> chunkPool = new Queue<GameObject>();
+        private HashSet<Vector3Int> generationQue = new HashSet<Vector3Int>();
+        private Queue<(Chunk chunk, Vector3Int tragetPos)> transformQueue =
+            new Queue<(Chunk chunk, Vector3Int tragetPos)>();
 
         // How many chunks should be building at once.
         public int chunksPerFrame = 4;
@@ -29,18 +32,10 @@ namespace Core
         public int initialPoolSize = 20; // pre-instantiate this many chunks
 
         private ThreadedChunkWorker threadedWorker;
-        private ThreadedPaddedBlockBuilder paddedBlockBuilder;
 
         // --- new: track pending requests so we don't enqueue duplicates
         private HashSet<Vector3Int> pendingRequests = new HashSet<Vector3Int>();
-        private HashSet<Vector3Int> generationQue = new HashSet<Vector3Int>();
         
-        //Que for checked chunks
-        private HashSet<Vector3Int> meshWaitList = new HashSet<Vector3Int>();
-        private HashSet<Vector3Int> readyForBuild = new HashSet<Vector3Int>();
-
-        private Queue<(Chunk chunk, Vector3Int tragetPos)> transformQueue =
-            new Queue<(Chunk chunk, Vector3Int tragetPos)>();
         
         //If a player moves (so the chunks also moves), then if the player increase render distance new chunks
         //gets generated and there forms a line where moved chunks arent getting re rendered :(
@@ -137,7 +132,6 @@ namespace Core
             {
                 // clear pendingRequests entry in case it still exists
                 pendingRequests.Remove(res.coord);
-                ResolveWaitListNeighbors(res.coord);
                 return;
             }
 
@@ -151,29 +145,12 @@ namespace Core
             var chunkRender = chunk.renderer;
             if (chunkRender != null && res.meshData != null)
             {
-                // Only apply worker mesh if neighbors exist (or they're outside world)
-                if (HasAllNeighbors(res.coord))
-                {
-                    try
-                    {
-                        readyForBuild.Add(res.coord);
-                        chunkRender.ApplyMeshData(res.meshData);
-                    }
-                    catch (Exception e)
-                    {
-                        Debug.LogWarning($"ChunkManager: ApplyMeshData exception for {res.coord}: {e}");
-                        // fallback: schedule chunk for main-thread mesh generation (older path)
-                        meshQue.Add(chunk);
-                    }
-                }
-                
-                EnqueueChunkBorderUpdates(chunk.coord);
-                
+                chunkRender.ApplyMeshData(res.meshData);
+                EnqueueNeighborRebuilds(chunk.coord);
             }
             else
             {
-                // No renderer or no meshdata -> schedule for main-thread meshing
-                meshWaitList.Add(res.coord);
+                meshQue.Add(chunk);
             }
             
             // Remove from pending requests set so future generates are allowed
@@ -244,25 +221,6 @@ namespace Core
             Vector3Int.up, Vector3Int.down,
             new Vector3Int(0,0,1), new Vector3Int(0,0,-1)
         };
-
-        private void ResolveWaitListNeighbors(Vector3Int newlyLoadedChunk)
-        {
-            foreach (var d in dirs)
-            {
-                Vector3Int c = newlyLoadedChunk + d;
-                
-                if(!meshWaitList.Contains(c)) continue;
-                
-                if(!chunks.TryGetValue(c,out Chunk chunk)) continue;
-                
-                if(!HasAllNeighbors(c)) continue;
-
-                meshWaitList.Remove(c);
-                readyForBuild.Add(c);
-                meshQue.Add(chunk);
-            }
-        }
-
 
         private Chunk GenerateChunk(Vector3Int coord, int chunkNumber)
         {
@@ -368,8 +326,6 @@ namespace Core
 
             // Make sure to remove any pending request marker
             pendingRequests.Remove(coord);
-            meshWaitList.Remove(coord);
-            readyForBuild.Remove(coord);
 
             chunks.Remove(coord);
             chunkCount--;
@@ -421,19 +377,6 @@ namespace Core
         {
             chunks.TryGetValue(coord, out var c);
             return c;
-        }
-
-        private List<Vector3Int> GetNeighborCoords(Vector3Int coord)
-        {
-            return new List<Vector3Int>
-            {
-                coord + Vector3Int.right,
-                coord + Vector3Int.left,
-                coord + Vector3Int.up,
-                coord + Vector3Int.down,
-                coord + new Vector3Int(0, 0, 1),
-                coord + new Vector3Int(0, 0, -1)
-            };
         }
 
         public Chunk GetChunkFromWorldPos(Vector3Int worldPos)
@@ -561,47 +504,30 @@ namespace Core
             chunk.renderer.BuildChunkMesh();
         }
         
-        bool HasAllNeighbors(Vector3Int coord)
-        {
-            if (IsHorizonChunk(coord)) return true;
-            
-            Vector3Int[] dirs =
-            {
-                Vector3Int.right, Vector3Int.left,
-                Vector3Int.up,    Vector3Int.down,
-                new Vector3Int(0,0,1),
-                new Vector3Int(0,0,-1)
-            };
-
-            foreach (Vector3Int d in dirs)
-            {
-                Vector3Int nc = coord + d;
-
-                // Outside world = treat as air, valid
-                if (!World.Instance.IsChunkInsideOfWorld(nc))
-                    continue;
-
-                // Inside world = must exist
-                if (!chunks.ContainsKey(nc))
-                    return false;
-            }
-            return true;
-        }
         
-        bool IsHorizonChunk(Vector3Int coord)
+        private void EnqueueNeighborRebuilds(Vector3Int coord)
         {
-            int dx = Mathf.Abs(coord.x - playerChunkCord.x);
-            int dy = Mathf.Abs(coord.y - playerChunkCord.y);
-            int dz = Mathf.Abs(coord.z - playerChunkCord.z);
+            if(!chunks.TryGetValue(coord, out Chunk c))
+                return;
+            
+            meshQue.Add(c);
 
-            return dx == viewDistance || dy == viewDistance || dz == viewDistance;
+            foreach (var d in dirs)
+            {
+                if (chunks.TryGetValue(coord + d, out Chunk neighbor) &&
+                    neighbor.renderer && neighbor.renderer.gameObject)
+                {
+                    meshQue.Add(neighbor);
+                }
+            }
         }
-
 
         
         public void EnqueueNeighborUpdates(Vector3Int coord, Vector3Int localPos)
         {
             // If block is on any border, add neighbor chunk(s) to mesh queue
+            
+            //This is currently only used for block placement!
             if (localPos.x == 0) AddIfExists(coord + Vector3Int.left);
             if (localPos.x == Chunk.CHUNK_SIZE - 1) AddIfExists(coord + Vector3Int.right);
 
@@ -618,34 +544,6 @@ namespace Core
                 meshQue.Add(n);
         }
         
-        private void EnqueueChunkBorderUpdates(Vector3Int coord)
-        {
-            int S = Chunk.CHUNK_SIZE;
-
-            // X faces
-            for (int y = 0; y < S; y++)
-            for (int z = 0; z < S; z++)
-            {
-                EnqueueNeighborUpdates(coord, new Vector3Int(0, y, z));
-                EnqueueNeighborUpdates(coord, new Vector3Int(S - 1, y, z));
-            }
-
-            // Y faces
-            for (int x = 0; x < S; x++)
-            for (int z = 0; z < S; z++)
-            {
-                EnqueueNeighborUpdates(coord, new Vector3Int(x, 0, z));
-                EnqueueNeighborUpdates(coord, new Vector3Int(x, S - 1, z));
-            }
-
-            // Z faces
-            for (int x = 0; x < S; x++)
-            for (int y = 0; y < S; y++)
-            {
-                EnqueueNeighborUpdates(coord, new Vector3Int(x, y, 0));
-                EnqueueNeighborUpdates(coord, new Vector3Int(x, y, S - 1));
-            }
-        }
 
         private void SortChunksLists()
         {
@@ -711,17 +609,14 @@ namespace Core
                 for (int i = 0; i < transformChunksThisFrame; i++)
                 {
                     var t = transformQueue.Dequeue();
-                    if (t.chunk != null && t.chunk.renderer.gameObject != null)
+                    if (t.chunk != null && t.chunk.renderer != null
+                        && t.chunk.renderer.gameObject != null && 
+                        chunks.ContainsKey(t.chunk.coord))
                     {
                         t.chunk.renderer.transform.position = t.tragetPos;
                         t.chunk.renderer.gameObject.SetActive(true);
-
-                        if (!meshWaitList.Contains(t.chunk.coord))
-                        {
-                            meshWaitList.Add(t.chunk.coord);
-                        }
                         
-                        ResolveWaitListNeighbors(t.chunk.coord);
+                        EnqueueNeighborRebuilds(t.chunk.coord);
                     }
                 }
             }
