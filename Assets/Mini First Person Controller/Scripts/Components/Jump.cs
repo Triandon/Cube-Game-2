@@ -1,4 +1,5 @@
-﻿using UnityEngine;
+﻿using TMPro;
+using UnityEngine;
 
 public class Jump : MonoBehaviour
 {
@@ -8,6 +9,8 @@ public class Jump : MonoBehaviour
 
     [SerializeField, Tooltip("Prevents jumping when the transform is in mid-air.")]
     GroundCheck groundCheck;
+    
+    public TMP_InputField chatBox;
 
     void Awake()
     {
@@ -18,11 +21,14 @@ public class Jump : MonoBehaviour
 
     void LateUpdate()
     {
-        // Jump when the Jump button is pressed and we are on the ground.
-        if (Input.GetButtonDown("Jump") && groundCheck.isGrounded)
+        if (!chatBox.isFocused)
         {
-            rigidbody.AddForce(Vector3.up * 100 * jumpStrength);
-            Jumped?.Invoke();
+            // Jump when the Jump button is pressed and we are on the ground.
+            if (Input.GetButtonDown("Jump") && groundCheck.isGrounded)
+            {
+                rigidbody.AddForce(Vector3.up * 100 * jumpStrength);
+                Jumped?.Invoke();
+            }
         }
     }
 }

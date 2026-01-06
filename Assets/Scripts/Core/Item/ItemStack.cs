@@ -13,6 +13,8 @@ namespace Core.Item
 
         public bool IsEmpty => itemId == 0 || count <= 0 || Item == null;
 
+        public static readonly ItemStack Empty = new ItemStack(0, 0, "");
+
         public ItemStack(int itemId, int count, string displayName)
         {
             this.itemId = itemId;

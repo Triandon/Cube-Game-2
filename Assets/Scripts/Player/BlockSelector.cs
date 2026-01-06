@@ -19,13 +19,13 @@ public class BlockSelector : MonoBehaviour
     public Transform highlightCube;
     public Transform cubeParent;
 
-    private HotBar hotBar;
+    private HotBarUI hotBar;
     
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
     {
         chunkManager = FindAnyObjectByType<ChunkManager>();
-        hotBar = FindAnyObjectByType<HotBar>();
+        hotBar = FindAnyObjectByType<HotBarUI>();
         InventoryHolder holder = GetComponent<InventoryHolder>();
         inventory = holder.Inventory;
         GenerateSelectorCube();
@@ -109,7 +109,7 @@ public class BlockSelector : MonoBehaviour
                 {
                     ModifyBlock(target,stack.Item.blockId);
 
-                    inventory.RemoveItemFromSlot(hotBar.selectedSlot, 1);
+                    inventory.RemoveItemFromSlot(hotBar.GetSelectedSlot(), 1);
                 }
             }
         }

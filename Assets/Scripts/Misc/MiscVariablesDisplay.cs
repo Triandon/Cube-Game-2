@@ -18,6 +18,9 @@ public class MiscVariablesDisplay : MonoBehaviour
     public Transform player;
 
     private Settings settings;
+
+    [SerializeField] private InventoryHolder playerHolder;
+    public TMP_InputField chatBox;
     
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
@@ -43,44 +46,53 @@ public class MiscVariablesDisplay : MonoBehaviour
         chunkBuilding.text = $"Chunks currently building: {chunksCurrentlyBuilding}";
         playerCordsText.text = "Coords: " + playerPos;
 
-        if (Input.GetKeyDown(KeyCode.I))
+        if (!chatBox.isFocused)
         {
-            chunkManager.viewDistance++;
-            chunkManager.UpdateChunks();
-        }
-
-        if (Input.GetKeyDown(KeyCode.K))
-        {
-            chunkManager.viewDistance--;
-            chunkManager.TrimUnusedChunks();
-            chunkManager.UpdateChunks();
-        }
-
-        if (Input.GetKeyDown(KeyCode.U))
-        {
-            chunkManager.TrimUnusedChunks();
-            chunkManager.UpdateChunks();
-        }
-
-        if (Input.GetKeyDown(KeyCode.Z))
-        {
-            chunkManager.SaveWorld();
-            InventoryHolder[] allHolders = FindObjectsOfType<InventoryHolder>();
-            foreach (var holder in allHolders)
+            if (Input.GetKeyDown(KeyCode.I))
             {
-                holder.SaveInventory();
+                chunkManager.viewDistance++;
+                chunkManager.UpdateChunks();
             }
-        }
-        
-        if (Input.GetKeyDown(KeyCode.R))
-        {
-            player.position = new Vector3(2.5f, 108f, 2.6f);
-        }
 
-        if (Input.GetKeyDown(KeyCode.Escape))
-        {
-            Cursor.lockState = CursorLockMode.None;
-            SceneManager.LoadScene("Scenes/Menu");
+            if (Input.GetKeyDown(KeyCode.K))
+            {
+                chunkManager.viewDistance--;
+                chunkManager.TrimUnusedChunks();
+                chunkManager.UpdateChunks();
+            }
+
+            if (Input.GetKeyDown(KeyCode.U))
+            {
+                chunkManager.TrimUnusedChunks();
+                chunkManager.UpdateChunks();
+            }
+
+            if (Input.GetKeyDown(KeyCode.Z))
+            {
+                chunkManager.SaveWorld();
+                InventoryHolder[] allHolders = FindObjectsOfType<InventoryHolder>();
+                foreach (var holder in allHolders)
+                {
+                    holder.SaveInventory();
+                }
+            }
+        
+            if (Input.GetKeyDown(KeyCode.R))
+            {
+                player.position = new Vector3(2.5f, 108f, 2.6f);
+            }
+
+            if (Input.GetKeyDown(KeyCode.Escape))
+            {
+                Cursor.lockState = CursorLockMode.None;
+                SceneManager.LoadScene("Scenes/Menu");
+            }
+
+            if (Input.GetKeyDown(KeyCode.E))
+            {
+                int newSize = playerHolder.Inventory.Size == 5 ? 3 : 5;
+                playerHolder.Inventory.Resize(newSize);
+            }
         }
     }
 }

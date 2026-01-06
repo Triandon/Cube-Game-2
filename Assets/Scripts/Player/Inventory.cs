@@ -9,6 +9,7 @@ public class Inventory
     public int Size => slots.Length;
 
     public event Action OnInventoryChanged;
+    public event Action OnInventoryResized;
 
     public Inventory(int size)
     {
@@ -72,6 +73,32 @@ public class Inventory
 
     public void InventoryChanged()
     {
+        OnInventoryChanged?.Invoke();
+    }
+
+    public void Resize(int newSize)
+    {
+        if(newSize == slots.Length)
+            return;
+
+        ItemStack[] newSlots = new ItemStack[newSize];
+
+        for (int i = 0; i < newSize; i++)
+        {
+            if (i < slots.Length)
+            {
+                newSlots[i] = slots[i];
+            }
+            else
+            {
+                newSlots[i] = new ItemStack(0, 0, "");
+            }
+        }
+        
+        slots = newSlots;
+            
+        //Order matters here!!!
+        OnInventoryResized?.Invoke();
         OnInventoryChanged?.Invoke();
     }
 
