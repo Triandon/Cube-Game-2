@@ -518,7 +518,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: 'Version nr: TestBuild12
+  m_text: 'Version nr: TestBuild11
 
 '
   m_isRightToLeft: 0
@@ -2651,7 +2651,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a938d871ce42d4446808241a8d24cfd4, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::InventoryHolder
-  ownerName: A
+  ownerName: SigmaBot123
   inventorySize: 5
   inventory:
     slots: []
@@ -4346,7 +4346,7 @@ MonoBehaviour:
   slotPrefab: {fileID: 4691630989961481880, guid: 6e9ee409498b202409212c2f91f5aa3f, type: 3}
   slotParent: {fileID: 1853867314}
   selectedSlot: 0
-  chatBox: {fileID: 2023732281}
+  chatBox: {fileID: 0}
 --- !u!1 &1856950278
 GameObject:
   m_ObjectHideFlags: 0

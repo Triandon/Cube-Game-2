@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using UnityEngine;
 
 namespace Core.Block
 {
@@ -11,19 +12,21 @@ namespace Core.Block
         public int topIndex;
         public int sideIndex;
         public int bottomIndex;
+        public int frontIndex;
     
         public List<BlockState> states = new List<BlockState>();
 
         public float hardness = 1f;
         public bool isTransparent = false;
 
-        public Block(byte id, string name, int top, int side, int bottom)
+        public Block(byte id, string name, int top, int side, int bottom, int front = -1)
         {
             this.id = id;
             this.blockName = name;
             this.topIndex = top;
             this.sideIndex = side;
             this.bottomIndex = bottom;
+            this.frontIndex = front;
         }
 
         public void AddState(string stateName, string value)
@@ -39,6 +42,17 @@ namespace Core.Block
         {
             var existing = states.Find(s => s.stateName == stateName);
             return existing != null ? existing.value : null;
+        }
+
+        public bool HasStates => states.Count > 0;
+        
+        //Events
+        
+        // Called once a block is placed!
+        public virtual void OnPlaced(
+            Vector3Int position, BlockStateContainer state, Transform player)
+        {
+            // default: does nothing
         }
     
     }

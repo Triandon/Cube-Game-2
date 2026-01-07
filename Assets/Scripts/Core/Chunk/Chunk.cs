@@ -12,8 +12,13 @@ namespace Core
     
         public Vector3Int coord;
         public byte[,,] blocks;
+        public BlockStateContainer[,,] states;
         public bool isDirty = false;
+        
         public Dictionary<int, byte> changedBlocks = new Dictionary<int, byte>();
+
+        public Dictionary<int, BlockStateContainer> changedStates
+            = new Dictionary<int, BlockStateContainer>();
         
         public ChunkManager chunkManager;
         public ChunkRendering renderer;
@@ -22,6 +27,8 @@ namespace Core
         {
             this.coord = coord;
             blocks = new byte[CHUNK_SIZE, CHUNK_SIZE, CHUNK_SIZE];
+
+            states = new BlockStateContainer[CHUNK_SIZE, CHUNK_SIZE, CHUNK_SIZE];
         }
 
         
@@ -91,6 +98,13 @@ namespace Core
 
         }
 
+        public BlockStateContainer GetStateAt(int x, int y, int z)
+        {
+            if (x < 0 || y < 0 || z < 0 || x >= CHUNK_SIZE || y >= CHUNK_SIZE || z >= CHUNK_SIZE) 
+                return null;
+            return states[x, y, z];
+        }
+
         public Block.Block GetBlockObjet(int x, int y, int z)
         {
             byte id = GetBlock(x, y, z);
@@ -109,6 +123,12 @@ namespace Core
 
 
         public void SetBlockLocal(Vector3Int localPos, byte id)
+        {
+            SetBlockLocal(localPos, id, null);
+            
+        }
+
+        public void SetBlockLocal(Vector3Int localPos, byte id, BlockStateContainer state)
         {
             int x = localPos.x;
             int y = localPos.y;
@@ -130,6 +150,18 @@ namespace Core
             }
 
             blocks[x, y, z] = id;
+            
+
+            if (state != null && !state.IsStateless())
+            {
+                states[x, y, z] = state;
+                changedStates[index] = state;
+            }
+            else
+            {
+                states[x, y, z] = null;
+                changedStates.Remove(index);
+            }
 
             isDirty = true;
 
@@ -139,9 +171,8 @@ namespace Core
                 chunkManager.meshQue.Add(this);
                 
                 //ask chunk manager to also add neighbto chunks if it was on the border change
-                chunkManager.EnqueueNeighborUpdates(coord,new Vector3Int(x,y,z));
+                chunkManager.EnqueueNeighborUpdates(coord,localPos);
             }
-            
         }
 
         public bool IsAir(byte id)

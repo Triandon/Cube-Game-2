@@ -51,9 +51,9 @@ public static class ThreadedChunkProcessor
         // ------------------------------------
         // 3. APPLY SAVED CHANGES (MODIFICATIONS)
         // ------------------------------------
-        if (req.savedChanges != null && req.savedChanges.Count > 0)
+        if (req.savedBlocks != null && req.savedBlocks.Count > 0)
         {
-            foreach (var kv in req.savedChanges)
+            foreach (var kv in req.savedBlocks)
             {
                 int idx = kv.Key;
                 byte id = kv.Value;
@@ -94,6 +94,8 @@ public static class ThreadedChunkProcessor
 
             return padded[px, py, pz];
         };
+        
+        Func<int,int,int,BlockStateContainer> getState = (x, y, z) => null;
 
         // ------------------------------------
         // 5. MESH GENERATION
@@ -101,7 +103,7 @@ public static class ThreadedChunkProcessor
         MeshData meshData;
         try
         {
-            meshData = ChunkMeshGeneratorThreaded.GenerateMeshData(getBlock);
+            meshData = ChunkMeshGeneratorThreaded.GenerateMeshData(getBlock,getState);
         }
         catch (Exception e)
         {

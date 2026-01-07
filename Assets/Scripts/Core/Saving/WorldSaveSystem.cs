@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using Core.Block;
 using UnityEngine;
 
 namespace Core
@@ -18,14 +19,41 @@ namespace Core
             return File.Exists(GetChunkPath(coord));
         }
 
-        public static void SaveChunk(Vector3Int coord, Dictionary<int,byte> changedBlocks)
+        public static void SaveChunk(Vector3Int coord, Dictionary<int,byte> changedBlocks,
+            Dictionary<int, BlockStateContainer> changedStates)
         {
             Directory.CreateDirectory(Application.persistentDataPath + "/chunks/");
-
             ChunkSaveData data = new ChunkSaveData();
-            foreach (var kv in changedBlocks)
+
+            HashSet<int> indices = new HashSet<int>(changedBlocks.Keys);
+            indices.UnionWith(changedStates.Keys);
+            
+            foreach (int index in indices)
             {
-                data.changedBlocks.Add(new SerializableBlockChange { index = kv.Key, id = kv.Value });
+                byte id = changedBlocks.TryGetValue(index, out var savedId)
+                    ? savedId
+                    : default;
+
+                List<SerializableBlockState> serializableStates = null;
+
+                if (changedStates.TryGetValue(index, out var stateContainer))
+                {
+                    if (stateContainer != null && !stateContainer.IsStateless())
+                    {
+                        serializableStates  = new List<SerializableBlockState>();
+                        foreach (var kv in stateContainer.GetAllStates)
+                        {
+                            serializableStates .Add(new SerializableBlockState
+                            {
+                                name = kv.Key,
+                                value = kv.Value.value
+                            });
+                        }
+                    }
+                }
+                
+                data.changedBlocks.Add(new SerializableBlockChange 
+                    { index = index, id = id, states = serializableStates });
             }
 
             string json = JsonUtility.ToJson(data);
@@ -33,16 +61,12 @@ namespace Core
             Debug.Log("World saved successfully!");
         }
 
-        public static Dictionary<int,byte> LoadChunk(Vector3Int coord)
+        public static ChunkSaveData LoadChunk(Vector3Int coord)
         {
             string json = File.ReadAllText(GetChunkPath(coord));
             ChunkSaveData data = JsonUtility.FromJson<ChunkSaveData>(json);
-        
-            Dictionary<int, byte> dict = new Dictionary<int, byte>();
-            foreach (var change in data.changedBlocks)
-                dict[change.index] = change.id;
-        
-            return dict;
+
+            return data;
         }
 
         public static string GetInventoryPath(string ownerName)

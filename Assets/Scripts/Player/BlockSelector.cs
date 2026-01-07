@@ -1,4 +1,5 @@
 using Core;
+using Core.Block;
 using Core.Item;
 using UnityEngine;
 
@@ -79,6 +80,7 @@ public class BlockSelector : MonoBehaviour
     {
         if(!hasHit) return;
 
+        // Break block
         if (Input.GetMouseButtonDown(0))
         {
             Vector3Int target = GetTargetBlockPos(lastHit, false);
@@ -98,6 +100,7 @@ public class BlockSelector : MonoBehaviour
             ModifyBlock(target,0);
         }
 
+        //Place block
         if (Input.GetMouseButtonDown(1))
         {
             Vector3Int target = GetTargetBlockPos(lastHit, true);
@@ -147,5 +150,6 @@ public class BlockSelector : MonoBehaviour
 
         return Physics.CheckBox(blockCenter, blockExtents, Quaternion.identity, playerLayer);
     }
+    
 
 }

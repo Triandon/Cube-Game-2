@@ -138,8 +138,18 @@ namespace Core
             // Apply block data
             chunk.blocks = res.blocks ?? new byte[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
 
+            if (chunk.changedStates.Count > 0)
+            {
+                foreach (var kv in chunk.changedStates)
+                {
+                    Vector3Int localPos = IndexToPos(kv.Key);
+                    BlockStateContainer state = kv.Value;
+                    chunk.states[localPos.x, localPos.y, localPos.z] = state;
+                }
+            }
+
             // If chunk has stored changes, it remains dirty
-            chunk.isDirty = chunk.changedBlocks.Count > 0;
+            chunk.isDirty = chunk.changedBlocks.Count > 0 || chunk.changedStates.Count > 0;
 
             // Apply the worker mesh data to the chunk's ChunkRendering (main thread only)
             var chunkRender = chunk.renderer;
@@ -155,6 +165,22 @@ namespace Core
             
             // Remove from pending requests set so future generates are allowed
             pendingRequests.Remove(res.coord);
+        }
+
+        public static Vector3Int IndexToPos(int index)
+        {
+            int C = Chunk.CHUNK_SIZE;
+            
+            int x = index % C;
+            int y = (index / C) % C;
+            int z = index / (C * C);
+
+            return new Vector3Int(x, y, z);
+        }
+
+        public static int PosToIndex(int x, int y, int z)
+        {
+            return x + Chunk.CHUNK_SIZE * (y + Chunk.CHUNK_SIZE * z);
         }
 
         // Get the chunk coordinate the player is currently inside
@@ -239,6 +265,7 @@ namespace Core
                 // Reset old data
                 chunk.blocks = new byte[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
                 chunk.changedBlocks.Clear();
+                chunk.changedStates.Clear();
                 chunk.isDirty = false;
                 
                 go.SetActive(false);
@@ -271,25 +298,44 @@ namespace Core
             chunks.Add(coord, chunk);
             
             // Load saved changes on main thread
-            Dictionary<int, byte> savedChanges = null;
+            ChunkSaveData saveData = null;
+            Dictionary<int, byte> savedBlocks = null;
+            Dictionary<int, BlockStateContainer> savedStates = null;
             if (WorldSaveSystem.ChunkSaveExist(coord))
             {
-                savedChanges = WorldSaveSystem.LoadChunk(coord);
+                saveData = WorldSaveSystem.LoadChunk(coord);
+
+                savedBlocks = new Dictionary<int, byte>();
+                savedStates = new Dictionary<int, BlockStateContainer>();
                 // do NOT apply saved changes to chunk.blocks here; worker will merge them
                 // but keep changedBlocks to reflect that the chunk has saved modifications
-                foreach (var kv in savedChanges)
+                foreach (var kv in saveData.changedBlocks)
                 {
-                    chunk.changedBlocks[kv.Key] = kv.Value;
+                    savedBlocks[kv.index] = kv.id;
+
+                    if (kv.states != null && kv.states.Count > 0)
+                    {
+                        BlockStateContainer container = new BlockStateContainer();
+                        foreach (var s in kv.states)
+                        {
+                            container.SetState(s.name,s.value);
+                        }
+
+                        savedStates[kv.index] = container;
+                    }
                 }
 
-                if (chunk.changedBlocks.Count > 0) chunk.isDirty = true;
+                chunk.changedBlocks = new Dictionary<int, byte>(savedBlocks);
+                chunk.changedStates = new Dictionary<int, BlockStateContainer>(savedStates);
+                chunk.isDirty = (chunk.changedBlocks.Count > 0) ||
+                                (chunk.changedStates.Count > 0);
             }
 
             // Build padded blocks (center maybe empty — worker will generate center blocks or use padded center)
             var snapshots = CaptureNeighborSnapshots(coord);
 
             // Create request with padded array and saved changes
-            var req = new ChunkGenRequest(coord, savedChanges, snapshots);
+            var req = new ChunkGenRequest(coord, savedBlocks, savedStates, snapshots);
 
             // Mark request pending and enqueue
             pendingRequests.Add(coord);
@@ -308,13 +354,14 @@ namespace Core
         {
             if (chunk.isDirty)
             {
-                WorldSaveSystem.SaveChunk(coord, chunk.changedBlocks);
+                WorldSaveSystem.SaveChunk(coord, chunk.changedBlocks, chunk.changedStates);
                 chunk.isDirty = false;
             }
 
             // Reset chunk state before returning to pool
             chunk.blocks = new byte[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
             chunk.changedBlocks.Clear();
+            chunk.changedStates.Clear();
             //chunk.name = $"Chunk_{coord.x}_{coord.y}_{coord.z}_chunk_nr{chunkCount}";
 
             // return to pool
@@ -350,7 +397,7 @@ namespace Core
                     if (chunk.isDirty)
                     {
                         // Save changes before removing
-                        WorldSaveSystem.SaveChunk(coord, chunk.changedBlocks);
+                        WorldSaveSystem.SaveChunk(coord, chunk.changedBlocks, chunk.changedStates);
                         Destroy(chunk.renderer.gameObject);
                     }
                     else
@@ -406,7 +453,19 @@ namespace Core
                 return;
             }
 
-            chunk.SetBlockLocal(local, id);
+            Block.Block block = BlockRegistry.GetBlock(id);
+            BlockStateContainer state = null;
+            
+
+            if (id != 0 && block != null && block.HasStates)
+            {
+                state = new BlockStateContainer();
+                block?.OnPlaced(
+                    position: worldPos, state: state, player: player);
+            }
+            
+            // Sets block at the local chunk
+            chunk.SetBlockLocal(local, id, state);
             
             // Enqueue neighbors if block is on border
             if (local.x == 0 || local.x == Chunk.CHUNK_SIZE - 1 ||
@@ -472,7 +531,7 @@ namespace Core
                 Chunk chunk = kvp.Value;
                 if (chunk.isDirty)
                 {
-                    WorldSaveSystem.SaveChunk(chunk.coord, chunk.changedBlocks);
+                    WorldSaveSystem.SaveChunk(chunk.coord, chunk.changedBlocks, chunk.changedStates);
                     chunk.isDirty = false;
                 }
             }

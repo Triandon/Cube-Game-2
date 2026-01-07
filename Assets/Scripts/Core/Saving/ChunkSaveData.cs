@@ -7,6 +7,7 @@ namespace Core
     {
         public int index;
         public byte id;
+        public List<SerializableBlockState> states;
     }
 
     [System.Serializable]

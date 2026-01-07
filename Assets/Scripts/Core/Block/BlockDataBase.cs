@@ -11,6 +11,7 @@ namespace Core.Block
         public static Block StoneBlock;
         public static Block Sigma;
         public static Block ChestBlock;
+        public static Block WoodBlock;
         
         static BlockDataBase()
         {
@@ -36,8 +37,13 @@ namespace Core.Block
             BlockRegistry.RegisterBlock(Sigma);
             
             //Chest Block 
-            ChestBlock = new Block(5, "Chest_Block", top: 5, side: 5, bottom: 5);
+            ChestBlock = new ChestBlock(5, "Chest_Block", top: 4, side: 4, bottom: 4);
+            ChestBlock.frontIndex = 5;
             BlockRegistry.RegisterBlock(ChestBlock);
+            
+            //Wood Block
+            WoodBlock = new Block(6, "Wood_Block", top: 6, side: 6, bottom: 6);
+            BlockRegistry.RegisterBlock(WoodBlock);
 
             Debug.Log("Blocks registered (static)");
         }

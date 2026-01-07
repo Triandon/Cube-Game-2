@@ -27,7 +27,8 @@ public static class ChunkMeshGeneratorThreaded
         public int atlasIndex;
     }
     
-    public static MeshData GenerateMeshData(Func<int,int,int,byte> getBlock)
+    public static MeshData GenerateMeshData(Func<int,int,int,byte> getBlock,
+        Func<int, int, int, BlockStateContainer> getState)
     {
         var mesh = new MeshData();
 
@@ -43,14 +44,15 @@ public static class ChunkMeshGeneratorThreaded
 
         foreach (var dir in dirs)
         {
-            GreedyDirection(getBlock, dir, mesh, mask);
+            GreedyDirection(getBlock, getState, dir, mesh, mask);
         }
 
         return mesh;
     }
     
     // Greedy direction implementation adapted to be fully data-only and match original behavior
-    private static void GreedyDirection(Func<int,int,int,byte> getBlock, Vector3Int dir, MeshData mesh, MaskCell[,] mask)
+    private static void GreedyDirection(Func<int,int,int,byte> getBlock, Func<int, int, int, BlockStateContainer> getState, 
+        Vector3Int dir, MeshData mesh, MaskCell[,] mask)
     {
         int uMax = CHUNK_SIZE;
         int vMax = CHUNK_SIZE;
@@ -96,10 +98,42 @@ public static class ChunkMeshGeneratorThreaded
                         var tbi = BlockRegistry.ThreadBlockInfo;
                         if (tbi != null && current >= 0 && current < tbi.Length)
                         {
-                            var info = tbi[current];
-                            atlasIdx = info.sideIndex;
-                            if (dir == Vector3Int.up) atlasIdx = info.topIndex;
-                            if (dir == Vector3Int.down) atlasIdx = info.bottomIndex;
+                            var block = tbi[current];
+                            BlockStateContainer state = getState?.Invoke(x, y, z);
+
+                            if (block != null)
+                            {
+                                if (dir == Vector3Int.up) atlasIdx = block.topIndex;
+                                else if (dir == Vector3Int.down) atlasIdx = block.bottomIndex;
+                                else
+                                {
+                                    // Default to sides
+                                    atlasIdx = block.sideIndex;
+                                    
+                                    //Check if the block has facing state
+                                    string facing = state?.GetState("facing");
+                                    bool isFront = false;
+                                    if (facing != null)
+                                    {
+                                        if ((dir == Vector3Int.forward && facing == "north") ||
+                                            (dir == Vector3Int.back && facing == "south") ||
+                                            (dir == Vector3Int.right && facing == "east") ||
+                                            (dir == Vector3Int.left && facing == "west"))
+                                        {
+                                            isFront = true;
+                                        }
+
+                                        atlasIdx = isFront ? block.frontIndex : block.sideIndex;
+                                    }
+                                }
+                            }
+
+
+                            // Legacy code;
+                            //var info = tbi[current];
+                            //atlasIdx = info.sideIndex;
+                            //if (dir == Vector3Int.up) atlasIdx = info.topIndex;
+                            //if (dir == Vector3Int.down) atlasIdx = info.bottomIndex;
                         }
                         else
                         {
@@ -334,8 +368,18 @@ public class ChunkMeshGenerator
             return 0;
         };
 
+        Func<int, int, int, BlockStateContainer> getState = (x, y, z) =>
+        {
+            if (owner != null)
+            {
+                return owner.GetStateAt(x, y, z);
+            }
+
+            return null;
+        };
+
         // Use threaded mesher to produce plain MeshData (runs on main thread here)
-        MeshData meshData = ChunkMeshGeneratorThreaded.GenerateMeshData(getBlock);
+        MeshData meshData = ChunkMeshGeneratorThreaded.GenerateMeshData(getBlock,getState);
 
         // Convert MeshData to Unity Mesh objects (this MUST be done on main thread)
         return ConvertToChunkMeshData(meshData);

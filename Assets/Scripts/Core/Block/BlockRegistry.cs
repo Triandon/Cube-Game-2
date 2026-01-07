@@ -59,7 +59,7 @@ namespace Core.Block
                 Block b = kv.Value;
                 if (key >= 0 && key < 256)
                 {
-                    arr[key] = new Block(b.id, b.blockName, b.topIndex, b.sideIndex, b.bottomIndex);
+                    arr[key] = new Block(b.id, b.blockName, b.topIndex, b.sideIndex, b.bottomIndex, b.frontIndex);
                 }
 
                 ThreadBlockInfo = arr;
