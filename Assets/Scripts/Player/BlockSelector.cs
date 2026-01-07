@@ -19,6 +19,7 @@ public class BlockSelector : MonoBehaviour
 
     public Transform highlightCube;
     public Transform cubeParent;
+    public Transform player;
 
     private HotBarUI hotBar;
     
@@ -84,16 +85,19 @@ public class BlockSelector : MonoBehaviour
         if (Input.GetMouseButtonDown(0))
         {
             Vector3Int target = GetTargetBlockPos(lastHit, false);
-            byte block = chunkManager.GetBlockAtWorldPos(target);
+            byte blockId = chunkManager.GetBlockAtWorldPos(target);
+            Block block = BlockRegistry.GetBlock(blockId);
+            BlockStateContainer state = chunkManager.GetBlockStateAtWorldPos(target);
 
-            if (block != 0)
+            if (block != null && block.id != 0)
             {
-                Item item = ItemRegistry.GetItem(block);
+                block?.OnClicked(target, state, block, player);
+                
+                Item item = ItemRegistry.GetItem(block.id);
 
                 if (item != null)
                 {
                     inventory.AddItem(item.id, 1,item.itemName);
-
                 }
             }
             
@@ -105,6 +109,16 @@ public class BlockSelector : MonoBehaviour
         {
             Vector3Int target = GetTargetBlockPos(lastHit, true);
             ItemStack stack = hotBar.GetSelectedStack();
+
+            Vector3Int hitTarget = GetTargetBlockPos(lastHit, false);
+            byte hitBlockId = chunkManager.GetBlockAtWorldPos(hitTarget);
+            Block hitBlock = BlockRegistry.GetBlock(hitBlockId);
+            BlockStateContainer state = chunkManager.GetBlockStateAtWorldPos(target);
+
+            if (hitBlock != null && hitBlock.id != 0)
+            {
+                hitBlock?.OnActivated(target,state,hitBlock,player);
+            }
 
             if (stack != null && !stack.IsEmpty && stack.Item.isBlock)
             {

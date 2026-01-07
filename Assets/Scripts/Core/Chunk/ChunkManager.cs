@@ -495,6 +495,36 @@ namespace Core
             return chunk.blocks[local.x, local.y, local.z];
         }
 
+        public BlockStateContainer GetBlockStateAtWorldPos(Vector3Int worldPos)
+        {
+            Chunk chunk = GetChunkFromWorldPos(worldPos);
+            if (chunk == null) return null;
+
+            Vector3Int local = chunk.WorldToLocal(worldPos);
+            
+            // Bounds check
+            if (local.x < 0 || local.x >= Chunk.CHUNK_SIZE ||
+                local.y < 0 || local.y >= Chunk.CHUNK_SIZE ||
+                local.z < 0 || local.z >= Chunk.CHUNK_SIZE)
+            {
+                // Block is outside this chunk, skip
+                return null;
+            }
+            
+            // First: check explicit per-block states array
+            BlockStateContainer state = chunk.states[local.x, local.y, local.z];
+            if (state != null)
+                return state;
+            
+            // Second: check changedStates dictionary (older saves / safety)
+            int index = PosToIndex(local.x, local.y, local.z);
+            if (chunk.changedStates.TryGetValue(index, out var changedState))
+                return changedState;
+
+            // No state for this block
+            return null;
+        }
+
         private void UpdateFPS()
         {
             if (fpsCounter == null) return;

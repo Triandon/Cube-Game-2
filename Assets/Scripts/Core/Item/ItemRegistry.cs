@@ -41,6 +41,12 @@ namespace Core.Item
             return item;
         }
         
+        // Get all registered items!
+        public static IReadOnlyCollection<Item> getAllItems()
+        {
+            return itemsById.Values;
+        }
+        
         public static void InitAtlas(Material atlasMaterial, int atlasSize, int tileSize)
         {
             atlasTexture = atlasMaterial.mainTexture as Texture2D;

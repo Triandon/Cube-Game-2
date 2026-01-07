@@ -54,6 +54,19 @@ namespace Core.Block
         {
             // default: does nothing
         }
+        
+        // Called when a block is activated (right clicked)
+        public virtual void OnActivated(
+            Vector3Int position, BlockStateContainer state, Block block, Transform player)
+        {
+            //Debug.Log("Block activated with block: " + block + " and with id: " + block.id);
+        }
+
+        public virtual void OnClicked(
+            Vector3Int position, BlockStateContainer state, Block block,Transform player)
+        {
+            //Debug.Log("Block clicked with block: " + block + " and with id: " + block.id);
+        }
     
     }
 }

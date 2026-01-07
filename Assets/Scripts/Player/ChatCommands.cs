@@ -1,3 +1,6 @@
+using System.Collections.Generic;
+using System.Text;
+using Core.Block;
 using Core.Item;
 using UnityEngine;
 
@@ -18,14 +21,31 @@ public static class ChatCommands
 
 	    switch (command)
 	    {
+		    case "help":
+			    HandleHelpCommand(args, chat);
+			    break;
+		    
 		    case "give":
 			    HandleGiveCommand(args, chat);
 			    break;
 
+		    case "ids":
+			    HandleIdsCommand(args, chat);
+			    break;
+		    
 		    default:
 			    chat.SendMessageToChat("Unknown command.", Message.MessageType.warning);
 			    break;
 	    }
+    }
+
+    private static void HandleHelpCommand(string[] args, Chat chat)
+    {
+	    // Expected: /help
+	    
+	    chat.SendMessageToChat("Here is the command lists!:\n" +
+	                           "/give <player> <itemId> <amount>\n" +
+	                           "/ids", Message.MessageType.info);
     }
 
     private static void HandleGiveCommand(string[] args, Chat chat)
@@ -83,4 +103,29 @@ public static class ChatCommands
 		    chat.SendMessageToChat($"{targetPlayer}'s inventory is full.", Message.MessageType.warning);
 	    }
     }
+
+    private static void HandleIdsCommand(string[] args, Chat chat)
+    {
+	    // Expected: /ids
+	    List<Block> allBlocks = new List<Block>(BlockRegistry.GetAllBlocks());
+	    List<Item> allItems = new List<Item>(ItemRegistry.getAllItems());
+
+	    StringBuilder sb = new StringBuilder();
+
+	    sb.AppendLine("=== Blocks ===");
+	    foreach (Block block in allBlocks)
+	    {
+		    sb.AppendLine($"{block.blockName} : {block.id}");
+	    }
+
+	    sb.AppendLine();
+	    sb.AppendLine("=== Items ===");
+	    foreach (Item item in allItems)
+	    {
+		    sb.AppendLine($"{item.itemName} : {item.id}");
+	    }
+
+	    chat.SendMessageToChat(sb.ToString(), Message.MessageType.info);
+    }
+
 }

@@ -49,6 +49,12 @@ namespace Core.Block
             return null;
         }
         
+        // Get all registered blocks!
+        public static IReadOnlyCollection<Block> GetAllBlocks()
+        {
+            return blocksById.Values;
+        }
+        
         // Call this once on main thread after all blocks are registered (e.g. at game start)
         public static void BuildThreadLookup()
         {

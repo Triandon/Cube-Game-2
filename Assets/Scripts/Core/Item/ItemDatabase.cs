@@ -22,6 +22,9 @@ namespace Core.Item
             
             //Chest Item
             ItemRegistry.RegisterItem(new Item(id:5, itemName:"Chest", isBlock:true, blockId:5, textureIndex:5,1));
+            
+            //Wood Item
+            ItemRegistry.RegisterItem(new Item(id: 6, itemName:"Wood_Item", isBlock:true, blockId:6, textureIndex: 6, 64));
         }
     
         public static void Init(){}
