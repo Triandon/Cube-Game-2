@@ -54,4 +54,9 @@ public class InventoryHolder : MonoBehaviour
         if (Holders.ContainsKey(ownerName))
             Holders.Remove(ownerName);
     }
+
+    public string GetInventoryName()
+    {
+        return ownerName;
+    }
 }

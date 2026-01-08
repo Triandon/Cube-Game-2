@@ -19,6 +19,7 @@ public class Chat : MonoBehaviour
 	[SerializeField]private List<Message> messageList = new List<Message>();
 
 	private Settings settings;
+	[SerializeField] private InventoryHolder playerHolder;
 
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
@@ -27,6 +28,10 @@ public class Chat : MonoBehaviour
 	    if (settings != null)
 	    {
 		    userName = settings.userName;
+	    }
+	    else
+	    {
+		    userName = playerHolder.GetInventoryName();
 	    }
     }
 

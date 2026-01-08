@@ -380,12 +380,15 @@ namespace Core
 
         public void TrimUnusedChunks()
         {
-            List<Vector3Int> chunksToRemove = new List<Vector3Int>();
+            List<(Vector3Int coord, Chunk chunk)> chunksToRemove = new List<(Vector3Int coord, Chunk chunk)>();
 
             foreach (var kvp in chunks)
             {
                 Chunk chunk = kvp.Value;
                 Vector3Int coord = kvp.Key;
+                
+                if(IsChunkInTransformQueue(coord, chunk))
+                    continue;
 
                 // Calculate distance from player chunk
                 int distanceX = Mathf.Abs(coord.x - playerChunkCord.x);
@@ -405,17 +408,22 @@ namespace Core
                         Destroy(chunk.renderer.gameObject);
                     }
 
+                    chunk.blocks = new byte[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
+                    chunk.changedBlocks.Clear();
+                    chunk.changedStates.Clear();
                     meshQue.Remove(chunk);
                     generationQue.Remove(coord);
+                    pendingRequests.Remove(coord);
+                    
                     // Chunk is outside the new view distance
-                    chunksToRemove.Add(coord);
+                    chunksToRemove.Add((coord,chunk));
                 }
             }
 
             // Remove from dictionary
             foreach (var key in chunksToRemove)
             {
-                chunks.Remove(key);
+                chunks.Remove(key.coord);
                 chunkCount--;
             }
         }
@@ -585,6 +593,19 @@ namespace Core
             }
 
             return dict;
+        }
+
+        private bool IsChunkBusy(Vector3Int coord, Chunk chunk)
+        {
+            return pendingRequests.Contains(coord) ||
+                   generationQue.Contains(coord) ||
+                   meshQue.Contains(chunk) ||
+                   transformQueue.Any(t => t.chunk == chunk);
+        }
+
+        private bool IsChunkInTransformQueue(Vector3Int coord, Chunk chunk)
+        {
+            return transformQueue.Any(t => t.chunk == chunk);
         }
 
         private IEnumerator BuildChunkMeshNextFrame(Chunk chunk)

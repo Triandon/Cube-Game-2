@@ -13,7 +13,7 @@ public class SettingsManager : MonoBehaviour
     {
         settings = Settings.Instance;
 
-        userNameChatBox.text = "Username: " + settings.userName;
+        UpdateUserNameDisplay();
     }
 
     // Update is called once per frame
@@ -38,11 +38,11 @@ public class SettingsManager : MonoBehaviour
     public void UpdateUserName(string userName)
     {
         settings.userName = userName;
-        userNameDisplayText.text = "Username: " + settings.userName;
+        UpdateUserNameDisplay();
     }
 
     public void UpdateUserNameDisplay()
     {
-        userNameDisplayText.text = settings.userName;
+        userNameDisplayText.text = "Username: " + settings.userName;
     }
 }

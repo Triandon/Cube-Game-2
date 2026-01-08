@@ -518,7 +518,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: 'Version nr: TestBuild13
+  m_text: 'Version nr: TestBuild12
 
 '
   m_isRightToLeft: 0
@@ -3263,7 +3263,7 @@ MonoBehaviour:
   m_VertexBufferAutoSizeReduction: 0
   m_useMaxVisibleDescender: 1
   m_pageToDisplay: 1
-  m_margin: {x: -391.18488, y: 0, z: -16.268372, w: 0}
+  m_margin: {x: -391.18488, y: 0, z: 195.45392, w: 0}
   m_isUsingLegacyAnimationComponent: 0
   m_isVolumetricText: 0
   m_hasFontAssetChanged: 0
@@ -5245,7 +5245,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3c23f2f358bd46b4fa51f18ffe7e6715, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::World
-  worldSize: 2000
+  worldSize: 200
   worldSizeY: 10
 --- !u!1 &2023732279
 GameObject:
@@ -5523,7 +5523,6 @@ MonoBehaviour:
   playerMessage: {r: 0, g: 0, b: 0, a: 1}
   info: {r: 1, g: 1, b: 1, a: 1}
   messageList: []
-  playerHolder: {fileID: 1170794369}
 --- !u!1 &2077135882
 GameObject:
   m_ObjectHideFlags: 0

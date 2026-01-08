@@ -31,6 +31,10 @@ public class MiscVariablesDisplay : MonoBehaviour
         {
             usernameDisplayText.text = settings.userName;
         }
+        else
+        {
+            usernameDisplayText.text = playerHolder.GetInventoryName();
+        }
     }
 
     // Update is called once per frame
