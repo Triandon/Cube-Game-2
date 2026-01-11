@@ -14,6 +14,7 @@ namespace Core
         public byte[,,] blocks;
         public BlockStateContainer[,,] states;
         public bool isDirty = false;
+        public bool isColliderDirty = false;
         
         public Dictionary<int, byte> changedBlocks = new Dictionary<int, byte>();
 
@@ -22,6 +23,7 @@ namespace Core
         
         public ChunkManager chunkManager;
         public ChunkRendering renderer;
+        public MeshData meshData;
 
         public Chunk(Vector3Int coord)
         {
@@ -164,6 +166,7 @@ namespace Core
             }
 
             isDirty = true;
+            isColliderDirty = true;
 
             if (chunkManager != null)
             {

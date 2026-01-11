@@ -2,7 +2,7 @@ using System;
 using Core;
 using UnityEngine;
 
-[RequireComponent(typeof(MeshFilter),typeof(MeshRenderer),typeof(MeshCollider))]
+[RequireComponent(typeof(MeshFilter),typeof(MeshRenderer))]
 public class ChunkRendering : MonoBehaviour
 {
     private MeshFilter meshFilter;
@@ -21,7 +21,6 @@ public class ChunkRendering : MonoBehaviour
     {
         meshFilter = GetComponent<MeshFilter>();
         meshRenderer = GetComponent<MeshRenderer>();
-        meshCollider = GetComponent<MeshCollider>();
         
         meshGenerator = new ChunkMeshGenerator();
     }
@@ -42,10 +41,22 @@ public class ChunkRendering : MonoBehaviour
         meshFilter.sharedMesh = meshData.renderingMesh;
 
         // Assign collider mesh to MeshCollider
-        meshCollider.sharedMesh = meshData.colliderMesh;
+        //meshCollider.sharedMesh = meshData.colliderMesh;
 
         // Material
         meshRenderer.sharedMaterial = Resources.Load<Material>("Materials/AtlasMaterial");
+    }
+
+    public void BuildChunkColliderMesh()
+    {
+        if(chunk == null || chunk.blocks == null)
+            return;
+
+        if (meshCollider == null)
+            meshCollider = gameObject.AddComponent<MeshCollider>();
+        
+        var meshData = meshGenerator.GenerateMesh(chunk.blocks, chunk);
+        meshCollider.sharedMesh = meshData.colliderMesh;
     }
 
     // modified chunk of your ChunkRendering class
@@ -53,6 +64,7 @@ public class ChunkRendering : MonoBehaviour
     {
         if (meshData == null) return;
 
+        //Render mesh
         var renderMesh = new Mesh();
         renderMesh.Clear();
         renderMesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
@@ -65,6 +77,20 @@ public class ChunkRendering : MonoBehaviour
         renderMesh.RecalculateBounds();
 
         meshFilter.sharedMesh = renderMesh;
+        
+
+        meshRenderer.sharedMaterial = Resources.Load<Material>("Materials/AtlasMaterial");
+    }
+
+    public void CreateCollider(MeshData meshData)
+    {
+        if(meshData == null)
+            return;
+
+        if (meshCollider == null)
+        {
+            meshCollider = gameObject.AddComponent<MeshCollider>();
+        }
 
         var colliderMesh = new Mesh();
         colliderMesh.Clear();
@@ -76,8 +102,23 @@ public class ChunkRendering : MonoBehaviour
         colliderMesh.RecalculateBounds();
 
         meshCollider.sharedMesh = colliderMesh;
+    }
 
-        meshRenderer.sharedMaterial = Resources.Load<Material>("Materials/AtlasMaterial");
+    public void DestroyCollider()
+    {
+        if(meshCollider == null)
+            return;
+        
+        Destroy(meshCollider);
+        meshCollider = null;
+    }
+
+    public bool HasCollider()
+    {
+        if (meshCollider == null)
+            return false;
+        
+        return meshCollider != null;
     }
 
     

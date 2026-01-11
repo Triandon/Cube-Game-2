@@ -12,6 +12,7 @@ namespace Core
         public GameObject chunkPrefab;
         public Transform player;
         public int viewDistance;
+        public int colliderDistance = 1;
 
         private Dictionary<Vector3Int, Chunk> chunks = new Dictionary<Vector3Int, Chunk>();
         private Vector3Int playerChunkCord;
@@ -87,6 +88,7 @@ namespace Core
             {
                 playerChunkCord = currentPlayerChunk;
                 UpdateChunks();
+                UpdateChunkCollidersForPlayerMove();
             }
             
             SortChunksLists();
@@ -155,7 +157,10 @@ namespace Core
             var chunkRender = chunk.renderer;
             if (chunkRender != null && res.meshData != null)
             {
+                chunk.meshData = res.meshData;
                 chunkRender.ApplyMeshData(res.meshData);
+                chunkRender.CreateCollider(res.meshData);
+                
                 EnqueueNeighborRebuilds(chunk.coord);
             }
             else
@@ -533,6 +538,44 @@ namespace Core
             return null;
         }
 
+        private void UpdateChunkCollidersForPlayerMove()
+        {
+            foreach (var chunk in chunks.Values)
+            {
+                if (chunk == null)
+                    continue;
+                
+                bool needsCollider = NeedsColliders(chunk);
+
+                //Case 1: Needs collider but doesnt have one
+                if (needsCollider && !chunk.renderer.HasCollider())
+                {
+                    if (chunk.renderer.gameObject.activeInHierarchy)
+                    {
+                        chunk.renderer.BuildChunkColliderMesh();
+                        chunk.isColliderDirty = false;
+                    }
+                }
+                //Case 2: Has collider but no longer needs one
+                else if(!needsCollider && chunk.renderer.HasCollider())
+                {
+                    chunk.renderer.DestroyCollider();
+                    chunk.isColliderDirty = false;
+                } 
+                //Case 3: Has collider AND mesh changed!
+                else if (needsCollider && chunk.renderer.HasCollider() && chunk.isColliderDirty)
+                {
+                    chunk.renderer.DestroyCollider();
+                    if (chunk.renderer.gameObject.activeInHierarchy)
+                    {
+                        chunk.renderer.BuildChunkColliderMesh();
+                        chunk.isColliderDirty = false;
+                    }
+                }
+            }
+        }
+
+
         private void UpdateFPS()
         {
             if (fpsCounter == null) return;
@@ -613,6 +656,42 @@ namespace Core
             yield return null;
             chunk.renderer.BuildChunkMesh();
         }
+
+        private IEnumerator BuildChunkColliderNextFrame(Chunk chunk)
+        {
+            yield return null;
+            if (NeedsColliders(chunk))
+            {
+                chunk.renderer.BuildChunkColliderMesh();
+            }
+            else
+            {
+                chunk.renderer.DestroyCollider();
+            }
+            
+        }
+        
+        private bool NeedsColliders(Chunk chunk)
+        {
+            if(chunk == null || chunk.blocks == null)
+                return false;
+
+            int dx = Mathf.Abs(chunk.coord.x - playerChunkCord.x);
+            int dy = Mathf.Abs(chunk.coord.y - playerChunkCord.y);
+            int dz = Mathf.Abs(chunk.coord.z - playerChunkCord.z);
+
+            bool needsCollider =
+                dx <= colliderDistance &&
+                dy <= colliderDistance &&
+                dz <= colliderDistance;
+
+            if (needsCollider)
+            {
+                return true;
+            }
+
+            return false;
+        }
         
         
         private void EnqueueNeighborRebuilds(Vector3Int coord)
@@ -651,7 +730,11 @@ namespace Core
         private void AddIfExists(Vector3Int c)
         {
             if (chunks.TryGetValue(c, out Chunk n) && n != null && n.renderer.gameObject != null)
+            {
                 meshQue.Add(n);
+                n.isColliderDirty = true;
+            }
+                
         }
         
 
@@ -757,6 +840,7 @@ namespace Core
                         chunkToBuild.renderer.gameObject.activeInHierarchy)
                     {
                         StartCoroutine(BuildChunkMeshNextFrame(chunkToBuild));
+                        StartCoroutine(BuildChunkColliderNextFrame(chunkToBuild));
                     }
 
                     // Remove from queue regardless (we're attempting to build it)
