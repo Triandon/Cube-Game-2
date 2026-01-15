@@ -13,7 +13,7 @@ namespace Core.Item
 
         public bool IsEmpty => itemId == 0 || count <= 0 || Item == null;
 
-        public static readonly ItemStack Empty = new ItemStack(0, 0, "");
+        public static ItemStack Empty => new ItemStack(0, 0, "");
 
         public ItemStack(int itemId, int count, string displayName)
         {
@@ -46,6 +46,11 @@ namespace Core.Item
             }
 
             return amount - removed;
+        }
+
+        public ItemStack Clone()
+        {
+            return new ItemStack(itemId, count, displayName);
         }
     }
 }

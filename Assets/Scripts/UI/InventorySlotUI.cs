@@ -2,9 +2,10 @@ using System;
 using Core.Item;
 using TMPro;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
-public class InvenotrySlotUI : MonoBehaviour
+public class InventorySlotUI : MonoBehaviour, IPointerClickHandler
 {
     [SerializeField] private Image icon;
     [SerializeField] private TextMeshProUGUI countText;
@@ -12,11 +13,15 @@ public class InvenotrySlotUI : MonoBehaviour
 
     private Inventory inventory;
     private int slotIndex;
-
-    public void Init(Inventory inventory, int slotIndex)
+    private InventoryViewManager owner;
+        
+    public void Init(Inventory inventory, int slotIndex, InventoryViewManager owner)
     {
         this.inventory = inventory;
         this.slotIndex = slotIndex;
+        this.owner = owner;
+
+        gameObject.name = $"Slot_{slotIndex}_{owner}";
 
         inventory.OnInventoryChanged += Refresh;
         Refresh();
@@ -58,4 +63,23 @@ public class InvenotrySlotUI : MonoBehaviour
         countText.text = stack.count > 1 ? stack.count.ToString() : "";
     }
     
+    public void OnUISlotClicked()
+    {
+        owner?.SlotClicked(this);
+    }
+
+    public int SlotIndex => slotIndex;
+
+    public ItemStack GetItemStackFromUISlot()
+    {
+        return inventory.slots[slotIndex];
+    }
+
+    public void OnPointerClick(PointerEventData eventData)
+    {
+        if (eventData.button == PointerEventData.InputButton.Right)
+        {
+            owner?.SlotRightClicked(this);
+        }
+    }
 }

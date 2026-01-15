@@ -8,6 +8,10 @@ public class HotBarUI : InventoryViewManager
     [SerializeField] private int selectedSlot;
     public TMP_InputField chatBox;
 
+    [SerializeField] private GameObject itemEntityPref;
+    [SerializeField] private Transform playerPos;
+    [SerializeField] private GameObject emptyGoItemListThing;
+
     private void Update()
     {
         if (!chatBox.isFocused)
@@ -25,6 +29,11 @@ public class HotBarUI : InventoryViewManager
             if(Input.GetKeyDown(KeyCode.Alpha3)) Select(2);
             if(Input.GetKeyDown(KeyCode.Alpha4)) Select(3);
             if(Input.GetKeyDown(KeyCode.Alpha5)) Select(4);
+
+            if (Input.GetKeyDown(KeyCode.Q))
+            {
+                TryDropItem();
+            }
         }
         
     }
@@ -60,4 +69,45 @@ public class HotBarUI : InventoryViewManager
     {
         return selectedSlot;
     }
+
+    private void TryDropItem()
+    {
+        //Cursor has item -> drop cursor stack
+        if (cursor.HasItem)
+        {
+            DropItem(cursor.CursorStack);
+            cursor.CursorStack.count--;
+            
+            if(cursor.CursorStack.count <= 0)
+                cursor.ClearCursor();
+            
+            return;
+        }
+        
+        //Cursor empty -> drop selected stack in hotbar
+        ItemStack stack = GetSelectedStack();
+        if(stack.IsEmpty)
+            return;
+        
+        DropItem(stack);
+        stack.count--;
+
+        if (stack.count <= 0)
+            inventory.slots[selectedSlot] = ItemStack.Empty;
+        
+        inventory.InventoryChanged();
+    }
+
+    private void DropItem(ItemStack stack)
+    {
+        Vector3 spawnPos =
+            playerPos.position +
+            playerPos.forward * 1.2f +
+            Vector3.up * 0.5f;
+
+        GameObject go = Instantiate(itemEntityPref, spawnPos, Quaternion.identity,emptyGoItemListThing.transform);
+        go.GetComponent<ItemEntity>().Init(
+            new ItemStack(stack.itemId, 1, stack.displayName));
+    }
+     
 }
