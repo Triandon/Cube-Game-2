@@ -1,6 +1,5 @@
 using System;
 using Core.Item;
-using Microsoft.Unity.VisualStudio.Editor;
 using TMPro;
 using UnityEngine;
 using Image = UnityEngine.UI.Image;
