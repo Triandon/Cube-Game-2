@@ -5190,7 +5190,7 @@ MonoBehaviour:
   chunkPrefab: {fileID: 6105398898649497424, guid: 1f654b7fe82c83a489796eb872658c6f, type: 3}
   player: {fileID: 1077880575}
   viewDistance: 6
-  colliderDistance: 1
+  colliderDistance: 2
   chunkCount: 0
   chunksPerFrame: 4
   dynamicChunkRendering: 1
