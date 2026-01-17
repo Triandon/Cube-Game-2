@@ -18,20 +18,22 @@ public class Crouch : MonoBehaviour
     public float crouchYHeadPosition = 1;
     
     [Tooltip("Collider to lower when crouched.")]
-    public CapsuleCollider colliderToLower;
+    public BoxCollider colliderToLower;
     [HideInInspector]
     public float? defaultColliderHeight;
 
     public bool IsCrouched { get; private set; }
     public event System.Action CrouchStart, CrouchEnd;
 
-
+    [HideInInspector] public Vector3? defaultColliderSize;
+    [HideInInspector] public Vector3? defaultColliderCenter;
+    
     void Reset()
     {
         // Try to get components.
         movement = GetComponentInParent<FirstPersonMovement>();
         headToLower = movement.GetComponentInChildren<Camera>().transform;
-        colliderToLower = movement.GetComponentInChildren<CapsuleCollider>();
+        colliderToLower = movement.GetComponentInChildren<BoxCollider>();
     }
 
     void LateUpdate()
@@ -54,27 +56,24 @@ public class Crouch : MonoBehaviour
             // Enforce a low colliderToLower.
             if (colliderToLower)
             {
-                // If we don't have the defaultColliderHeight, get it now.
-                if (!defaultColliderHeight.HasValue)
+                if (!defaultColliderSize.HasValue)
                 {
-                    defaultColliderHeight = colliderToLower.height;
+                    defaultColliderSize = colliderToLower.size;
+                    defaultColliderCenter = colliderToLower.center;
                 }
 
-                // Get lowering amount.
-                float loweringAmount;
-                if(defaultHeadYLocalPosition.HasValue)
-                {
-                    loweringAmount = defaultHeadYLocalPosition.Value - crouchYHeadPosition;
-                }
-                else
-                {
-                    loweringAmount = defaultColliderHeight.Value * .5f;
-                }
+                float loweringAmount = defaultHeadYLocalPosition.HasValue
+                    ? defaultHeadYLocalPosition.Value - crouchYHeadPosition
+                    : defaultColliderSize.Value.y * 0.5f;
 
-                // Lower the colliderToLower.
-                colliderToLower.height = Mathf.Max(defaultColliderHeight.Value - loweringAmount, 0);
-                colliderToLower.center = Vector3.up * colliderToLower.height * .5f;
+                Vector3 newSize = defaultColliderSize.Value;
+                newSize.y = Mathf.Max(defaultColliderSize.Value.y - loweringAmount, 0.1f);
+                colliderToLower.size = newSize;
+
+                colliderToLower.center = defaultColliderCenter.Value
+                                         - Vector3.up * (loweringAmount * 0.5f);
             }
+
 
             // Set IsCrouched state.
             if (!IsCrouched)
@@ -97,9 +96,10 @@ public class Crouch : MonoBehaviour
                 // Reset the colliderToLower's height.
                 if (colliderToLower)
                 {
-                    colliderToLower.height = defaultColliderHeight.Value;
-                    colliderToLower.center = Vector3.up * colliderToLower.height * .5f;
+                    colliderToLower.size = defaultColliderSize.Value;
+                    colliderToLower.center = defaultColliderCenter.Value;
                 }
+
 
                 // Reset IsCrouched.
                 IsCrouched = false;

@@ -470,7 +470,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: 'Version nr: TestBuild13F
+  m_text: 'Version nr: TestBuild13E
 
 '
   m_isRightToLeft: 0
@@ -2988,8 +2988,7 @@ MonoBehaviour:
       m_Calls: []
   m_text: "Controlls:\n\t1. R - Respawn\n\t2. I - Increase render distance\n\t3.
     K - Decrease render distance\n\t4. U - Update chunks (not rerendering)\n\t5.
-    Z - Save World\n\t6. Q - Throw item\n\t7. Alt - Unlock cursor\n\t8. ESC - Back
-    to menu\n"
+    Z - Save World"
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
@@ -4416,10 +4415,6 @@ PrefabInstance:
     - target: {fileID: 114762042097486276, guid: 11aaea5348574644a9eb4f4504fcce3f, type: 3}
       propertyPath: colliderToLower
       value: 
-      objectReference: {fileID: 1170794346}
-    - target: {fileID: 114762042097486276, guid: 11aaea5348574644a9eb4f4504fcce3f, type: 3}
-      propertyPath: crouchYHeadPosition
-      value: 2
       objectReference: {fileID: 0}
     - target: {fileID: 1963958859065967600, guid: 11aaea5348574644a9eb4f4504fcce3f, type: 3}
       propertyPath: m_Layer
