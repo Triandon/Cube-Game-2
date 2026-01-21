@@ -117,7 +117,7 @@ public class BlockSelector : MonoBehaviour
 
             if (hitBlock != null && hitBlock.id != 0)
             {
-                hitBlock?.OnActivated(target,state,hitBlock,player);
+                hitBlock?.OnActivated(hitTarget,state,hitBlock,player);
             }
 
             if (stack != null && !stack.IsEmpty && stack.Item.isBlock)

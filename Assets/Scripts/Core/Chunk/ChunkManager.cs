@@ -465,9 +465,12 @@ namespace Core
                 // Block is outside this chunk, skip
                 return;
             }
-
+            
             Block.Block block = BlockRegistry.GetBlock(id);
             BlockStateContainer state = null;
+
+            byte oldId = chunk.blocks[local.x, local.y, local.z];
+            Block.Block oldBlock = BlockRegistry.GetBlock(oldId);
             
 
             if (id != 0 && block != null && block.HasStates)
@@ -475,6 +478,17 @@ namespace Core
                 state = new BlockStateContainer();
                 block?.OnPlaced(
                     position: worldPos, state: state, player: player);
+            }
+
+            if (id != 0 && block != null && block.HasBlockEntity)
+            {
+                SpawnBlockEntityAtWorldPos(block, worldPos);
+            }
+
+            if (id == 0 && oldBlock != null && oldId != 0)
+            {
+                oldBlock?.OnMined(worldPos,state,player);
+                RemoveBlockEntityAtWorldPos(worldPos);
             }
             
             // Sets block at the local chunk
@@ -487,6 +501,46 @@ namespace Core
             {
                 EnqueueNeighborUpdates(chunk.coord, local);
             }
+        }
+
+        private void SpawnBlockEntityAtWorldPos(Block.Block block, Vector3Int worldPos)
+        {
+            Chunk chunk = GetChunkFromWorldPos(worldPos);
+            if(chunk == null)
+                return;
+
+            Vector3Int local = chunk.WorldToLocal(worldPos);
+
+            if (chunk.blockEntities.ContainsKey(local))
+                return;
+
+            if (block is ChestBlock)
+            {
+                GameObject go = new GameObject("ChestEntity_With_No_Name :(");
+                go.transform.SetParent(chunk.renderer.transform, false);
+                go.transform.position = worldPos + Vector3.one * 0.5f;
+
+                var holder = go.AddComponent<ChestInventoryHolder>();
+                holder.Init(worldPos);
+                chunk.blockEntities[local] = holder;
+            }
+        }
+
+        private void RemoveBlockEntityAtWorldPos(Vector3Int worldPos)
+        {
+            Chunk chunk = GetChunkFromWorldPos(worldPos);
+            if(chunk == null)
+                return;
+
+            Vector3Int local = chunk.WorldToLocal(worldPos);
+            
+            if(!chunk.blockEntities.TryGetValue(local, out InventoryHolder holder))
+                return;
+            
+            holder.SaveInventory();
+            
+            Destroy(holder.gameObject);
+            chunk.blockEntities.Remove(local);
         }
 
         public byte GetBlockAtWorldPos(Vector3Int worldPos)

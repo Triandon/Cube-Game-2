@@ -18,6 +18,7 @@ namespace Core.Block
 
         public float hardness = 1f;
         public bool isTransparent = false;
+        public virtual bool HasBlockEntity => false;
 
         public Block(byte id, string name, int top, int side, int bottom, int front = -1)
         {
@@ -62,10 +63,19 @@ namespace Core.Block
             //Debug.Log("Block activated with block: " + block + " and with id: " + block.id);
         }
 
+        // Called when a block is LEFT-Clicked
         public virtual void OnClicked(
             Vector3Int position, BlockStateContainer state, Block block,Transform player)
         {
             //Debug.Log("Block clicked with block: " + block + " and with id: " + block.id);
+        }
+
+        // When a block is mined, aka replaced with air blockId: 0
+        public virtual void OnMined(
+            Vector3Int position, BlockStateContainer state, Transform player
+        )
+        {
+            
         }
     
     }

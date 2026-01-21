@@ -15,6 +15,8 @@ public class PlayerInteraction : MonoBehaviour
     {
         inventory = GetComponent<InventoryHolder>().Inventory;
         hotBarUI = FindAnyObjectByType<HotBarUI>();
+        
+        GetComponent<PlayerInventoryHolder>().OpenInventory();
     }
 
     // Update is called once per frame

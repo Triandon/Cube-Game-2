@@ -83,7 +83,19 @@ public static class ChatCommands
 		    return;
 	    }
 
-	    if (!InventoryHolder.Holders.TryGetValue(targetPlayer, out InventoryHolder holder))
+	    InventoryHolder[] holders = Object.FindObjectsOfType<InventoryHolder>();
+	    InventoryHolder target = null;
+
+	    foreach (var h in holders)
+	    {
+		    if (h.GetInventoryName() == targetPlayer)
+		    {
+			    target = h;
+			    break;
+		    }
+	    }
+
+	    if (target == null)
 	    {
 		    chat.SendMessageToChat($"Player '{targetPlayer}' not found.", Message.MessageType.warning);
 		    return;
@@ -96,7 +108,7 @@ public static class ChatCommands
 		    return;
 	    }
 
-	    bool success = holder.Inventory.AddItem(item.id, amount, item.itemName);
+	    bool success = target.Inventory.AddItem(item.id, amount, item.itemName);
 
 	    if (!success)
 	    {

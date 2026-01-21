@@ -13,6 +13,8 @@ namespace Core
         public Vector3Int coord;
         public byte[,,] blocks;
         public BlockStateContainer[,,] states;
+        public Dictionary<Vector3Int, InventoryHolder> blockEntities = new Dictionary<Vector3Int, InventoryHolder>();
+        
         public bool isDirty = false;
         public bool isColliderDirty = false;
         

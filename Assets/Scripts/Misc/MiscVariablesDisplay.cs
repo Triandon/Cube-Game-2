@@ -19,7 +19,7 @@ public class MiscVariablesDisplay : MonoBehaviour
 
     private Settings settings;
 
-    [SerializeField] private InventoryHolder playerHolder;
+    [SerializeField] private PlayerInventoryHolder playerHolder;
     public TMP_InputField chatBox;
     
     // Start is called once before the first execution of Update after the MonoBehaviour is created

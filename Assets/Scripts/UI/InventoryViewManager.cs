@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
 using Core.Item;
+using Unity.VisualScripting;
 using UnityEngine;
 
 public class InventoryViewManager : MonoBehaviour
 {
-    [SerializeField] private InventoryHolder inventoryHolder;
     [SerializeField] private InventorySlotUI slotPrefab;
     [SerializeField] private Transform slotParent;
     [SerializeField] public InventoryCursor cursor;
@@ -16,18 +16,39 @@ public class InventoryViewManager : MonoBehaviour
 
     protected ItemStack cursorStack = ItemStack.Empty;
 
-    protected virtual void Start()
+    protected void OnEnable()
     {
-        inventory = inventoryHolder.Inventory;
+        InventoryHolder.OnInventoryDisplayRequested += OnInventoryRequested;
+    }
 
-        inventory.OnInventoryResized += RebuildSlots;
-        BuildSlots();
+    protected void OnDisable()
+    {
+        InventoryHolder.OnInventoryDisplayRequested -= OnInventoryRequested;
+
+        if (inventory != null)
+            inventory.OnInventoryResized -= RebuildSlots;
+        
+        cursor.ClearCursor();
     }
 
     private void OnDestroy()
     {
         if (inventory != null)
             inventory.OnInventoryResized -= RebuildSlots;
+    }
+
+    protected virtual void OnInventoryRequested(Inventory inv, InventoryHolder holder)
+    {
+        if(this is HotBarUI && holder is not IPlayerInventory)
+            return;
+
+        if (inventory != null)
+            inventory.OnInventoryResized -= RebuildSlots;
+        
+        inventory = inv;
+
+        inventory.OnInventoryResized += RebuildSlots;
+        BuildSlots();
     }
 
     protected void BuildSlots()
@@ -66,8 +87,5 @@ public class InventoryViewManager : MonoBehaviour
         cursor.HandleSlotRightClick(inventory, clickedSlot.SlotIndex);
     }
 
-    private void OnDisable()
-    {
-        cursor.ClearCursor();
-    }
+    
 }
