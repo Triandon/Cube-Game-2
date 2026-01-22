@@ -77,6 +77,24 @@ public static class ThreadedChunkProcessor
                 }
             }
         }
+        
+        //3.5 Detect block entities
+        List<Vector3Int> blockEntities = null;
+        
+        for (int x = 0; x < S; x++)
+        for (int y = 0; y < S; y++)
+        for (int z = 0; z < S; z++)
+        {
+            byte id = center[x, y, z];
+            if(id == 0) continue;
+            
+            Block block = BlockRegistry.GetBlock(id);
+            if (block != null && block.HasBlockEntity)
+            {
+                blockEntities ??= new List<Vector3Int>();
+                blockEntities.Add(new Vector3Int(x,y,z));
+            }
+        }
 
         // ------------------------------------
         // 4. THREAD-SAFE BLOCK QUERY
@@ -114,7 +132,7 @@ public static class ThreadedChunkProcessor
         // ------------------------------------
         // 6. RETURN RESULT
         // ------------------------------------
-        return new ChunkGenResult(coord, center, meshData);
+        return new ChunkGenResult(coord, center, meshData,blockEntities);
     }
 
     private static byte[,,] BuildPaddedBlocks(

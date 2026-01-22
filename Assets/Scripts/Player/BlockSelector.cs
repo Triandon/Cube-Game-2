@@ -7,29 +7,17 @@ public class BlockSelector : MonoBehaviour
 {
 
     public Camera playerCamera;
-    public float maxDistance = 6.0f;
-
-    private ChunkManager chunkManager;
-    private Inventory inventory;
 
     public Vector3Int highlightedBlock;
-    public bool hasHit;
-
+    
+    public float maxDistance = 6.0f;
+    private bool hasHit;
     private RaycastHit lastHit;
-
     public Transform highlightCube;
-    public Transform cubeParent;
-    public Transform player;
-
-    private HotBarUI hotBar;
     
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
     {
-        chunkManager = FindAnyObjectByType<ChunkManager>();
-        hotBar = FindAnyObjectByType<HotBarUI>();
-        InventoryHolder holder = GetComponent<InventoryHolder>();
-        inventory = holder.Inventory;
         GenerateSelectorCube();
     }
 
@@ -38,9 +26,8 @@ public class BlockSelector : MonoBehaviour
     {
         CheckForHit();
         UpdateHighLight();
-        HandleInput();
     }
-
+    
     private void CheckForHit()
     {
         Ray ray = new Ray(playerCamera.transform.position, playerCamera.transform.forward);
@@ -76,66 +63,6 @@ public class BlockSelector : MonoBehaviour
         highlightCube = Instantiate(highlightCube);
         highlightCube.gameObject.SetActive(false);
     }
-
-    private void HandleInput()
-    {
-        if(!hasHit) return;
-
-        // Break block
-        if (Input.GetMouseButtonDown(0))
-        {
-            Vector3Int target = GetTargetBlockPos(lastHit, false);
-            byte blockId = chunkManager.GetBlockAtWorldPos(target);
-            Block block = BlockRegistry.GetBlock(blockId);
-            BlockStateContainer state = chunkManager.GetBlockStateAtWorldPos(target);
-
-            if (block != null && block.id != 0)
-            {
-                block?.OnClicked(target, state, block, player);
-                
-                Item item = ItemRegistry.GetItem(block.id);
-
-                if (item != null)
-                {
-                    inventory.AddItem(item.id, 1,item.itemName);
-                }
-            }
-            
-            ModifyBlock(target,0);
-        }
-
-        //Place block
-        if (Input.GetMouseButtonDown(1))
-        {
-            Vector3Int target = GetTargetBlockPos(lastHit, true);
-            ItemStack stack = hotBar.GetSelectedStack();
-
-            Vector3Int hitTarget = GetTargetBlockPos(lastHit, false);
-            byte hitBlockId = chunkManager.GetBlockAtWorldPos(hitTarget);
-            Block hitBlock = BlockRegistry.GetBlock(hitBlockId);
-            BlockStateContainer state = chunkManager.GetBlockStateAtWorldPos(target);
-
-            if (hitBlock != null && hitBlock.id != 0)
-            {
-                hitBlock?.OnActivated(hitTarget,state,hitBlock,player);
-            }
-
-            if (stack != null && !stack.IsEmpty && stack.Item.isBlock)
-            {
-                if (!IsInsideOfPlayer(target))
-                {
-                    ModifyBlock(target,stack.Item.blockId);
-
-                    inventory.RemoveItemFromSlot(hotBar.GetSelectedSlot(), 1);
-                }
-            }
-        }
-    }
-
-    private void ModifyBlock(Vector3Int worldPos, byte id)
-    {
-        chunkManager.SetBlockAtWorldPos(worldPos, id);
-    }
     
     private Vector3Int GetTargetBlockPos(RaycastHit hit, bool place)
     {
@@ -154,16 +81,5 @@ public class BlockSelector : MonoBehaviour
 
         return Vector3Int.FloorToInt(pos);
     }
-
-    private bool IsInsideOfPlayer(Vector3Int blockWorldPos)
-    {
-        Vector3 blockCenter = blockWorldPos + Vector3.one * 0.5f;
-        Vector3 blockExtents = Vector3.one * 0.45f;
-
-        int playerLayer = LayerMask.GetMask("Player");
-
-        return Physics.CheckBox(blockCenter, blockExtents, Quaternion.identity, playerLayer);
-    }
-    
 
 }

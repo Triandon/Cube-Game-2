@@ -61,7 +61,15 @@ public class ChestBlock : Block
         if (chunk.blockEntities.TryGetValue(local, out InventoryHolder holder))
         {
             holder.CloseInventory();
+            
+            //Drops all items
+            holder.DropAllItems(position + Vector3.one * 0.5f);
+            
             holder.SaveInventory();
+            
+            //Cleanup removal
+            chunk.blockEntities.Remove(local);
+            Object.Destroy(holder.gameObject);
         }
     }
 }

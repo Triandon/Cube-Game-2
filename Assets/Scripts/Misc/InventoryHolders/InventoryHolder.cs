@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Core;
+using Core.Item;
 using UnityEngine;
 using UnityEngine.Events;
 
@@ -48,5 +49,23 @@ public abstract class InventoryHolder : MonoBehaviour
     public string GetInventoryName()
     {
         return ownerName;
+    }
+
+    public void DropAllItems(Vector3 worldPos)
+    {
+        foreach (ItemStack stack in inventory.slots)
+        {
+            if(stack.IsEmpty) continue;
+
+            ItemDropper.Instance.DropItemStack(stack,worldPos);
+        }
+        
+        //Clear all slots
+        for (int i = 0; i < inventory.slots.Length; i++)
+        {
+            inventory.slots[i] = ItemStack.Empty;
+        }
+        
+        inventory.InventoryChanged();
     }
 }

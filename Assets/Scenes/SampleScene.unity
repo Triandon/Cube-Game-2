@@ -470,7 +470,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: 'Version nr: TestBuild13F
+  m_text: 'Version nr: TestBuild14
 
 '
   m_isRightToLeft: 0
@@ -2717,6 +2717,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::PlayerInventoryHolder
   ownerName: 
   inventorySize: 0
+  debugSlots: []
 --- !u!1 &1199583606
 GameObject:
   m_ObjectHideFlags: 0

@@ -150,6 +150,32 @@ namespace Core
                 }
             }
 
+            //Rebuilds block entities  AFTER chunk is ready, the entity is a GO
+            if (res.blockEntityLocals != null && res.blockEntityLocals.Count > 0)
+            {
+                //Clear old entities in case if they exist
+                foreach (var be in chunk.blockEntities.Values)
+                {
+                    if (be != null)
+                        Destroy(be.gameObject);
+                }
+                chunk.blockEntities.Clear();
+                
+                foreach (var local in res.blockEntityLocals)
+                {
+                    Vector3Int worldPos =
+                        chunk.coord * Chunk.CHUNK_SIZE + local;
+
+                    byte id = chunk.blocks[local.x, local.y, local.z];
+                    Block.Block block = BlockRegistry.GetBlock(id);
+
+                    if (block != null)
+                    {
+                        SpawnBlockEntityAtWorldPos(block, worldPos);
+                    }
+                }
+            }
+
             // If chunk has stored changes, it remains dirty
             chunk.isDirty = chunk.changedBlocks.Count > 0 || chunk.changedStates.Count > 0;
 
@@ -367,6 +393,16 @@ namespace Core
             chunk.blocks = new byte[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
             chunk.changedBlocks.Clear();
             chunk.changedStates.Clear();
+            
+            //Removes old BE
+            foreach (var be in chunk.blockEntities.Values)
+            {
+                if (be != null)
+                {
+                    Destroy(be.gameObject);
+                }
+            }
+            chunk.blockEntities.Clear();
             //chunk.name = $"Chunk_{coord.x}_{coord.y}_{coord.z}_chunk_nr{chunkCount}";
 
             // return to pool
@@ -416,6 +452,17 @@ namespace Core
                     chunk.blocks = new byte[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
                     chunk.changedBlocks.Clear();
                     chunk.changedStates.Clear();
+                    
+                    //Removes old BE
+                    foreach (var be in chunk.blockEntities.Values)
+                    {
+                        if (be != null)
+                        {
+                            Destroy(be.gameObject);
+                        }
+                    }
+                    chunk.blockEntities.Clear();
+                    
                     meshQue.Remove(chunk);
                     generationQue.Remove(coord);
                     pendingRequests.Remove(coord);
@@ -541,6 +588,32 @@ namespace Core
             
             Destroy(holder.gameObject);
             chunk.blockEntities.Remove(local);
+        }
+
+        private void RebuildBlockEntities(Chunk chunk)
+        {
+            if(chunk == null) return;
+            
+            chunk.blockEntities.Clear();
+
+            for (int x = 0; x < Chunk.CHUNK_SIZE; x++)
+            for (int y = 0; y < Chunk.CHUNK_SIZE; y++)
+            for (int z = 0; z < Chunk.CHUNK_SIZE; z++)
+            {
+                byte id = chunk.blocks[x, y, z];
+                
+                if(id == 0) continue;
+
+                Block.Block block = BlockRegistry.GetBlock(id);
+                if(block == null || !block.HasBlockEntity) continue;
+
+                Vector3Int localPos = new Vector3Int(x, y, z);
+
+                Vector3Int worldPos =
+                    chunk.coord * Chunk.CHUNK_SIZE + localPos;
+                
+                SpawnBlockEntityAtWorldPos(block, worldPos);
+            }
         }
 
         public byte GetBlockAtWorldPos(Vector3Int worldPos)
