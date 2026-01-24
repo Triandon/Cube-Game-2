@@ -9,6 +9,9 @@ public class MiscVariablesDisplay : MonoBehaviour
     public TextMeshProUGUI RenderDistanceText;
     public TextMeshProUGUI chunkBuilding;
     public TextMeshProUGUI playerCordsText, usernameDisplayText;
+
+    [SerializeField] private GameObject keyInfo, debugPanel, chatBoxGO, cursorGO;
+    
     private ChunkManager chunkManager;
     private int chunkCount;
     private int renderDistance;
@@ -47,7 +50,7 @@ public class MiscVariablesDisplay : MonoBehaviour
         
         ChunkCountText.text = $"Chunk Count: {chunkCount}";
         RenderDistanceText.text = $"Render Distance: {renderDistance}";
-        chunkBuilding.text = $"Chunks currently building: {chunksCurrentlyBuilding}";
+        chunkBuilding.text = $"CCB: {chunksCurrentlyBuilding}";
         playerCordsText.text = "Coords: " + playerPos;
 
         if (!chatBox.isFocused)
@@ -97,6 +100,49 @@ public class MiscVariablesDisplay : MonoBehaviour
                 int newSize = playerHolder.Inventory.Size == 5 ? 3 : 5;
                 playerHolder.Inventory.Resize(newSize);
             }
+
+            if (Input.GetKeyDown(KeyCode.F1))
+            {
+                HideAllTrash();
+            }
+
+            if (Input.GetKeyDown(KeyCode.F2))
+            {
+                HideCursor();
+            }
         }
+    }
+
+    private void HideAllTrash()
+    {
+        bool a = ChunkCountText.gameObject.activeInHierarchy;
+
+        if (a)
+        {
+            a = false;
+        }
+        else
+        {
+            a = true;
+        }
+        
+        ChunkCountText.gameObject.SetActive(a);
+        RenderDistanceText.gameObject.SetActive(a);
+        chunkBuilding.gameObject.SetActive(a);
+        playerCordsText.gameObject.SetActive(a);
+        usernameDisplayText.gameObject.SetActive(a);
+        keyInfo.SetActive(a);
+        debugPanel.SetActive(a);
+        chatBoxGO.SetActive(a);
+    }
+
+    private void HideCursor()
+    {
+        bool b = cursorGO.activeInHierarchy;
+
+        if (b) b = false;
+        else b = true;
+        
+        cursorGO.SetActive(b);
     }
 }

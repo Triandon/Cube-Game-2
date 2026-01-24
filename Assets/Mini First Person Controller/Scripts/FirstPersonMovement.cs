@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using TMPro;
 using UnityEngine;
 
 public class FirstPersonMovement : MonoBehaviour
@@ -15,7 +16,7 @@ public class FirstPersonMovement : MonoBehaviour
     /// <summary> Functions to override movement speed. Will use the last added override. </summary>
     public List<System.Func<float>> speedOverrides = new List<System.Func<float>>();
 
-
+    public TMP_InputField chatBox;
 
     void Awake()
     {
@@ -25,6 +26,9 @@ public class FirstPersonMovement : MonoBehaviour
 
     void FixedUpdate()
     {
+        if(chatBox.isFocused)
+            return;
+        
         // Update IsRunning from input.
         IsRunning = canRun && Input.GetKey(runningKey);
 
