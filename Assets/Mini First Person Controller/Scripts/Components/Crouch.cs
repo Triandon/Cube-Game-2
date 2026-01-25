@@ -38,6 +38,9 @@ public class Crouch : MonoBehaviour
 
     void LateUpdate()
     {
+        if(movement.creativeMode)
+            return;
+        
         if (Input.GetKey(key))
         {
             // Enforce a low head.

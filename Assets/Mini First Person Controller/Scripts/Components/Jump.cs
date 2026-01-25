@@ -9,6 +9,8 @@ public class Jump : MonoBehaviour
 
     [SerializeField, Tooltip("Prevents jumping when the transform is in mid-air.")]
     GroundCheck groundCheck;
+
+    private FirstPersonMovement movement;
     
     public TMP_InputField chatBox;
 
@@ -17,10 +19,17 @@ public class Jump : MonoBehaviour
         // Get rigidbody.
         rigidbody = GetComponent<Rigidbody>();
         groundCheck = GetComponent<GroundCheck>();
+        movement = GetComponent<FirstPersonMovement>();
     }
 
     void LateUpdate()
     {
+        if (chatBox.isFocused)
+            return;
+        
+        if(movement.creativeMode)
+            return;
+        
         if (!chatBox.isFocused)
         {
             // Jump when the Jump button is pressed and we are on the ground.

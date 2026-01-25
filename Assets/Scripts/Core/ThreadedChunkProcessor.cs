@@ -29,7 +29,7 @@ public static class ThreadedChunkProcessor
         if (padded == null)
         {
             padded = new byte[S + 2, S + 2, S + 2];
-            byte[,,] gen = GenerateChunkBlocks(coord);
+            byte[,,] gen = TerrainGeneration.GenerateChunkBlocks(coord);
 
             for (int x = 0; x < S; x++)
             for (int y = 0; y < S; y++)
@@ -179,7 +179,7 @@ public static class ThreadedChunkProcessor
 
         if (centerEmpty)
         {
-            byte[,,] gen = GenerateChunkBlocks(coord);
+            byte[,,] gen = TerrainGeneration.GenerateChunkBlocks(coord);
             for (int x = 0; x < S; x++)
             for (int y = 0; y < S; y++)
             for (int z = 0; z < S; z++)
@@ -190,50 +190,5 @@ public static class ThreadedChunkProcessor
         return padded;
     }
 
-    // Use same noise & rules as your Chunk.GenerateHeightMapData()
-    // This function is only used if no padded blocks were passed in.
-    public static byte[,,] GenerateChunkBlocks(Vector3Int coord)
-    {
-        var b = new byte[CHUNK_SIZE, CHUNK_SIZE, CHUNK_SIZE];
-
-        for (int x = 0; x < CHUNK_SIZE; x++)
-        for (int z = 0; z < CHUNK_SIZE; z++)
-        {
-            int worldX = coord.x * CHUNK_SIZE + x;
-            int worldZ = coord.z * CHUNK_SIZE + z;
-
-            float baseHeight = WorldNoise.GetHeight(worldX * 0.01f, worldZ * 0.01f) * 64f;
-            baseHeight = Mathf.Max(baseHeight, 0f);
-            baseHeight += 25f;
-
-            float detail = WorldNoise.GetHeight(worldX * 0.1f, worldZ * 0.1f) * 4f;
-            int height = Mathf.FloorToInt(baseHeight + detail);
-
-            for (int y = 0; y < CHUNK_SIZE; y++)
-            {
-                int worldY = coord.y * CHUNK_SIZE + y;
-                if (worldY > height)
-                {
-                    b[x, y, z] = 0;
-                }
-                else if (worldY == height)
-                {
-                    b[x, y, z] = BlockDataBase.GrassBlock.id;
-                }
-                else if (worldY > height - 3)
-                {
-                    b[x, y, z] = BlockDataBase.DirtBlock.id;
-                }
-                else
-                {
-                    b[x, y, z] = BlockDataBase.StoneBlock.id;
-                }
-
-                if (worldY == 0)
-                    b[x, y, z] = BlockDataBase.StoneBlock.id;
-            }
-        }
-
-        return b;
-    }
+    
 }

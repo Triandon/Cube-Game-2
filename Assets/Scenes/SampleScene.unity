@@ -470,7 +470,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: 'Version nr: TestBuild13Final
+  m_text: 'Version nr: TestBuild14
 
 '
   m_isRightToLeft: 0
@@ -2845,7 +2845,7 @@ MonoBehaviour:
   m_text: "\tControlls:\n\t1. R - Respawn\n\t2. I - Increase render distance\n\t3.
     K - Decrease render distance\n\t4. U - Update chunks (Deprecated)\n\t5. Z - Save
     World\n\t6. Q - Throw item\n\t7. Alt - Unlock cursor\n\t8. ESC - Back to menu\n\t9.
-    F1 - Hide Generic info\n\t10. F2 - Hide Cursor \n"
+    F1 - Hide Generic info\n\t10. F2 - Hide Cursor \n\t11. C - Creative mode\n"
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 19e46f5e93abb23448e9735ba2f4c426, type: 2}
   m_sharedMaterial: {fileID: 4325394615127799905, guid: 19e46f5e93abb23448e9735ba2f4c426, type: 2}

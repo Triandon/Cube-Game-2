@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 
@@ -11,6 +12,12 @@ public class FirstPersonMovement : MonoBehaviour
     public bool IsRunning { get; private set; }
     public float runSpeed = 9;
     public KeyCode runningKey = KeyCode.LeftShift;
+    
+    public bool creativeMode = false;
+
+    [Header(("Creative mode settings"))] 
+    public float flySpeed = 8f;
+    public float runFlySpeed = 29;
 
     Rigidbody rigidbody;
     /// <summary> Functions to override movement speed. Will use the last added override. </summary>
@@ -22,6 +29,14 @@ public class FirstPersonMovement : MonoBehaviour
     {
         // Get the rigidbody on this.
         rigidbody = GetComponent<Rigidbody>();
+    }
+
+    private void Update()
+    {
+        if (Input.GetKeyDown(KeyCode.C))
+        {
+            creativeMode = !creativeMode;
+        }
     }
 
     void FixedUpdate()
@@ -38,11 +53,51 @@ public class FirstPersonMovement : MonoBehaviour
         {
             targetMovingSpeed = speedOverrides[speedOverrides.Count - 1]();
         }
+        
+        // Get target fly speed.
+        float targetFlySpeed = IsRunning ? runFlySpeed : flySpeed;
+        if (speedOverrides.Count > 0)
+        {
+            targetFlySpeed = speedOverrides[speedOverrides.Count - 1]();
+        }
 
         // Get targetVelocity from input.
-        Vector2 targetVelocity =new Vector2( Input.GetAxis("Horizontal") * targetMovingSpeed, Input.GetAxis("Vertical") * targetMovingSpeed);
+        float x = Input.GetAxis("Horizontal");
+        float z = Input.GetAxis("Vertical");
+        Vector3 velocity;
 
+        if (creativeMode)
+        {
+            float y = 0f;
+
+            if (Input.GetKey(KeyCode.Space))
+            {
+                y += 1f;
+            }
+
+            if (Input.GetKey(KeyCode.LeftControl))
+            {
+                y -= 1f;
+            }
+
+            velocity = transform.rotation * new Vector3(
+                x * targetFlySpeed,
+                y * targetFlySpeed,
+                z * targetFlySpeed);
+
+            rigidbody.useGravity = false;
+        }
+        else
+        {
+            velocity = transform.rotation * new Vector3(
+                x * targetMovingSpeed,
+                rigidbody.linearVelocity.y,
+                z * targetMovingSpeed);
+
+            rigidbody.useGravity = true;
+        }
+        
         // Apply movement.
-        rigidbody.linearVelocity = transform.rotation * new Vector3(targetVelocity.x, rigidbody.linearVelocity.y, targetVelocity.y);
+        rigidbody.linearVelocity = velocity;
     }
 }

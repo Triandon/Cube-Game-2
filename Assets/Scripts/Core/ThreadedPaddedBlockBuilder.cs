@@ -9,7 +9,8 @@ public class ThreadedPaddedBlockBuilder
     private ChunkManager chunkManager;
     
     
-
+    //Legacy class
+    
     public byte[,,] BuildPaddedBlocks(Vector3Int coord)
     {
             int S = Chunk.CHUNK_SIZE;
@@ -65,11 +66,11 @@ public class ThreadedPaddedBlockBuilder
             if (centerEmpty)
             {
                 // Use the existing thread-safe generator from ThreadedChunkProcessor
-                byte[,,] generated = ThreadedChunkProcessor.GenerateChunkBlocks(coord);
-                for (int x = 0; x < S; x++)
-                for (int y = 0; y < S; y++)
-                for (int z = 0; z < S; z++)
-                    padded[x + 1, y + 1, z + 1] = generated[x, y, z];
+                //byte[,,] generated = ThreadedChunkProcessor.GenerateChunkBlocks(coord);
+                //for (int x = 0; x < S; x++)
+                //for (int y = 0; y < S; y++)
+                //for (int z = 0; z < S; z++)
+                    //padded[x + 1, y + 1, z + 1] = generated[x, y, z];
             }
  
 
