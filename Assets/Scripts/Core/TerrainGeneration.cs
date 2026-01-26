@@ -16,15 +16,13 @@ namespace Core
             byte dirt = BlockDataBase.GetBlock(BlockDataBase.DirtBlock);
             byte stone = BlockDataBase.StoneBlock.id;
 
-            float sandChance = NoiseClass.GetChunkSandChance(coord, CHUNK_SIZE);
+            ChunkClimate climate = BiomeManager.GetChunkClimate(coord);
             
             for(int x = 0; x < CHUNK_SIZE; x++)
             for(int z = 0; z < CHUNK_SIZE; z++)
             {
                 int worldX = coord.x * CHUNK_SIZE + x;
                 int worldZ = coord.z * CHUNK_SIZE + z;
-            
-                
                 
                 // Multi-layer noise for realistic terrain
                 
@@ -37,8 +35,8 @@ namespace Core
                 float detail = WorldNoise.GetHeight(worldX * 0.1f, worldZ * 0.1f) * 4f;        // Small bumps
                 int height = Mathf.FloorToInt(baseHeight + detail);
                 
-                //BiomeWeights biome = BiomeManager.GetBiomeWeights(worldX, worldZ);
-                byte topBlock = ChooseSurfaceBlock(sandChance, worldX, worldZ, height);
+                //What top block to have
+                byte topBlock = BiomeManager.ChooseSurfaceBlock(climate, worldX, worldZ, height);
                 
                 for (int y = 0; y < CHUNK_SIZE; y++)
                 {
@@ -72,46 +70,7 @@ namespace Core
 
             return blocks;
         }
-
-        private static byte ChooseSurfaceBlock(
-            float dryness,
-            int worldX,
-            int worldZ,
-            int height
-        )
-        {
-            float r = Hash(worldX, worldZ);
-            float patch = PatchNoise(worldX, worldZ);
-            
-            //chances
-            float grassChance = Mathf.Clamp01(1f - dryness * 1.3f);
-            float deadGrassChance = Mathf.Clamp01(dryness * 1.5f * (1f - dryness));
-            
-            float sandUnlock = Mathf.InverseLerp(0.6f, 1f, dryness);
-            float sandChance = sandUnlock * sandUnlock;
-            
-            //patching
-            deadGrassChance *= Mathf.Lerp(0.6f, 1.4f, patch);
-            grassChance *= Mathf.Lerp(0.4f, 1.6f, patch);
-            sandChance *= Mathf.InverseLerp(60f, 30f, height);
-            
-            //norm
-            float sum = grassChance + deadGrassChance + sandChance;
-            grassChance /= sum;
-            deadGrassChance /= sum;
-            sandChance /= sum;
-            
-            //roll
-            if (r < grassChance)
-                return BlockDataBase.GrassBlock.id;
-
-            r -= grassChance;
-
-            if (r < deadGrassChance)
-                return BlockDataBase.DeadGrassBlock.id;
-
-            return BlockDataBase.SandStoneBlock.id;
-        }
+        
 
         private static float Hash(int x, int z)
         {

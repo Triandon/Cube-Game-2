@@ -1,22 +1,25 @@
 using UnityEngine;
 
-public struct BiomeWeights
+public struct ChunkClimate
 {
-    public float desert;
-    public float plains;
-    public float forest;
-    public float jungle;
-    public float tundra;
+    public float temperature;
+    public float humidity;
+}
+
+public struct SurfaceWeights
+{
+    public float grass;
+    public float deadGrass;
+    public float sand;
+
 
     public void Normalize()
     {
-        float sum = desert + plains + forest + jungle + tundra;
-        if(sum <= 0f) return;
+        float sum = grass + deadGrass + sand;
+        if (sum <= 0f) return;
 
-        desert /= sum;
-        plains /= sum;
-        forest /= sum;
-        jungle /= sum;
-        tundra /= sum;
+        grass /= sum;
+        deadGrass /= sum;
+        sand /= sum;
     }
 }

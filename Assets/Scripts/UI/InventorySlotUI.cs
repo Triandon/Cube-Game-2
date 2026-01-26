@@ -5,7 +5,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
-public class InventorySlotUI : MonoBehaviour, IPointerClickHandler
+public class InventorySlotUI : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, IPointerExitHandler
 {
     [SerializeField] private Image icon;
     [SerializeField] private TextMeshProUGUI countText;
@@ -81,5 +81,19 @@ public class InventorySlotUI : MonoBehaviour, IPointerClickHandler
         {
             owner?.SlotRightClicked(this);
         }
+    }
+
+    public void OnPointerEnter(PointerEventData eventData)
+    {
+        ItemStack stack = GetItemStackFromUISlot();
+        if(stack.IsEmpty)
+            return;
+        
+        owner?.ShowTooltip(stack);
+    }
+
+    public void OnPointerExit(PointerEventData eventData)
+    {
+        owner?.HideToolTip();
     }
 }

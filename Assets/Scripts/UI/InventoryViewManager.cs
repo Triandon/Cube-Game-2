@@ -9,6 +9,7 @@ public class InventoryViewManager : MonoBehaviour
     [SerializeField] private InventorySlotUI slotPrefab;
     [SerializeField] private Transform slotParent;
     [SerializeField] public InventoryCursor cursor;
+    private TooltipUI tooltipUI;
 
     protected Inventory inventory;
     protected readonly List<InventorySlotUI> slots = new();
@@ -80,12 +81,31 @@ public class InventoryViewManager : MonoBehaviour
     public void SlotClicked(InventorySlotUI clickedSlot)
     {
         cursor.HandleSlotClick(inventory, clickedSlot.SlotIndex);
+        tooltipUI?.Hide();
     }
     
     public void SlotRightClicked(InventorySlotUI clickedSlot)
     {
         cursor.HandleSlotRightClick(inventory, clickedSlot.SlotIndex);
+        tooltipUI?.Hide();
     }
 
-    
+    public void ShowTooltip(ItemStack stack)
+    {
+        if(!cursor.CursorStack.IsEmpty)
+            return;
+        
+        tooltipUI?.Show(stack);
+    }
+
+    public void HideToolTip()
+    {
+        tooltipUI?.Hide();
+    }
+
+    private void Awake()
+    {
+        if (tooltipUI == null)
+            tooltipUI = FindObjectOfType<TooltipUI>(true);
+    }
 }
