@@ -9,6 +9,7 @@ public class MiscVariablesDisplay : MonoBehaviour
     public TextMeshProUGUI RenderDistanceText;
     public TextMeshProUGUI chunkBuilding;
     public TextMeshProUGUI playerCordsText, usernameDisplayText;
+    public TextMeshProUGUI chunkClimateText;
 
     [SerializeField] private GameObject keyInfo, debugPanel, chatBoxGO, cursorGO;
     
@@ -52,6 +53,12 @@ public class MiscVariablesDisplay : MonoBehaviour
         RenderDistanceText.text = $"Render Distance: {renderDistance}";
         chunkBuilding.text = $"CCB: {chunksCurrentlyBuilding}";
         playerCordsText.text = "Coords: " + playerPos;
+
+        Vector3Int playerChunk = GetPlayerChunkCoord();
+        ChunkClimate climate = BiomeManager.GetChunkClimate(playerChunk);
+        
+        chunkClimateText.text =
+            $"Chunk Climate | T: {climate.temperature:F2} H: {climate.humidity:F2}";
 
         if (!chatBox.isFocused)
         {
@@ -144,5 +151,14 @@ public class MiscVariablesDisplay : MonoBehaviour
         else b = true;
         
         cursorGO.SetActive(b);
+    }
+    
+    private Vector3Int GetPlayerChunkCoord()
+    {
+        return new Vector3Int(
+            Mathf.FloorToInt(player.position.x / Chunk.CHUNK_SIZE),
+            Mathf.FloorToInt(player.position.y / Chunk.CHUNK_SIZE),
+            Mathf.FloorToInt(player.position.z / Chunk.CHUNK_SIZE)
+        );
     }
 }

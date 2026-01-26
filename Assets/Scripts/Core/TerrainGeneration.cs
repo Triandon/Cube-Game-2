@@ -36,7 +36,7 @@ namespace Core
                 int height = Mathf.FloorToInt(baseHeight + detail);
                 
                 //What top block to have
-                byte topBlock = BiomeManager.ChooseSurfaceBlock(climate, worldX, worldZ, height);
+                byte topBlock = BiomeManager.ChooseSurfaceBlock(climate, worldX, worldZ, height,coord);
                 
                 for (int y = 0; y < CHUNK_SIZE; y++)
                 {

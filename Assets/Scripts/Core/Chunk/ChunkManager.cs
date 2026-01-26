@@ -714,11 +714,11 @@ namespace Core
             if (fps > 110)
                 chunksPerFrame = 14;
             else if (fps > 80)
-                chunksPerFrame = 10;
+                chunksPerFrame = 12;
             else if (fps > 60)
-                chunksPerFrame = 8;
+                chunksPerFrame = 9;
             else if (fps > 40)
-                chunksPerFrame = 6;
+                chunksPerFrame = 7;
             else if (fps > 25)
                 chunksPerFrame = 4;
             else if (fps > 15)
