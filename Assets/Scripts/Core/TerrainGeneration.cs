@@ -16,14 +16,15 @@ namespace Core
             byte dirt = BlockDataBase.GetBlock(BlockDataBase.DirtBlock);
             byte stone = BlockDataBase.StoneBlock.id;
 
-            ChunkClimate climate = BiomeManager.GetChunkClimate(coord);
+            //ChunkClimate climate = BiomeManager.GetChunkClimate(coord);
             
             for(int x = 0; x < CHUNK_SIZE; x++)
             for(int z = 0; z < CHUNK_SIZE; z++)
             {
                 int worldX = coord.x * CHUNK_SIZE + x;
                 int worldZ = coord.z * CHUNK_SIZE + z;
-                
+
+                ChunkClimate climate = BiomeManager.GetClimateAt(worldX, worldZ);
                 // Multi-layer noise for realistic terrain
                 
                 //Base noise values
