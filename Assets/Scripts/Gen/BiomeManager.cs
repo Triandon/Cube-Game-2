@@ -143,7 +143,7 @@ public static class BiomeManager
     {
         float temp = climate.temperature;
 
-        float t = Mathf.InverseLerp(0.35f, 15.0f, temp);
+        float t = Mathf.InverseLerp(0.35f, 0.15f, temp);
         t = Mathf.Clamp01(t);
 
         //Bias toward cold, removes edges.
