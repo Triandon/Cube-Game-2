@@ -121,7 +121,7 @@ public static class ThreadedChunkProcessor
         MeshData meshData;
         try
         {
-            meshData = ChunkMeshGeneratorThreaded.GenerateMeshData(getBlock,getState);
+            meshData = ChunkMeshGeneratorThreaded.GenerateMeshData(getBlock,getState,req.lodScale,req.neighborLods);
         }
         catch (Exception e)
         {

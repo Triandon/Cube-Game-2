@@ -17,6 +17,7 @@ namespace Core
         
         public bool isDirty = false;
         public bool isColliderDirty = false;
+        public int chunkNumber;
         
         public Dictionary<int, byte> changedBlocks = new Dictionary<int, byte>();
 
@@ -26,6 +27,7 @@ namespace Core
         public ChunkManager chunkManager;
         public ChunkRendering renderer;
         public MeshData meshData;
+        public ChunkLOD lod;
 
         public Chunk(Vector3Int coord)
         {
@@ -273,7 +275,23 @@ namespace Core
         
             return BlockRegistry.GetBlock("Stone_Block").id;
         }
-    
+        
+        public enum ChunkLOD : byte
+        {
+            LOD0 = 0, // 1x1
+            LOD1 = 1, // 2x2
+            LOD2 = 2, // 4x4
+            LOD3 = 3, // 8x8
+            LOD4 = 4  // 16x16
+        }
+
+        public int GetLodScale()
+        {
+            return 1 << (int)lod;
+        }
 
     }
+    
 }
+
+

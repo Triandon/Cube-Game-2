@@ -89,6 +89,7 @@ namespace Core
                 playerChunkCord = currentPlayerChunk;
                 UpdateChunks();
                 UpdateChunkCollidersForPlayerMove();
+                UpdateChunkLODs();
             }
             
             SortChunksLists();
@@ -285,13 +286,14 @@ namespace Core
             GameObject go;
             Vector3Int worldPos = new Vector3Int(coord.x * Chunk.CHUNK_SIZE, coord.y * Chunk.CHUNK_SIZE,
                 coord.z * Chunk.CHUNK_SIZE);
+
+            chunk.lod = ComputeLOD(coord);
             
             if (chunkPool.Count > 0)
             {
                 go = chunkPool.Dequeue();
                 chunk.coord = coord;
                 chunk.chunkManager = this;
-                go.name = "Chunk_" + coord.x + "_" + coord.y + "_" + coord.z + "_chunk_nr" + chunkNumber;
 
                 // Reset old data
                 chunk.blocks = new byte[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
@@ -311,11 +313,13 @@ namespace Core
                 go = Instantiate(chunkPrefab, Vector3.zero, Quaternion.identity, transform);
                 chunk.coord = coord;
                 chunk.chunkManager = this;
-                go.name = "Chunk_" + coord.x + "_" + coord.y + "_" + coord.z + "_chunk_nr" + chunkNumber;
                 go.transform.position = worldPos;
                 go.SetActive(true);
             }
 
+            chunk.chunkNumber = chunkNumber;
+            
+            go.name = "Chunk_" + coord.x + "_" + coord.y + "_" + coord.z + "_chunk_nr" + chunk.chunkNumber + "_LOD" + chunk.lod;
             ChunkRendering rendering = go.GetComponent<ChunkRendering>();
             chunk.renderer = rendering;
             rendering.SetChunkData(chunk);
@@ -365,8 +369,21 @@ namespace Core
             // Build padded blocks (center maybe empty — worker will generate center blocks or use padded center)
             var snapshots = CaptureNeighborSnapshots(coord);
 
+            int lodScale = chunk.GetLodScale();
+
+            ChunkMeshGeneratorThreaded.NeighborLODInfo neighborLODInfo =
+                new ChunkMeshGeneratorThreaded.NeighborLODInfo()
+                {
+                    posX = GetNeighborLod(coord + Vector3Int.right, lodScale),
+                    negX = GetNeighborLod(coord + Vector3Int.left, lodScale),
+                    posY = GetNeighborLod(coord + Vector3Int.up, lodScale),
+                    negY = GetNeighborLod(coord + Vector3Int.down, lodScale),
+                    posZ = GetNeighborLod(coord + Vector3Int.forward, lodScale),
+                    negZ = GetNeighborLod(coord + Vector3Int.back, lodScale),
+                };
+            
             // Create request with padded array and saved changes
-            var req = new ChunkGenRequest(coord, savedBlocks, savedStates, snapshots);
+            var req = new ChunkGenRequest(coord, savedBlocks, savedStates, snapshots, lodScale, neighborLODInfo);
 
             // Mark request pending and enqueue
             pendingRequests.Add(coord);
@@ -393,6 +410,7 @@ namespace Core
             chunk.blocks = new byte[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
             chunk.changedBlocks.Clear();
             chunk.changedStates.Clear();
+            chunk.chunkNumber = -1;
             
             //Removes old BE
             foreach (var be in chunk.blockEntities.Values)
@@ -452,6 +470,7 @@ namespace Core
                     chunk.blocks = new byte[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
                     chunk.changedBlocks.Clear();
                     chunk.changedStates.Clear();
+                    chunk.chunkNumber = -1;
                     
                     //Removes old BE
                     foreach (var be in chunk.blockEntities.Values)
@@ -698,6 +717,33 @@ namespace Core
                         chunk.renderer.BuildChunkColliderMesh();
                         chunk.isColliderDirty = false;
                     }
+                }
+            }
+        }
+
+        private void UpdateChunkLODs()
+        {
+            foreach (var chunk in chunks.Values)
+            {
+                if (chunk == null || chunk.renderer == null)
+                    continue;
+
+                Chunk.ChunkLOD newLod = ComputeLOD(chunk.coord);
+
+                if (chunk.lod != newLod)
+                {
+                    chunk.lod = newLod;
+
+                    // Tell renderer (for now: just store it)
+                    //chunk.renderer.SetLOD(newLod);
+
+                    // Debug proof
+                    chunk.renderer.gameObject.name =
+                        $"Chunk_{chunk.coord.x}_{chunk.coord.y}_{chunk.coord.z}_chunk_nr_{chunk.chunkNumber.ToString()}_LOD{(int)newLod}";
+
+                    // Later: this will enqueue a mesh rebuild
+                    meshQue.Add(chunk);
+                    chunk.isColliderDirty = true;
                 }
             }
         }
@@ -979,6 +1025,28 @@ namespace Core
             
             
         }
+
+        private Chunk.ChunkLOD ComputeLOD(Vector3Int chunkCoord)
+        {
+            int dx = Mathf.Abs(chunkCoord.x - playerChunkCord.x);
+            int dy = Mathf.Abs(chunkCoord.y - playerChunkCord.y);
+            int dz = Mathf.Abs(chunkCoord.z - playerChunkCord.z);
+
+            int dist = Mathf.Max(dx, Mathf.Max(dy, dz));
+            if (dist <= 2) return Chunk.ChunkLOD.LOD0;
+            if (dist <= 4) return Chunk.ChunkLOD.LOD1;
+            if (dist <= 8) return Chunk.ChunkLOD.LOD2;
+            if (dist <= 16) return Chunk.ChunkLOD.LOD3;
+            return Chunk.ChunkLOD.LOD4;
+        }
+        
+        int GetNeighborLod(Vector3Int c, int fallback)
+        {
+            return chunks.TryGetValue(c, out var ch)
+                ? ch.GetLodScale()
+                : fallback;
+        }
+
 
     }
 }

@@ -5,6 +5,8 @@ using Core;
 using Core.Block;
 using UnityEngine;
 
+//Todo In the lods, there CAN be a height bias for long distance chunks!
+
 public class MeshData
 {
     public List<Vector3> vertices = new List<Vector3>();
@@ -27,8 +29,15 @@ public static class ChunkMeshGeneratorThreaded
         public int atlasIndex;
     }
     
+    public struct NeighborLODInfo
+    {
+        public int posX, negX;
+        public int posY, negY;
+        public int posZ, negZ;
+    }
+    
     public static MeshData GenerateMeshData(Func<int,int,int,byte> getBlock,
-        Func<int, int, int, BlockStateContainer> getState)
+        Func<int, int, int, BlockStateContainer> getState, int lodScale, NeighborLODInfo neighbors)
     {
         var mesh = new MeshData();
 
@@ -44,7 +53,7 @@ public static class ChunkMeshGeneratorThreaded
 
         foreach (var dir in dirs)
         {
-            GreedyDirection(getBlock, getState, dir, mesh, mask);
+            GreedyDirection(getBlock, getState, dir, mesh,mask, lodScale, neighbors);
         }
 
         return mesh;
@@ -52,21 +61,48 @@ public static class ChunkMeshGeneratorThreaded
     
     // Greedy direction implementation adapted to be fully data-only and match original behavior
     private static void GreedyDirection(Func<int,int,int,byte> getBlock, Func<int, int, int, BlockStateContainer> getState, 
-        Vector3Int dir, MeshData mesh, MaskCell[,] mask)
+        Vector3Int dir, MeshData mesh,MaskCell[,] mask, int lodScale, NeighborLODInfo neighbors)
     {
+        int neighborScale =
+            dir == Vector3Int.right   ? neighbors.posX :
+            dir == Vector3Int.left    ? neighbors.negX :
+            dir == Vector3Int.up      ? neighbors.posY :
+            dir == Vector3Int.down    ? neighbors.negY :
+            dir == Vector3Int.forward ? neighbors.posZ :
+            neighbors.negZ;
+
+        bool needsSkirt = neighborScale > lodScale;
+        int skirtDepth = lodScale;
+
+        
         int uMax = CHUNK_SIZE;
         int vMax = CHUNK_SIZE;
         int wMax = CHUNK_SIZE;
 
-        for (int w = 0; w < wMax; w++)
+        int mSize = CHUNK_SIZE / lodScale;
+
+        for (int w = 0; w < wMax; w += lodScale)
         {
+            bool isBorderSlice =
+                (dir == Vector3Int.left     && w == 0) ||
+                (dir == Vector3Int.right    && w == wMax - lodScale) ||
+                (dir == Vector3Int.down     && w == 0) ||
+                (dir == Vector3Int.up       && w == wMax - lodScale) ||
+                (dir == Vector3Int.back     && w == 0) ||
+                (dir == Vector3Int.forward  && w == wMax - lodScale);
+
+            
             // build mask for this slice
-            for (int u = 0; u < uMax; u++)
+            for (int u = 0; u < uMax; u += lodScale)
             {
-                for (int v = 0; v < vMax; v++)
+                int mu = u / lodScale;
+                
+                for (int v = 0; v < vMax; v += lodScale)
                 {
-                    mask[u, v].occluded = false;
-                    mask[u, v].atlasIndex = -1;
+                    int mv = v / lodScale;
+                    
+                    mask[mu, mv].occluded = false;
+                    mask[mu, mv].atlasIndex = -1;
 
                     int x = 0, y = 0, z = 0;
                     if (dir.x != 0)
@@ -88,10 +124,23 @@ public static class ChunkMeshGeneratorThreaded
                         z = w;
                     }
 
-                    byte current = getBlock(x, y, z);
-                    byte neighbor = getBlock(x+dir.x,y+dir.y,z+dir.z); // adjust back to original coordinates
+                    byte current = SampleBlock(getBlock, x, y, z, lodScale);
+                    byte neighbor = SampleBlock(
+                        getBlock,
+                        x + dir.x * lodScale,
+                        y + dir.y * lodScale,
+                        z + dir.z * lodScale,
+                        lodScale
+                    );
 
-                    if (current != 0 && neighbor == 0)
+                    bool isDifferentLOD = neighborScale != lodScale;
+                    bool renderBoundaryWall = neighborScale > lodScale;
+
+                    if (current != 0 &&
+                        (
+                            neighbor == 0 ||                      // normal face
+                            (renderBoundaryWall && isBorderSlice) // LOD seam wall
+                        ))
                     {
                         // Use the thread-safe BlockInfo table if available, fallback safe handling
                         int atlasIdx = -1;
@@ -151,21 +200,21 @@ public static class ChunkMeshGeneratorThreaded
 
                         if (atlasIdx >= 0)
                         {
-                            mask[u, v].occluded = true;
-                            mask[u, v].atlasIndex = atlasIdx;
+                            mask[mu, mv].occluded = true;
+                            mask[mu, mv].atlasIndex = atlasIdx;
                         }
                         else
                         {
-                            mask[u, v].occluded = false;
+                            mask[mu, mv].occluded = false;
                         }
                     }
                 }
             }
 
             // Greedy merge the mask into quads
-            for (int u = 0; u < uMax; u++)
+            for (int u = 0; u < mSize; u++)
             {
-                for (int v = 0; v < vMax;)
+                for (int v = 0; v < mSize;)
                 {
                     if (!mask[u, v].occluded)
                     {
@@ -177,14 +226,14 @@ public static class ChunkMeshGeneratorThreaded
 
                     // extend width (v direction)
                     int width = 1;
-                    while (v + width < vMax && mask[u, v + width].occluded &&
+                    while (v + width < mSize && mask[u, v + width].occluded &&
                            mask[u, v + width].atlasIndex == atlasIndex)
                         width++;
 
                     // extend height (u direction)
                     int height = 1;
                     bool done = false;
-                    while (u + height < uMax && !done)
+                    while (u + height < mSize && !done)
                     {
                         for (int k = 0; k < width; k++)
                         {
@@ -204,8 +253,8 @@ public static class ChunkMeshGeneratorThreaded
                             mask[u + du, v + dv].occluded = false;
 
                     // Add the merged quad: compute its 4 corner positions in chunk-local space
-                    AddQuadFromMask(u, v, width, height, w, dir, atlasIndex, mesh);
-
+                    AddQuadFromMask(u, v, width, height, w, dir, atlasIndex, mesh, lodScale);
+                    
                     // advance v cursor
                     v += width;
                 }
@@ -214,21 +263,51 @@ public static class ChunkMeshGeneratorThreaded
         } // end w loop
     }
     
-    private static void AddQuadFromMask(int u, int v, int width, int height, int w, Vector3Int dir, int atlasIndex, MeshData mesh)
+    private static byte SampleBlock(
+        Func<int,int,int,byte> getBlock,
+        int x, int y, int z,
+        int scale)
+    {
+        // search from TOP to BOTTOM
+        for (int dy = scale - 1; dy >= 0; dy--)
+        for (int dx = 0; dx < scale; dx++)
+        for (int dz = 0; dz < scale; dz++)
+        {
+            byte b = getBlock(x + dx, y + dy, z + dz);
+            if (b != 0)
+                return b;
+        }
+
+        return 0;
+    }
+    
+
+    
+    private static void AddQuadFromMask(int u, int v, int width, int height, int w, Vector3Int dir, int atlasIndex, MeshData mesh, int lodScale)
     {
         if (width <= 0 || height <= 0) return;
 
         Vector3[] faceVerts = VoxelData.GetFaceVertices(dir);
         if (faceVerts == null || faceVerts.Length != 4) return;
 
-        Vector3 offset = Vector3.zero;
+        int bu = u * lodScale;
+        int bv = v * lodScale;
+        int bw = w;
 
+        int blockWidth = width * lodScale;
+        int blockHeight = height * lodScale;
+        
+        Vector3 offset;
+
+        int faceOffset = dir.x + dir.y + dir.z > 0 ? lodScale : 0;
+        
         if (dir.x != 0)
-            offset = new Vector3(w + (dir.x > 0 ? 1f : 0f), u, v);
+            offset = new Vector3(bw + faceOffset, bu, bv);
         else if (dir.y != 0)
-            offset = new Vector3(u, w + (dir.y > 0 ? 1f : 0f), v);
-        else // dir.z != 0
-            offset = new Vector3(u, v, w + (dir.z > 0 ? 1f : 0f));
+            offset = new Vector3(bu, bw + faceOffset, bv);
+        else
+            offset = new Vector3(bu, bv, bw + faceOffset);
+
 
         int baseIndex = mesh.vertices.Count;
 
@@ -236,15 +315,23 @@ public static class ChunkMeshGeneratorThreaded
         foreach (Vector3 vert in faceVerts)
         {
             Vector3 pos;
+            
             if (dir.x != 0)
-                pos = offset + vert.y * Vector3.up * height + vert.z * Vector3.forward * width;
+                pos = offset
+                      + vert.y * Vector3.up * blockHeight
+                      + vert.z * Vector3.forward * blockWidth;
             else if (dir.y != 0)
-                pos = offset + vert.x * Vector3.right * height + vert.z * Vector3.forward * width;
+                pos = offset
+                      + vert.x * Vector3.right * blockHeight
+                      + vert.z * Vector3.forward * blockWidth;
             else // dir.z != 0
-                pos = offset + vert.x * Vector3.right * height + vert.y * Vector3.up * width;
-
+                pos = offset
+                      + vert.x * Vector3.right * blockHeight
+                      + vert.y * Vector3.up * blockWidth;
+            
             mesh.vertices.Add(pos);
         }
+
 
         // Triangles (winding check)
         int i0 = baseIndex + 0;
@@ -357,6 +444,18 @@ public class ChunkMeshGenerator
     // uses the chunk.GetBlock method on the main thread (same behavior as original).
     public ChunkRendering.ChunkMeshData GenerateMesh(byte[,,] blocks, Chunk owner)
     {
+        int lodScale = owner != null ? owner.GetLodScale() : 1;
+        
+        ChunkMeshGeneratorThreaded.NeighborLODInfo neighbors = new ChunkMeshGeneratorThreaded.NeighborLODInfo
+        {
+            posX = owner.chunkManager.GetChunk(owner.coord + Vector3Int.right)?.GetLodScale() ?? lodScale,
+            negX = owner.chunkManager.GetChunk(owner.coord + Vector3Int.left )?.GetLodScale() ?? lodScale,
+            posY = owner.chunkManager.GetChunk(owner.coord + Vector3Int.up   )?.GetLodScale() ?? lodScale,
+            negY = owner.chunkManager.GetChunk(owner.coord + Vector3Int.down )?.GetLodScale() ?? lodScale,
+            posZ = owner.chunkManager.GetChunk(owner.coord + Vector3Int.forward)?.GetLodScale() ?? lodScale,
+            negZ = owner.chunkManager.GetChunk(owner.coord + Vector3Int.back   )?.GetLodScale() ?? lodScale,
+        };
+        
         // Provide the worker thread only a plain byte array (blocks)
         Func<int,int,int,byte> getBlock = (x,y,z) =>
         {
@@ -379,7 +478,7 @@ public class ChunkMeshGenerator
         };
 
         // Use threaded mesher to produce plain MeshData (runs on main thread here)
-        MeshData meshData = ChunkMeshGeneratorThreaded.GenerateMeshData(getBlock,getState);
+        MeshData meshData = ChunkMeshGeneratorThreaded.GenerateMeshData(getBlock,getState,lodScale, neighbors);
 
         // Convert MeshData to Unity Mesh objects (this MUST be done on main thread)
         return ConvertToChunkMeshData(meshData);
