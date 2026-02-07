@@ -55,7 +55,6 @@ public static class ChunkMeshGeneratorThreaded
         {
             GreedyDirection(getBlock, getState, dir, mesh,mask, lodScale, neighbors);
         }
-
         return mesh;
     }
     
@@ -133,14 +132,9 @@ public static class ChunkMeshGeneratorThreaded
                         lodScale
                     );
 
-                    bool isDifferentLOD = neighborScale != lodScale;
-                    bool renderBoundaryWall = neighborScale > lodScale;
+                    bool forceFace = isBorderSlice && neighborScale < lodScale;
 
-                    if (current != 0 &&
-                        (
-                            neighbor == 0 ||                      // normal face
-                            (renderBoundaryWall && isBorderSlice) // LOD seam wall
-                        ))
+                    if (current != 0 && (neighbor == 0 || forceFace))
                     {
                         // Use the thread-safe BlockInfo table if available, fallback safe handling
                         int atlasIdx = -1;
@@ -400,6 +394,8 @@ public static class ChunkMeshGeneratorThreaded
             mesh.colliderTriangles.Add(c3);
         }
     }
+
+
 
     private static bool ISZFace(Vector3Int dir) => dir.z != 0;
 

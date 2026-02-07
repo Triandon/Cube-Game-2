@@ -10,6 +10,7 @@ public class ChunkRendering : MonoBehaviour
     private MeshCollider meshCollider;
     private Chunk chunk;
     private ChunkMeshGenerator meshGenerator;
+    private MaterialPropertyBlock mpb;
 
     public struct ChunkMeshData
     {
@@ -23,6 +24,8 @@ public class ChunkRendering : MonoBehaviour
         meshRenderer = GetComponent<MeshRenderer>();
         
         meshGenerator = new ChunkMeshGenerator();
+
+        mpb = new MaterialPropertyBlock();
     }
 
     public void SetChunkData(Chunk chunkData)
@@ -42,32 +45,23 @@ public class ChunkRendering : MonoBehaviour
 
         // Assign collider mesh to MeshCollider
         //meshCollider.sharedMesh = meshData.colliderMesh;
-
+        
         // Material
         meshRenderer.sharedMaterial = Resources.Load<Material>("Materials/AtlasMaterial");
     }
 
-    public void BuildChunkColliderMesh()
+    // modified chunk of your ChunkRendering class
+    public void ApplyMeshData(MeshData meshData, bool withCollider)
     {
-        if(chunk == null || chunk.blocks == null)
+        if (meshData == null)
             return;
 
-        if (meshCollider == null)
-            meshCollider = gameObject.AddComponent<MeshCollider>();
-        
-        var meshData = meshGenerator.GenerateMesh(chunk.blocks, chunk);
-        meshCollider.sharedMesh = meshData.colliderMesh;
-    }
+        // Render mesh
+        Mesh renderMesh = new Mesh
+        {
+            indexFormat = UnityEngine.Rendering.IndexFormat.UInt32
+        };
 
-    // modified chunk of your ChunkRendering class
-    public void ApplyMeshData(MeshData meshData)
-    {
-        if (meshData == null) return;
-
-        //Render mesh
-        var renderMesh = new Mesh();
-        renderMesh.Clear();
-        renderMesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
         renderMesh.SetVertices(meshData.vertices);
         renderMesh.SetTriangles(meshData.triangles, 0);
         renderMesh.SetUVs(0, meshData.uvs);
@@ -77,10 +71,38 @@ public class ChunkRendering : MonoBehaviour
         renderMesh.RecalculateBounds();
 
         meshFilter.sharedMesh = renderMesh;
-        
 
-        meshRenderer.sharedMaterial = Resources.Load<Material>("Materials/AtlasMaterial");
+        // Collider (SAME MeshData)
+        if (withCollider)
+            UpdateCollider(meshData);
+        else
+            DestroyCollider();
+
+        meshRenderer.sharedMaterial =
+            Resources.Load<Material>("Materials/AtlasMaterial");
     }
+
+    
+    public void Rebuild(bool withCollider)
+    {
+        if (chunk == null || chunk.blocks == null)
+            return;
+
+        // Generate fresh MeshData
+        MeshData md = ChunkMeshGeneratorThreaded.GenerateMeshData(
+            (x,y,z) => chunk.GetBlock(x,y,z),
+            (x,y,z) => chunk.GetStateAt(x,y,z),
+            chunk.GetLodScale(),
+            chunk.chunkManager.GetNeighborLODInfo(chunk.coord)
+        );
+
+        // Store it
+        chunk.meshData = md;
+
+        // Apply render mesh
+        ApplyMeshData(md, withCollider);
+    }
+
 
     public void CreateCollider(MeshData meshData)
     {
@@ -104,6 +126,29 @@ public class ChunkRendering : MonoBehaviour
         meshCollider.sharedMesh = colliderMesh;
     }
 
+    public void UpdateCollider(MeshData meshData)
+    {
+        if(meshData == null)
+            return;
+
+        if (meshCollider == null)
+        {
+            meshCollider = gameObject.AddComponent<MeshCollider>();
+        }
+
+        var colliderMesh = new Mesh();
+        colliderMesh.Clear();
+        colliderMesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+        colliderMesh.SetVertices(meshData.colliderVertices);
+        colliderMesh.SetTriangles(meshData.colliderTriangles, 0);
+        colliderMesh.RecalculateNormals();
+        colliderMesh.RecalculateTangents();
+        colliderMesh.RecalculateBounds();
+
+        meshCollider.sharedMesh = null;
+        meshCollider.sharedMesh = colliderMesh;
+    }
+
     public void DestroyCollider()
     {
         if(meshCollider == null)
@@ -120,6 +165,6 @@ public class ChunkRendering : MonoBehaviour
         
         return meshCollider != null;
     }
-
+    
     
 }

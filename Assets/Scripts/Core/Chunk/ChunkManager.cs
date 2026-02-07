@@ -115,14 +115,19 @@ namespace Core
             OnDestroy();
         }
 
+        //private const int MAX_APPLY_P_F = 1;
+        
         // Called each Update to dequeue all ready worker results
         private void ProcessWorkerResults()
         {
             if (threadedWorker == null) return;
-            ChunkGenResult res;
-            while (threadedWorker.TryDequeueResult(out res))
+
+            int applied = 0;
+            while (applied < chunksPerFrame &&
+                   threadedWorker.TryDequeueResult(out var res))
             {
                 ApplyChunkResult(res);
+                applied++;
             }
         }
 
@@ -185,8 +190,7 @@ namespace Core
             if (chunkRender != null && res.meshData != null)
             {
                 chunk.meshData = res.meshData;
-                chunkRender.ApplyMeshData(res.meshData);
-                chunkRender.CreateCollider(res.meshData);
+                chunkRender.ApplyMeshData(res.meshData, NeedsColliders(chunk));
                 
                 EnqueueNeighborRebuilds(chunk.coord);
             }
@@ -688,38 +692,23 @@ namespace Core
         {
             foreach (var chunk in chunks.Values)
             {
-                if (chunk == null)
-                    continue;
-                
                 bool needsCollider = NeedsColliders(chunk);
 
-                //Case 1: Needs collider but doesnt have one
+                // Create collider if now needed but missing
                 if (needsCollider && !chunk.renderer.HasCollider())
                 {
-                    if (chunk.renderer.gameObject.activeInHierarchy)
-                    {
-                        chunk.renderer.BuildChunkColliderMesh();
-                        chunk.isColliderDirty = false;
-                    }
+                    meshQue.Add(chunk); // <-- FORCE rebuild WITH collider
                 }
-                //Case 2: Has collider but no longer needs one
-                else if(!needsCollider && chunk.renderer.HasCollider())
+
+                // Remove collider if no longer needed
+                if (!needsCollider && chunk.renderer.HasCollider())
                 {
                     chunk.renderer.DestroyCollider();
-                    chunk.isColliderDirty = false;
-                } 
-                //Case 3: Has collider AND mesh changed!
-                else if (needsCollider && chunk.renderer.HasCollider() && chunk.isColliderDirty)
-                {
-                    chunk.renderer.DestroyCollider();
-                    if (chunk.renderer.gameObject.activeInHierarchy)
-                    {
-                        chunk.renderer.BuildChunkColliderMesh();
-                        chunk.isColliderDirty = false;
-                    }
                 }
             }
         }
+
+
 
         private void UpdateChunkLODs()
         {
@@ -740,10 +729,12 @@ namespace Core
                     // Debug proof
                     chunk.renderer.gameObject.name =
                         $"Chunk_{chunk.coord.x}_{chunk.coord.y}_{chunk.coord.z}_chunk_nr_{chunk.chunkNumber.ToString()}_LOD{(int)newLod}";
-
+                    
+                    chunk.isColliderDirty = true;
+                    
                     // Later: this will enqueue a mesh rebuild
                     meshQue.Add(chunk);
-                    chunk.isColliderDirty = true;
+                    EnqueueNeighborRebuilds(chunk.coord);
                 }
             }
         }
@@ -827,21 +818,12 @@ namespace Core
         private IEnumerator BuildChunkMeshNextFrame(Chunk chunk)
         {
             yield return null;
-            chunk.renderer.BuildChunkMesh();
-        }
-
-        private IEnumerator BuildChunkColliderNextFrame(Chunk chunk)
-        {
-            yield return null;
-            if (NeedsColliders(chunk))
-            {
-                chunk.renderer.BuildChunkColliderMesh();
-            }
-            else
-            {
-                chunk.renderer.DestroyCollider();
-            }
             
+            if (chunk == null || chunk.renderer == null)
+                yield break;
+            
+            chunk.renderer.Rebuild(NeedsColliders(chunk));
+            chunk.isColliderDirty = false;
         }
         
         private bool NeedsColliders(Chunk chunk)
@@ -852,7 +834,6 @@ namespace Core
             int dx = Mathf.Abs(chunk.coord.x - playerChunkCord.x);
             int dy = Mathf.Abs(chunk.coord.y - playerChunkCord.y);
             int dz = Mathf.Abs(chunk.coord.z - playerChunkCord.z);
-
             bool needsCollider =
                 dx <= colliderDistance &&
                 dy <= colliderDistance &&
@@ -917,35 +898,15 @@ namespace Core
             meshQue.RemoveWhere(c => c == null || c.renderer.gameObject == null);
             
             int buildChunksThisFrame = Mathf.Min(chunksPerFrame, meshQue.Count);
-            int generatingChunksThisFrame = Math.Min(chunksPerFrame, generationQue.Count);
-            
-            //Generate list limited number
-            List<Vector3Int> toGenerate = new List<Vector3Int>(generatingChunksThisFrame);
-            Vector3Int best;
-            float bestDistance;
-            
-            for (int i = 0; i < generatingChunksThisFrame; i++)
+            int generatingChunksThisFrame = Mathf.Min(chunksPerFrame, generationQue.Count);
+
+            var ordered = generationQue.OrderBy(c =>
             {
-                bestDistance = float.MaxValue;
-                best = default;
-
-                foreach (var c in generationQue)
-                {
-                    float dx = player.position.x - c.x * Chunk.CHUNK_SIZE;
-                    float dy = player.position.y - c.y * Chunk.CHUNK_SIZE;
-                    float dz = player.position.z - c.z * Chunk.CHUNK_SIZE;
-                    float dist = dx * dx + dy * dy + dz * dz;
-
-                    if (dist < bestDistance)
-                    {
-                        bestDistance = dist;
-                        best = c;
-                    }
-                }
-                toGenerate.Add(best);
-                generationQue.Remove(best);
-            }
-            
+                float dx = player.position.x - c.x * Chunk.CHUNK_SIZE;
+                float dy = player.position.y - c.y * Chunk.CHUNK_SIZE;
+                float dz = player.position.z - c.z * Chunk.CHUNK_SIZE;
+                return dx * dx + dy * dy + dz * dz;
+            }).Take(generatingChunksThisFrame).ToList();
             
             // Before generating chunks in Update()
             generationQue.RemoveWhere(coord => 
@@ -959,7 +920,7 @@ namespace Core
                 Mathf.Abs(c.coord.z - playerChunkCord.z) > viewDistance);
 
 
-            foreach (var coord in toGenerate)
+            foreach (var coord in ordered)
             {
                 generationQue.Remove(coord);
                 chunkCount++;
@@ -1013,7 +974,6 @@ namespace Core
                         chunkToBuild.renderer.gameObject.activeInHierarchy)
                     {
                         StartCoroutine(BuildChunkMeshNextFrame(chunkToBuild));
-                        StartCoroutine(BuildChunkColliderNextFrame(chunkToBuild));
                     }
 
                     // Remove from queue regardless (we're attempting to build it)
@@ -1033,20 +993,39 @@ namespace Core
             int dz = Mathf.Abs(chunkCoord.z - playerChunkCord.z);
 
             int dist = Mathf.Max(dx, Mathf.Max(dy, dz));
-            if (dist <= 2) return Chunk.ChunkLOD.LOD0;
-            if (dist <= 4) return Chunk.ChunkLOD.LOD1;
-            if (dist <= 8) return Chunk.ChunkLOD.LOD2;
-            if (dist <= 16) return Chunk.ChunkLOD.LOD3;
+            if (dist <= 19) return Chunk.ChunkLOD.LOD0;
+            if (dist <= 28) return Chunk.ChunkLOD.LOD1;
+            if (dist <= 38) return Chunk.ChunkLOD.LOD2;
+            if (dist <= 44) return Chunk.ChunkLOD.LOD3;
             return Chunk.ChunkLOD.LOD4;
         }
         
         int GetNeighborLod(Vector3Int c, int fallback)
         {
-            return chunks.TryGetValue(c, out var ch)
-                ? ch.GetLodScale()
-                : fallback;
+            if (!chunks.TryGetValue(c, out var ch))
+                return int.MaxValue; // force coarse-side face
+
+            return ch.GetLodScale();
+        }
+        
+        public ChunkMeshGeneratorThreaded.NeighborLODInfo GetNeighborLODInfo(Vector3Int coord)
+        {
+            int fallback = chunks.TryGetValue(coord, out var center)
+                ? center.GetLodScale()
+                : 1;
+
+            return new ChunkMeshGeneratorThreaded.NeighborLODInfo
+            {
+                posX = GetNeighborLod(coord + Vector3Int.right,   fallback),
+                negX = GetNeighborLod(coord + Vector3Int.left,    fallback),
+                posY = GetNeighborLod(coord + Vector3Int.up,      fallback),
+                negY = GetNeighborLod(coord + Vector3Int.down,    fallback),
+                posZ = GetNeighborLod(coord + Vector3Int.forward, fallback),
+                negZ = GetNeighborLod(coord + Vector3Int.back,    fallback),
+            };
         }
 
 
+        
     }
 }
