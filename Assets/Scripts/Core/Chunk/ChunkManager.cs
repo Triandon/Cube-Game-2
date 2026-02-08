@@ -36,6 +36,8 @@ namespace Core
 
         // --- new: track pending requests so we don't enqueue duplicates
         private HashSet<Vector3Int> pendingRequests = new HashSet<Vector3Int>();
+        private Settings settings;
+        private int lodDistance;
         
         
         //If a player moves (so the chunks also moves), then if the player increase render distance new chunks
@@ -57,6 +59,9 @@ namespace Core
 
         void Start()
         {
+            settings = Settings.Instance;
+            SetLodDistance();
+            
             BlockRegistry.BuildThreadLookup();
 
             // start worker threads (use processorCount -1 or 1 minimum)
@@ -986,17 +991,31 @@ namespace Core
             
         }
 
+        private void SetLodDistance()
+        {
+            int distance = 32; //Default number
+            
+            if (settings != null)
+            {
+                distance = settings.lodDistance;
+            }
+
+            lodDistance = distance;
+        }
+        
         private Chunk.ChunkLOD ComputeLOD(Vector3Int chunkCoord)
         {
+            int lodDistance = this.lodDistance;
+            
             int dx = Mathf.Abs(chunkCoord.x - playerChunkCord.x);
             int dy = Mathf.Abs(chunkCoord.y - playerChunkCord.y);
             int dz = Mathf.Abs(chunkCoord.z - playerChunkCord.z);
 
             int dist = Mathf.Max(dx, Mathf.Max(dy, dz));
-            if (dist <= 19) return Chunk.ChunkLOD.LOD0;
-            if (dist <= 28) return Chunk.ChunkLOD.LOD1;
-            if (dist <= 38) return Chunk.ChunkLOD.LOD2;
-            if (dist <= 44) return Chunk.ChunkLOD.LOD3;
+            if (dist <= lodDistance) return Chunk.ChunkLOD.LOD0;
+            if (dist <= lodDistance * 2) return Chunk.ChunkLOD.LOD1;
+            if (dist <= lodDistance * 4) return Chunk.ChunkLOD.LOD2;
+            if (dist <= lodDistance * 8) return Chunk.ChunkLOD.LOD3;
             return Chunk.ChunkLOD.LOD4;
         }
         

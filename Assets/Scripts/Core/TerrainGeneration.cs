@@ -6,7 +6,7 @@ namespace Core
     [System.Serializable]
     public static class TerrainGeneration
     {
-        public const int CHUNK_SIZE = 16;
+        public const int CHUNK_SIZE = Chunk.CHUNK_SIZE;
     
         public static byte[,,] GenerateChunkBlocks(Vector3Int coord)
         {

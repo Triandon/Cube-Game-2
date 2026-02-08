@@ -8,7 +8,7 @@ public class MiscVariablesDisplay : MonoBehaviour
     public TextMeshProUGUI ChunkCountText;
     public TextMeshProUGUI RenderDistanceText;
     public TextMeshProUGUI chunkBuilding;
-    public TextMeshProUGUI playerCordsText, usernameDisplayText;
+    public TextMeshProUGUI playerCordsText, usernameDisplayText, currentLodDistanceText;
     public TextMeshProUGUI chunkClimateText;
 
     [SerializeField] private GameObject keyInfo, debugPanel, chatBoxGO, cursorGO;
@@ -34,10 +34,12 @@ public class MiscVariablesDisplay : MonoBehaviour
         if (settings != null)
         {
             usernameDisplayText.text = settings.userName;
+            currentLodDistanceText.text = "Lod Distance: " + settings.lodDistance;
         }
         else
         {
             usernameDisplayText.text = playerHolder.GetInventoryName();
+            currentLodDistanceText.text = "Lod Distance: " + 32;
         }
     }
 
