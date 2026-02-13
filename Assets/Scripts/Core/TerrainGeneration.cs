@@ -12,64 +12,56 @@ namespace Core
         {
             byte[,,] blocks = new byte[CHUNK_SIZE, CHUNK_SIZE, CHUNK_SIZE];
 
-            byte grass = BlockDataBase.GrassBlock.id;
-            byte dirt = BlockDataBase.GetBlock(BlockDataBase.DirtBlock);
-            byte stone = BlockDataBase.StoneBlock.id;
-
-            //ChunkClimate climate = BiomeManager.GetChunkClimate(coord);
-            
-            for(int x = 0; x < CHUNK_SIZE; x++)
-            for(int z = 0; z < CHUNK_SIZE; z++)
+            for (int x = 0; x < CHUNK_SIZE; x++)
+            for (int y = 0; y < CHUNK_SIZE; y++)
+            for (int z = 0; z < CHUNK_SIZE; z++)
             {
-                int worldX = coord.x * CHUNK_SIZE + x;
-                int worldZ = coord.z * CHUNK_SIZE + z;
-
-                ChunkClimate climate = BiomeManager.GetClimateAt(worldX, worldZ);
-                // Multi-layer noise for realistic terrain
+                int wx = coord.x * CHUNK_SIZE + x;
+                int wy = coord.y * CHUNK_SIZE + y;
+                int wz = coord.z * CHUNK_SIZE + z;
                 
-                //Base noise values
-                float baseNoise = Mathf.Max(WorldNoise.GetHeight(worldX * 0.01f, worldZ * 0.01f), 0);
-                //Different biomes can have different height
-
-                float baseHeight = baseNoise * 64 + 25f;
-                
-                float detail = WorldNoise.GetHeight(worldX * 0.1f, worldZ * 0.1f) * 4f;        // Small bumps
-                int height = Mathf.FloorToInt(baseHeight + detail);
-                
-                //What top block to have
-                byte topBlock = BiomeManager.ChooseSurfaceBlock(climate, worldX, worldZ, height,coord);
-                
-                for (int y = 0; y < CHUNK_SIZE; y++)
-                {
-                    int worldY = coord.y * CHUNK_SIZE + y;
-
-                    if (worldY > height)
-                    {
-                        blocks[x, y, z] = 0; //Fills with air
-                    } 
-                    else if (worldY == height)
-                    {
-                        blocks[x, y, z] = topBlock;
-                        
-                    }
-                    else if(worldY > height - 3)
-                    {
-                        blocks[x, y, z] = dirt;
-                    }
-                    else
-                    {
-                        blocks[x, y, z] = stone;
-                    }
-                
-                    if (worldY == 0)
-                    {
-                        blocks[x, y, z] = stone;
-                    }
-                }
-
             }
 
             return blocks;
+        }
+
+
+        public static byte SampleBlock(int worldX, int worldY, int worldZ, int height,
+            byte surfaceBlock)
+        {
+            byte topBlock = surfaceBlock;
+            
+            if (worldY > height)
+            {
+                return 0; //Fills with air
+            } 
+            if (worldY == height)
+            {
+                return topBlock;
+                        
+            }
+            if(worldY > height - 3)
+            {
+                return BlockDataBase.DirtBlock.id;
+            }
+            if (worldY == 0)
+            {
+                return BlockDataBase.StoneBlock.id;
+            }
+            
+            return BlockDataBase.StoneBlock.id;
+        }
+
+        public static int SampleHeight(int worldX, int worldZ)
+        {
+            float baseNoise = Mathf.Max(
+                WorldNoise.GetHeight(worldX * 0.01f, worldZ * 0.01f), 0f);
+
+            float baseHeight = baseNoise * 64 + 25f;
+            float detail = WorldNoise.GetHeight(worldX * 0.1f, worldZ * 0.1f) * 4f;
+            int height = Mathf.FloorToInt(baseHeight + detail);
+
+            return height;
         }
         
 
@@ -112,6 +104,8 @@ namespace Core
         {
             return (WorldNoise.GetHeight(worldX * 0.03f, worldZ * 0.03f) + 1f) * 0.5f;
         }
+        
+        
         
     }
     

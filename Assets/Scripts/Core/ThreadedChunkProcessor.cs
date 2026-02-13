@@ -14,90 +14,27 @@ public static class ThreadedChunkProcessor
     {
         const int S = CHUNK_SIZE;
         Vector3Int coord = req.coord;
+        
+        byte[,,] center;
+        byte[,,] padded;
 
-        // ------------------------------------
-        // 1. PREPARE PADDED BLOCKS
-        // ------------------------------------
-        // padded expected size = (S+2)^3, center located at [1..S] on each axis
-        byte[,,] padded = null;
-
-        if (req.neighborSnapshots != null && req.neighborSnapshots.Count > 0)
+        //1 Builds block data
+        if (req.meshOnly)
         {
-            padded = BuildPaddedBlocks(req.coord, req.neighborSnapshots);
+            center = req.blocks;
+            padded = BuildPaddedFromCenter(center);
         }
-
-        if (padded == null)
+        else
         {
-            padded = new byte[S + 2, S + 2, S + 2];
-            byte[,,] gen = TerrainGeneration.GenerateChunkBlocks(coord);
-
-            for (int x = 0; x < S; x++)
-            for (int y = 0; y < S; y++)
-            for (int z = 0; z < S; z++)
-                padded[x + 1, y + 1, z + 1] = gen[x, y, z];
-            
-            Debug.Log($"ThreadedChunkProcessor: generated center for chunk {coord} (no padded provided).");
-        }
-
-        // ------------------------------------
-        // 2. MAKE CENTER ARRAY (RETURNED TO CHUNK)
-        // ------------------------------------
-        byte[,,] center = new byte[S, S, S];
-        for (int x = 0; x < S; x++)
-        for (int y = 0; y < S; y++)
-        for (int z = 0; z < S; z++)
-            center[x, y, z] = padded[x + 1, y + 1, z + 1];
-
-        // ------------------------------------
-        // 3. APPLY SAVED CHANGES (MODIFICATIONS)
-        // ------------------------------------
-        if (req.savedBlocks != null && req.savedBlocks.Count > 0)
-        {
-            foreach (var kv in req.savedBlocks)
-            {
-                int idx = kv.Key;
-                byte id = kv.Value;
-
-                // inverse of PosToIndex: x + S*(y + S*z)
-                int x = idx % S;
-                int y = (idx / S) % S;
-                int z = idx / (S * S);
-
-                // Bounds sanity check (defensive)
-                if (x >= 0 && x < S && y >= 0 && y < S && z >= 0 && z < S)
-                {
-                    center[x, y, z] = id;
-                    padded[x + 1, y + 1, z + 1] = id; // keep mesher consistent with saved changes
-                }
-                else
-                {
-                    // Shouldn't happen, but log in case of corrupted save data
-                    Debug.LogWarning(
-                        $"ThreadedChunkProcessor: saved change out of range for {coord} idx={idx} -> ({x},{y},{z})");
-                }
-            }
+            padded = GenerateTerrainPadded(coord, req.neighborBlocks);
+            center = ExtractCenter(padded);
         }
         
-        //3.5 Detect block entities
-        List<Vector3Int> blockEntities = null;
-        
-        for (int x = 0; x < S; x++)
-        for (int y = 0; y < S; y++)
-        for (int z = 0; z < S; z++)
-        {
-            byte id = center[x, y, z];
-            if(id == 0) continue;
-            
-            Block block = BlockRegistry.GetBlock(id);
-            if (block != null && block.HasBlockEntity)
-            {
-                blockEntities ??= new List<Vector3Int>();
-                blockEntities.Add(new Vector3Int(x,y,z));
-            }
-        }
+        //2 Detect block entities
+        List<Vector3Int> blockEntities = DetectBlockEntities(center);
 
         // ------------------------------------
-        // 4. THREAD-SAFE BLOCK QUERY
+        // 3. THREAD-SAFE BLOCK QUERY
         // ------------------------------------
         // Mesher queries local coords in [-1 .. S] inclusive, map to padded [0 .. S+1]
         Func<int, int, int, byte> getBlock = (lx, ly, lz) =>
@@ -116,7 +53,7 @@ public static class ThreadedChunkProcessor
         Func<int,int,int,BlockStateContainer> getState = (x, y, z) => null;
 
         // ------------------------------------
-        // 5. MESH GENERATION
+        // 4. MESH GENERATION
         // ------------------------------------
         MeshData meshData;
         try
@@ -130,65 +67,170 @@ public static class ThreadedChunkProcessor
         }
 
         // ------------------------------------
-        // 6. RETURN RESULT
+        // 5. RETURN RESULT
         // ------------------------------------
         return new ChunkGenResult(coord, center, meshData,blockEntities);
     }
 
-    private static byte[,,] BuildPaddedBlocks(
-        Vector3Int coord, Dictionary<Vector3Int, byte[,,]> neighbors)
+    private static byte[,,] BuildPaddedFromCenter(byte[,,] center)
     {
         int S = Chunk.CHUNK_SIZE;
-        int P = S + 2;
-
-        byte[,,] padded = new byte[P, P, P];
-
-        foreach (var kv in neighbors)
-        {
-            Vector3Int delta = kv.Key - coord;
-            byte[,,] src = kv.Value;
-
-            int baseX = (delta.x + 1) * S;
-            int baseY = (delta.y + 1) * S;
-            int baseZ = (delta.z + 1) * S;
-
-            for (int x = 0; x < S; x++)
-            for (int y = 0; y < S; y++)
-            for (int z = 0; z < S; z++)
-            {
-                int px = baseX + x - S + 1;
-                int py = baseY + y - S + 1;
-                int pz = baseZ + z - S + 1;
-
-                if ((uint)px < P && (uint)py < P && (uint)pz < P)
-                    padded[px, py, pz] = src[x, y, z];
-            }
-        }
         
-        bool centerEmpty = true;
-        for (int x = 1; x <= S && centerEmpty; x++)
-        for (int y = 1; y <= S && centerEmpty; y++)
-        for (int z = 1; z <= S; z++)
-        {
-            if (padded[x, y, z] != 0)
-            {
-                centerEmpty = false;
-                break;
-            }
-        }
+        byte[,,] padded = new byte[S + 2, S + 2, S + 2];
 
-        if (centerEmpty)
-        {
-            byte[,,] gen = TerrainGeneration.GenerateChunkBlocks(coord);
-            for (int x = 0; x < S; x++)
-            for (int y = 0; y < S; y++)
-            for (int z = 0; z < S; z++)
-                padded[x + 1, y + 1, z + 1] = gen[x, y, z];
-        }
-
+        for (int x = 0; x < S; x++)
+        for (int y = 0; y < S; y++)
+        for (int z = 0; z < S; z++)
+            padded[x + 1, y + 1, z + 1] = center[x, y, z];
 
         return padded;
     }
 
+    private static byte[,,] ExtractCenter(byte[,,] padded)
+    {
+        int S = Chunk.CHUNK_SIZE;
+        // ------------------------------------
+        // 2. MAKE CENTER ARRAY (RETURNED TO CHUNK)
+        // ------------------------------------
+        byte[,,] center = new byte[S, S, S];
+        for (int x = 0; x < S; x++)
+        for (int y = 0; y < S; y++)
+        for (int z = 0; z < S; z++)
+            center[x, y, z] = padded[x + 1, y + 1, z + 1];
+
+        return center;
+    }
+    
+    private static byte[,,] GenerateTerrainPadded(Vector3Int coord, Dictionary<Vector3Int, byte[,,]> neighbors)
+    {
+        int S = Chunk.CHUNK_SIZE;
+        
+        // ------------------------------------
+        // 1. PREPARE PADDED BLOCKS
+        // ------------------------------------
+        // padded expected size = (S+2)^3, center located at [1..S] on each axis
+        byte[,,] padded = new byte[S+2, S+2, S+2];
+
+        int S2 = S + 2;
+        
+        // column caches
+        int[,] heightCache = new int[S2, S2];
+        ChunkClimate[,] climateCache = new ChunkClimate[S2, S2];
+        byte[,] surfaceBlockCache = new byte[S2, S2];
+
+        // build column data ONCE
+        for (int x = -1; x <= S; x++)
+        for (int z = -1; z <= S; z++)
+        {
+            int wx = coord.x * S + x;
+            int wz = coord.z * S + z;
+
+            int height = TerrainGeneration.SampleHeight(wx, wz);
+            ChunkClimate climate = BiomeManager.GetClimateAt(wx, wz);
+
+            heightCache[x + 1, z + 1] =
+                TerrainGeneration.SampleHeight(wx, wz);
+
+            climateCache[x + 1, z + 1] =
+                BiomeManager.GetClimateAt(wx, wz);
+
+            surfaceBlockCache[x + 1, z + 1] =
+                BiomeManager.ChooseSurfaceBlock(
+                    climate, wx, wz, height, coord);
+        }
+
+        // now fill padded blocks
+        for (int x = -1; x <= S; x++)
+        for (int y = -1; y <= S; y++)
+        for (int z = -1; z <= S; z++)
+        {
+            int wx = coord.x * S + x;
+            int wy = coord.y * S + y;
+            int wz = coord.z * S + z;
+
+            int height = heightCache[x + 1, z + 1];
+            byte surface = surfaceBlockCache[x + 1, z + 1];
+
+            padded[x + 1, y + 1, z + 1] =
+                TerrainGeneration.SampleBlock(
+                    wx, wy, wz, height, surface);
+        }
+        
+        //2 Override borders ONLY if neighbor exists
+        // ----------------------------
+        if (neighbors != null)
+        {
+            foreach (var kv in neighbors)
+            {
+                Vector3Int delta = kv.Key - coord;
+                byte[,,] n = kv.Value;
+
+                if (delta == Vector3Int.right)
+                    CopyFace(n, padded, srcX: 0, dstX: S + 1);
+                else if (delta == Vector3Int.left)
+                    CopyFace(n, padded, srcX: S - 1, dstX: 0);
+                else if (delta == Vector3Int.forward)
+                    CopyFace(n, padded, srcZ: 0, dstZ: S + 1);
+                else if (delta == Vector3Int.back)
+                    CopyFace(n, padded, srcZ: S - 1, dstZ: 0);
+                else if (delta == Vector3Int.up)
+                    CopyFace(n, padded, srcY: 0, dstY: S + 1);
+                else if (delta == Vector3Int.down)
+                    CopyFace(n, padded, srcY: S - 1, dstY: 0);
+            }
+        }
+
+        return padded;
+    }
+    
+    private static void CopyFace(
+        byte[,,] src,
+        byte[,,] dst,
+        int srcX = -1, int dstX = -1,
+        int srcY = -1, int dstY = -1,
+        int srcZ = -1, int dstZ = -1)
+    {
+        int S = Chunk.CHUNK_SIZE;
+
+        for (int x = 0; x < S; x++)
+        for (int y = 0; y < S; y++)
+        for (int z = 0; z < S; z++)
+        {
+            int sx = srcX >= 0 ? srcX : x;
+            int sy = srcY >= 0 ? srcY : y;
+            int sz = srcZ >= 0 ? srcZ : z;
+
+            int dx = dstX >= 0 ? dstX : x;
+            int dy = dstY >= 0 ? dstY : y;
+            int dz = dstZ >= 0 ? dstZ : z;
+
+            dst[dx, dy, dz] = src[sx, sy, sz];
+        }
+    }
+
+    
+    private static List<Vector3Int> DetectBlockEntities(byte[,,] center)
+    {
+        int S = Chunk.CHUNK_SIZE;
+        
+        List<Vector3Int> result = null;
+
+        for (int x = 0; x < S; x++)
+        for (int y = 0; y < S; y++)
+        for (int z = 0; z < S; z++)
+        {
+            byte id = center[x, y, z];
+            if (id == 0) continue;
+
+            Block block = BlockRegistry.GetBlock(id);
+            if (block != null && block.HasBlockEntity)
+            {
+                result ??= new List<Vector3Int>();
+                result.Add(new Vector3Int(x, y, z));
+            }
+        }
+
+        return result;
+    }
     
 }

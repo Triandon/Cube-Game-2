@@ -19,41 +19,41 @@ namespace Core
             return File.Exists(GetChunkPath(coord));
         }
 
-        public static void SaveChunk(Vector3Int coord, Dictionary<int,byte> changedBlocks,
-            Dictionary<int, BlockStateContainer> changedStates)
+        public static void SaveChunk(Vector3Int coord, Chunk chunk)
         {
             Directory.CreateDirectory(Application.persistentDataPath + "/chunks/");
-            ChunkSaveData data = new ChunkSaveData();
-
-            HashSet<int> indices = new HashSet<int>(changedBlocks.Keys);
-            indices.UnionWith(changedStates.Keys);
-            
-            foreach (int index in indices)
+            ChunkSaveDataNEW data = new ChunkSaveDataNEW()
             {
-                byte id = changedBlocks.TryGetValue(index, out var savedId)
-                    ? savedId
-                    : default;
+                baseBlocks = EncodeRLE(chunk.blocks)
+            };
 
-                List<SerializableBlockState> serializableStates = null;
+            int S = Chunk.CHUNK_SIZE;
 
-                if (changedStates.TryGetValue(index, out var stateContainer))
+            for (int x = 0; x < S; x++)
+            for (int y = 0; y < S; y++)
+            for (int z = 0; z < S; z++)
+            {
+                BlockStateContainer state = chunk.states[x, y, z];
+                if (state == null || state.IsStateless())
+                    continue;
+
+                int index = ChunkManager.PosToIndex(x, y, z);
+                var list = new List<SerializableBlockState>();
+
+                foreach (var kv in state.GetAllStates)
                 {
-                    if (stateContainer != null && !stateContainer.IsStateless())
+                    list.Add(new SerializableBlockState
                     {
-                        serializableStates  = new List<SerializableBlockState>();
-                        foreach (var kv in stateContainer.GetAllStates)
-                        {
-                            serializableStates .Add(new SerializableBlockState
-                            {
-                                name = kv.Key,
-                                value = kv.Value.value
-                            });
-                        }
-                    }
+                        name = kv.Key,
+                        value = kv.Value.value
+                    });
                 }
-                
-                data.changedBlocks.Add(new SerializableBlockChange 
-                    { index = index, id = id, states = serializableStates });
+
+                data.blockStates.Add(new SerializableBlockStateEntry
+                {
+                    index = index,
+                    states = list
+                });
             }
 
             string json = JsonUtility.ToJson(data);
@@ -61,12 +61,41 @@ namespace Core
             Debug.Log("World saved successfully!");
         }
 
-        public static ChunkSaveData LoadChunk(Vector3Int coord)
+        public static void LoadChunk(Vector3Int coord, Chunk chunk)
         {
-            string json = File.ReadAllText(GetChunkPath(coord));
-            ChunkSaveData data = JsonUtility.FromJson<ChunkSaveData>(json);
+            string path = GetChunkPath(coord);
+            if (!File.Exists(path)) return;
+            
+            string json = File.ReadAllText(path);
+            
+            ChunkSaveDataNEW data = JsonUtility.FromJson<ChunkSaveDataNEW>(json);
 
-            return data;
+            if (data.baseBlocks != null && data.baseBlocks.Count > 0)
+            {
+                int S = Chunk.CHUNK_SIZE;
+                
+                chunk.blocks = DecodeRLE(data.baseBlocks);
+                chunk.states = new BlockStateContainer[S, S, S];
+
+                if (data.baseBlocks != null)
+                {
+                    foreach (var entry in data.blockStates)
+                    {
+                        Vector3Int pos = ChunkManager.IndexToPos(entry.index);
+                        var container = new BlockStateContainer();
+
+                        foreach (var s in entry.states)
+                            container.SetState(s.name, s.value);
+
+                        chunk.states[pos.x, pos.y, pos.z] = container;
+                    }
+                }
+
+                chunk.isDirty = false;
+                return;
+            }
+
+            SaveChunk(coord, chunk);
         }
 
         public static string GetInventoryPath(string ownerName)
@@ -122,5 +151,59 @@ namespace Core
             inventory.InventoryChanged();
             Debug.Log($"Inventory for {ownerName} loaded!");
         }
+        
+        public static List<RLEBlockRun> EncodeRLE(byte[,,] blocks)
+        {
+            int S = Chunk.CHUNK_SIZE;
+            var runs = new List<RLEBlockRun>();
+
+            byte current = blocks[0,0,0];
+            int count = 0;
+
+            for (int y = 0; y < S; y++)
+            for (int z = 0; z < S; z++)
+            for (int x = 0; x < S; x++)
+            {
+                byte id = blocks[x,y,z];
+
+                if (id == current)
+                {
+                    count++;
+                }
+                else
+                {
+                    runs.Add(new RLEBlockRun { id = current, count = count });
+                    current = id;
+                    count = 1;
+                }
+            }
+
+            runs.Add(new RLEBlockRun { id = current, count = count });
+            return runs;
+        }
+        
+        public static byte[,,] DecodeRLE(List<RLEBlockRun> runs)
+        {
+            int S = Chunk.CHUNK_SIZE;
+            var blocks = new byte[S,S,S];
+            int index = 0;
+
+            foreach (var run in runs)
+            {
+                for (int i = 0; i < run.count; i++)
+                {
+                    int x = index % S;
+                    int z = (index / S) % S;
+                    int y = index / (S * S);
+
+                    blocks[x,y,z] = run.id;
+                    index++;
+                }
+            }
+
+            return blocks;
+        }
+
+
     }
 }

@@ -127,12 +127,9 @@ namespace Core
         {
             if (threadedWorker == null) return;
 
-            int applied = 0;
-            while (applied < chunksPerFrame &&
-                   threadedWorker.TryDequeueResult(out var res))
+            while (threadedWorker.TryDequeueResult(out var result))
             {
-                ApplyChunkResult(res);
-                applied++;
+                ApplyChunkResult(result);
             }
         }
 
@@ -148,18 +145,10 @@ namespace Core
                 return;
             }
 
+            bool hasSavedBefore = WasChunkLoadedFromDisk(res.coord);
+
             // Apply block data
             chunk.blocks = res.blocks ?? new byte[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
-
-            if (chunk.changedStates.Count > 0)
-            {
-                foreach (var kv in chunk.changedStates)
-                {
-                    Vector3Int localPos = IndexToPos(kv.Key);
-                    BlockStateContainer state = kv.Value;
-                    chunk.states[localPos.x, localPos.y, localPos.z] = state;
-                }
-            }
 
             //Rebuilds block entities  AFTER chunk is ready, the entity is a GO
             if (res.blockEntityLocals != null && res.blockEntityLocals.Count > 0)
@@ -187,21 +176,25 @@ namespace Core
                 }
             }
 
-            // If chunk has stored changes, it remains dirty
-            chunk.isDirty = chunk.changedBlocks.Count > 0 || chunk.changedStates.Count > 0;
-
             // Apply the worker mesh data to the chunk's ChunkRendering (main thread only)
             var chunkRender = chunk.renderer;
             if (chunkRender != null && res.meshData != null)
             {
                 chunk.meshData = res.meshData;
                 chunkRender.ApplyMeshData(res.meshData, NeedsColliders(chunk));
-                
+                meshQue.Add(chunk);
                 EnqueueNeighborRebuilds(chunk.coord);
             }
             else
             {
                 meshQue.Add(chunk);
+            }
+            
+            // Save first gen chunk
+            if (!hasSavedBefore)
+            {
+                WorldSaveSystem.SaveChunk(chunk.coord, chunk);
+                chunk.isDirty = false;
             }
             
             // Remove from pending requests set so future generates are allowed
@@ -306,8 +299,6 @@ namespace Core
 
                 // Reset old data
                 chunk.blocks = new byte[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
-                chunk.changedBlocks.Clear();
-                chunk.changedStates.Clear();
                 chunk.isDirty = false;
                 
                 go.SetActive(false);
@@ -333,51 +324,6 @@ namespace Core
             chunk.renderer = rendering;
             rendering.SetChunkData(chunk);
             
-            //chunk.transform.position = worldPos;
-            //if (go.transform.position != worldPos)
-            //{
-                //transformQueue.Enqueue((chunk,worldPos));
-            //}
-            
-            chunks.Add(coord, chunk);
-            
-            // Load saved changes on main thread
-            ChunkSaveData saveData = null;
-            Dictionary<int, byte> savedBlocks = null;
-            Dictionary<int, BlockStateContainer> savedStates = null;
-            if (WorldSaveSystem.ChunkSaveExist(coord))
-            {
-                saveData = WorldSaveSystem.LoadChunk(coord);
-
-                savedBlocks = new Dictionary<int, byte>();
-                savedStates = new Dictionary<int, BlockStateContainer>();
-                // do NOT apply saved changes to chunk.blocks here; worker will merge them
-                // but keep changedBlocks to reflect that the chunk has saved modifications
-                foreach (var kv in saveData.changedBlocks)
-                {
-                    savedBlocks[kv.index] = kv.id;
-
-                    if (kv.states != null && kv.states.Count > 0)
-                    {
-                        BlockStateContainer container = new BlockStateContainer();
-                        foreach (var s in kv.states)
-                        {
-                            container.SetState(s.name,s.value);
-                        }
-
-                        savedStates[kv.index] = container;
-                    }
-                }
-
-                chunk.changedBlocks = new Dictionary<int, byte>(savedBlocks);
-                chunk.changedStates = new Dictionary<int, BlockStateContainer>(savedStates);
-                chunk.isDirty = (chunk.changedBlocks.Count > 0) ||
-                                (chunk.changedStates.Count > 0);
-            }
-
-            // Build padded blocks (center maybe empty — worker will generate center blocks or use padded center)
-            var snapshots = CaptureNeighborSnapshots(coord);
-
             int lodScale = chunk.GetLodScale();
 
             ChunkMeshGeneratorThreaded.NeighborLODInfo neighborLODInfo =
@@ -390,19 +336,32 @@ namespace Core
                     posZ = GetNeighborLod(coord + Vector3Int.forward, lodScale),
                     negZ = GetNeighborLod(coord + Vector3Int.back, lodScale),
                 };
-            
-            // Create request with padded array and saved changes
-            var req = new ChunkGenRequest(coord, savedBlocks, savedStates, snapshots, lodScale, neighborLODInfo);
 
+            ChunkGenRequest req;
+            var neighbors = CaptureNeighborSnapshots(coord);
+            
+            // Load saved changes on main thread
+            if (WorldSaveSystem.ChunkSaveExist(coord)) //No safe checks if the file exist not if the terrain is done generating
+            //Todo make so it also checks if the terrian is ready builded
+            {
+                WorldSaveSystem.LoadChunk(coord, chunk);
+                req = new ChunkGenRequest(coord, lodScale, neighborLODInfo, 
+                    chunk.blocks, true, neighbors);
+                
+                //Debug.Log("NOT Building terrain, with mesh");
+            }
+            else
+            {
+                req = new ChunkGenRequest(coord, lodScale, neighborLODInfo, 
+                    null, false, neighbors);
+                
+                //Debug.Log("Building terrain, with mesh");
+            }
+            
             // Mark request pending and enqueue
+            chunks.Add(coord, chunk);
             pendingRequests.Add(coord);
             threadedWorker.EnqueueRequest(req);
-
-            if (threadedWorker == null)
-            {
-                chunk.GenerateHeightMapData();
-                meshQue.Add(chunk);
-            }
 
             return chunk;
         }
@@ -411,14 +370,15 @@ namespace Core
         {
             if (chunk.isDirty)
             {
-                WorldSaveSystem.SaveChunk(coord, chunk.changedBlocks, chunk.changedStates);
+                WorldSaveSystem.SaveChunk(coord, chunk);
                 chunk.isDirty = false;
             }
 
+            int C = Chunk.CHUNK_SIZE;
+            
             // Reset chunk state before returning to pool
-            chunk.blocks = new byte[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
-            chunk.changedBlocks.Clear();
-            chunk.changedStates.Clear();
+            chunk.blocks = new byte[C, C, C];
+            chunk.states = new BlockStateContainer[C, C, C];
             chunk.chunkNumber = -1;
             
             //Removes old BE
@@ -468,7 +428,7 @@ namespace Core
                     if (chunk.isDirty)
                     {
                         // Save changes before removing
-                        WorldSaveSystem.SaveChunk(coord, chunk.changedBlocks, chunk.changedStates);
+                        WorldSaveSystem.SaveChunk(coord, chunk);
                         Destroy(chunk.renderer.gameObject);
                     }
                     else
@@ -477,8 +437,7 @@ namespace Core
                     }
 
                     chunk.blocks = new byte[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
-                    chunk.changedBlocks.Clear();
-                    chunk.changedStates.Clear();
+                    chunk.states = new BlockStateContainer[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
                     chunk.chunkNumber = -1;
                     
                     //Removes old BE
@@ -669,29 +628,15 @@ namespace Core
             if (chunk == null) return null;
 
             Vector3Int local = chunk.WorldToLocal(worldPos);
-            
-            // Bounds check
+
             if (local.x < 0 || local.x >= Chunk.CHUNK_SIZE ||
                 local.y < 0 || local.y >= Chunk.CHUNK_SIZE ||
                 local.z < 0 || local.z >= Chunk.CHUNK_SIZE)
-            {
-                // Block is outside this chunk, skip
                 return null;
-            }
-            
-            // First: check explicit per-block states array
-            BlockStateContainer state = chunk.states[local.x, local.y, local.z];
-            if (state != null)
-                return state;
-            
-            // Second: check changedStates dictionary (older saves / safety)
-            int index = PosToIndex(local.x, local.y, local.z);
-            if (chunk.changedStates.TryGetValue(index, out var changedState))
-                return changedState;
 
-            // No state for this block
-            return null;
+            return chunk.states[local.x, local.y, local.z];
         }
+        
 
         private void UpdateChunkCollidersForPlayerMove()
         {
@@ -747,6 +692,8 @@ namespace Core
 
         private void UpdateFPS()
         {
+            int mult = 1;
+            
             if (fpsCounter == null) return;
             fps = fpsCounter.CurrentFPS;
 
@@ -754,21 +701,21 @@ namespace Core
 
             // Dynamic scaling (with clamping)
             if (fps > 110)
-                chunksPerFrame = 14;
+                chunksPerFrame = 14 * mult;
             else if (fps > 80)
-                chunksPerFrame = 12;
+                chunksPerFrame = 12 * mult;
             else if (fps > 60)
-                chunksPerFrame = 9;
+                chunksPerFrame = 9 * mult;
             else if (fps > 40)
-                chunksPerFrame = 7;
+                chunksPerFrame = 7 * mult;
             else if (fps > 25)
-                chunksPerFrame = 4;
+                chunksPerFrame = 4 * mult;
             else if (fps > 15)
-                chunksPerFrame = 2;
+                chunksPerFrame = 2 * mult;
             else
-                chunksPerFrame = 1;
+                chunksPerFrame = 1 * mult;
 
-            if (meshQue.Count <= 0 && generationQue.Count <= 0)
+            if (meshQue.Count <= 0 && generationQue.Count <= 0 && transformQueue.Count <= 0)
             {
                 chunksPerFrame = 0;
             }
@@ -781,7 +728,7 @@ namespace Core
                 Chunk chunk = kvp.Value;
                 if (chunk.isDirty)
                 {
-                    WorldSaveSystem.SaveChunk(chunk.coord, chunk.changedBlocks, chunk.changedStates);
+                    WorldSaveSystem.SaveChunk(chunk.coord, chunk);
                     chunk.isDirty = false;
                 }
             }
@@ -1044,7 +991,10 @@ namespace Core
             };
         }
 
-
+        private bool WasChunkLoadedFromDisk(Vector3Int coord)
+        {
+            return WorldSaveSystem.ChunkSaveExist(coord);
+        }
         
     }
 }

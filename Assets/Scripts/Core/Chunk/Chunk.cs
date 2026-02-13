@@ -19,11 +19,6 @@ namespace Core
         public bool isColliderDirty = false;
         public int chunkNumber;
         
-        public Dictionary<int, byte> changedBlocks = new Dictionary<int, byte>();
-
-        public Dictionary<int, BlockStateContainer> changedStates
-            = new Dictionary<int, BlockStateContainer>();
-        
         public ChunkManager chunkManager;
         public ChunkRendering renderer;
         public MeshData meshData;
@@ -140,33 +135,15 @@ namespace Core
             int y = localPos.y;
             int z = localPos.z;
 
-            int index = PosToIndex(x, y, z);
-
-            // Original block from worldgen
-            byte original = GetGeneratedBlockAtLocal(localPos.x,localPos.y,localPos.z);
-
-            if (id != original)
-            {
-                changedBlocks[index] = id;
-            }
-            else
-            {
-                // If player changed it back to worldgen value, remove from save
-                changedBlocks.Remove(index);
-            }
-
             blocks[x, y, z] = id;
-            
 
             if (state != null && !state.IsStateless())
             {
                 states[x, y, z] = state;
-                changedStates[index] = state;
             }
             else
             {
                 states[x, y, z] = null;
-                changedStates.Remove(index);
             }
 
             isDirty = true;
@@ -200,80 +177,11 @@ namespace Core
 
             return false;
         }
-
-        public void GenerateHeightMapData()
-        {
-            blocks = new byte[CHUNK_SIZE, CHUNK_SIZE, CHUNK_SIZE];
         
-            for(int x = 0; x < CHUNK_SIZE; x++)
-            for(int z = 0; z < CHUNK_SIZE; z++)
-            {
-                int worldX = coord.x * CHUNK_SIZE + x;
-                int worldZ = coord.z * CHUNK_SIZE + z;
-            
-                // Multi-layer noise for realistic terrain
-                float baseHeight = WorldNoise.GetHeight(worldX * 0.01f, worldZ * 0.01f) * 128; // Big hills, last nuber determs the height
-                baseHeight = Mathf.Max(baseHeight, 0);
-                baseHeight += 25f;
-            
-                float detail = WorldNoise.GetHeight(worldX * 0.1f, worldZ * 0.1f) * 4f;        // Small bumps
-                int height = Mathf.FloorToInt(baseHeight + detail);
-
-                for (int y = 0; y < CHUNK_SIZE; y++)
-                {
-                    int worldY = coord.y * CHUNK_SIZE + y;
-
-                    if (worldY > height)
-                    {
-                        blocks[x, y, z] = 0; //Fills with air
-                    } 
-                    else if (worldY == height)
-                    {
-                        blocks[x, y, z] = BlockRegistry.GetBlock("Grass_Block").id;
-                    }
-                    else if(worldY > height - 3)
-                    {
-                        blocks[x, y, z] = BlockRegistry.GetBlock("Dirt_Block").id;
-                    }
-                    else
-                    {
-                        blocks[x, y, z] = BlockRegistry.GetBlock("Stone_Block").id;
-                    }
-                
-                    if (worldY == 0)
-                    {
-                        blocks[x, y, z] = BlockRegistry.GetBlock("Stone_Block").id;
-                    }
-                }
-
-            }
-        
-        }
 
         public static int PosToIndex(int x, int y, int z)
         {
             return x + CHUNK_SIZE * (y + CHUNK_SIZE * z);
-        }
-
-        public byte GetGeneratedBlockAtLocal(int x, int y, int z)
-        {
-            // Regenerate what the world generator would have produced
-            int worldX = coord.x * CHUNK_SIZE + x;
-            int worldY = coord.y * CHUNK_SIZE + y;
-            int worldZ = coord.z * CHUNK_SIZE + z;
-        
-            float baseHeight = WorldNoise.GetHeight(worldX * 0.01f, worldZ * 0.01f) * 64;
-            baseHeight = Mathf.Max(baseHeight, 0);
-            baseHeight += 25f;
-
-            float detail = WorldNoise.GetHeight(worldX * 0.1f, worldZ * 0.1f) * 4f;
-            int height = Mathf.FloorToInt(baseHeight + detail);
-
-            if (worldY > height) return 0;
-            if (worldY == height) return BlockRegistry.GetBlock("Grass_Block").id;
-            if (worldY > height - 3) return BlockRegistry.GetBlock("Dirt_Block").id;
-        
-            return BlockRegistry.GetBlock("Stone_Block").id;
         }
         
         public enum ChunkLOD : byte
