@@ -74,7 +74,7 @@ namespace Core
             {
                 int S = Chunk.CHUNK_SIZE;
                 
-                chunk.blocks = DecodeRLE(data.baseBlocks);
+                chunk.blocks = DecodeRLE(data.baseBlocks, coord);
                 chunk.states = new BlockStateContainer[S, S, S];
 
                 if (data.baseBlocks != null)
@@ -182,16 +182,34 @@ namespace Core
             return runs;
         }
         
-        public static byte[,,] DecodeRLE(List<RLEBlockRun> runs)
+        public static byte[,,] DecodeRLE(List<RLEBlockRun> runs, Vector3Int coord)
         {
             int S = Chunk.CHUNK_SIZE;
             var blocks = new byte[S,S,S];
+            int max = S * S * S;
             int index = 0;
+
+            string path = GetChunkPath(coord);
 
             foreach (var run in runs)
             {
+                if (run.count <= 0)
+                {
+                    Debug.LogError(
+                        $"Invalid RLE run count in chunk {coord} | File: {path}");
+                    continue;
+                }
+                
                 for (int i = 0; i < run.count; i++)
                 {
+                    if (index >= max)
+                    {
+                        Debug.LogError(
+                            $"RLE overflow in chunk {coord} | File: {path}\n" +
+                            $"index={index}, max={max}, runCount={run.count}");
+                        return blocks;
+                    }
+                    
                     int x = index % S;
                     int z = (index / S) % S;
                     int y = index / (S * S);
@@ -200,7 +218,14 @@ namespace Core
                     index++;
                 }
             }
-
+            
+            if (index != max)
+            {
+                Debug.LogWarning(
+                    $"Decoded {index} blocks but expected {max} | Chunk {coord} | File: {path}"
+                );
+            }
+            
             return blocks;
         }
 
