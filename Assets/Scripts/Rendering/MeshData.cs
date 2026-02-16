@@ -69,10 +69,6 @@ public static class ChunkMeshGeneratorThreaded
             dir == Vector3Int.down    ? neighbors.negY :
             dir == Vector3Int.forward ? neighbors.posZ :
             neighbors.negZ;
-
-        bool needsSkirt = neighborScale > lodScale;
-        int skirtDepth = lodScale;
-
         
         int uMax = CHUNK_SIZE;
         int vMax = CHUNK_SIZE;
@@ -509,12 +505,6 @@ public class ChunkMeshGenerator
             renderingMesh = renderMesh,
             colliderMesh = colliderMesh
         };
-    }
-    
-    public static ChunkRendering.ChunkMeshData ThreadedMeshDataToChunkMeshData(MeshData md)
-    {
-        var wrapper = new ChunkMeshGenerator();
-        return wrapper.ConvertToChunkMeshData(md);
     }
 }
 
