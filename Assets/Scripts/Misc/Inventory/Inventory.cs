@@ -20,15 +20,24 @@ public class Inventory
         }
     }
 
-    public bool AddItem(int itemId, int amount, string displayName)
+    public bool AddItem(int itemId, int amount, string displayName, CompositionLogic composition)
     {
-        //Fllis existing stacks
+        //Fills existing stacks
         for (int i = 0; i < slots.Length && amount > 0; i++)
         {
             if (slots[i].itemId == itemId)
             {
+                int before = slots[i].count;
+                
                 amount = slots[i].AddItemToStack(amount);
                 slots[i].displayName = displayName;
+                
+                int added = slots[i].count - before;
+
+                if (added > 0)
+                {
+                    slots[i].MergeComposition(composition, added);
+                }
             }
         }
         
@@ -37,9 +46,16 @@ public class Inventory
         {
             if (slots[i].IsEmpty)
             {
-                slots[i].itemId = itemId;
+                slots[i] = new ItemStack(itemId, 0, displayName, null);
+                int before = slots[i].count;
                 amount = slots[i].AddItemToStack(amount);
                 slots[i].displayName = displayName;
+                int added = slots[i].count - before;
+
+                if (added > 0)
+                {
+                    slots[i].composition = composition;
+                }
             }
         }
 

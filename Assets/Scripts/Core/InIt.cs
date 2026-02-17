@@ -17,6 +17,7 @@ namespace Core
                 tileSize: 16
             );
             ItemDatabase.Init();
+            MaterialDatabase.Init();
         }
 
         // Start is called once before the first execution of Update after the MonoBehaviour is created

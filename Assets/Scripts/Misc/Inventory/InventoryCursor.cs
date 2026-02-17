@@ -26,7 +26,8 @@ public class InventoryCursor : MonoBehaviour
             CursorStack = new ItemStack(
                 slotStack.itemId,
                 slotStack.count,
-                slotStack.displayName
+                slotStack.displayName,
+                slotStack.composition?.Clone()
             );
 
             inventory.slots[slotIndex] = ItemStack.Empty;
@@ -49,7 +50,8 @@ public class InventoryCursor : MonoBehaviour
 
             int half = Mathf.CeilToInt(stack.count / 2f);
 
-            CursorStack = new ItemStack(stack.itemId, half, stack.displayName);
+            CursorStack = new ItemStack(stack.itemId, half, stack.displayName,
+                stack.composition?.Clone());
             stack.count -= half;
 
             if (stack.count <= 0)
@@ -72,12 +74,13 @@ public class InventoryCursor : MonoBehaviour
         if (stack.IsEmpty)
         {
             inventory.slots[targetIndex] = new ItemStack(
-                CursorStack.itemId, 1, CursorStack.displayName);
+                CursorStack.itemId, 1, CursorStack.displayName, CursorStack.composition?.Clone());
             CursorStack.count--;
         }
         //Same but fill with 1 to existing stack
         else if (stack.itemId == CursorStack.itemId && stack.count < stack.MaxStack)
         {
+            stack.MergeComposition(CursorStack.composition, 1);
             stack.count++;
             CursorStack.count--;
         }
@@ -105,12 +108,18 @@ public class InventoryCursor : MonoBehaviour
         // Same item → merge
         if (target.itemId == CursorStack.itemId)
         {
-            int before = CursorStack.count;
-            
+            int before = target.count;
             int remaining = target.AddItemToStack(CursorStack.count);
+            int added = target.count - before;
+
+            if (added > 0)
+            {
+                target.MergeComposition(CursorStack.composition, added);
+            }
+            
             CursorStack.count = remaining;
 
-            if (CursorStack.count == before)
+            if (added == 0)
             {
                 ItemStack temp = target.Clone();
                 inventory.slots[targetIndex] = CursorStack.Clone();
@@ -146,7 +155,14 @@ public class InventoryCursor : MonoBehaviour
             ItemStack target = inventory.slots[i];
             if (target.itemId == source.itemId && target.count < target.MaxStack)
             {
+                int before = target.count;
                 source.count = target.AddItemToStack(source.count);
+                int added = target.count - before;
+
+                if (added > 0)
+                {
+                    target.MergeComposition(source.composition, added);
+                }
             }
         }
 
@@ -157,7 +173,8 @@ public class InventoryCursor : MonoBehaviour
 
             if (inventory.slots[i].IsEmpty)
             {
-                inventory.slots[i] = new ItemStack(source.itemId, 0, source.displayName);
+                inventory.slots[i] = new ItemStack(source.itemId, 0, source.displayName,
+                    source.composition?.Clone());
                 source.count = inventory.slots[i].AddItemToStack(source.count);
             }
         }

@@ -108,7 +108,7 @@ public static class ChatCommands
 		    return;
 	    }
 
-	    bool success = target.Inventory.AddItem(item.id, amount, item.itemName);
+	    bool success = target.Inventory.AddItem(item.id, amount, item.itemName, null);
 
 	    if (!success)
 	    {

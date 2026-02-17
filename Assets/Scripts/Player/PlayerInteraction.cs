@@ -65,7 +65,20 @@ public class PlayerInteraction : MonoBehaviour
 
                 if (item != null)
                 {
-                    inventory.AddItem(item.id, 1,item.itemName);
+                    CompositionLogic composition = new CompositionLogic();
+
+                    if (block.id == BlockDataBase.SnowBlock.id)
+                    {
+                        composition = CompositionLogic.Add(
+                            (MaterialDatabase.GraniteMaterial.materialId,
+                                Random.Range(0.1f, 0.8f)));
+                    }
+                    else
+                    {
+                        composition = CompositionGenerator.GenerateRandom();
+                    }
+                    
+                    inventory.AddItem(item.id, 1,item.itemName, composition);
                 }
             }
             
@@ -178,7 +191,7 @@ public class PlayerInteraction : MonoBehaviour
         
         if(stack == null || stack.IsEmpty) return;
 
-        bool success = inventory.AddItem(stack.itemId, stack.count, stack.displayName);
+        bool success = inventory.AddItem(stack.itemId, stack.count, stack.displayName, null);
         if (success)
         {
             Destroy(itemEntity.gameObject);

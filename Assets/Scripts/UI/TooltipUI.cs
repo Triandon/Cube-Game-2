@@ -14,7 +14,7 @@ public class TooltipUI : MonoBehaviour
 
     public void Show(ItemStack stack)
     {
-        stackDisplayName.text = stack.displayName;
+        stackDisplayName.text = stack.displayName + "\n" + stack.composition;
         gameObject.SetActive(true);
         FollowMouse();
     }

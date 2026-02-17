@@ -8,6 +8,7 @@ namespace Core.Item
         public int itemId;
         public int count;
         public string displayName;
+        public CompositionLogic composition;
 
         public Item Item => ItemRegistry.GetItem(itemId);
 
@@ -15,11 +16,12 @@ namespace Core.Item
 
         public static ItemStack Empty => new ItemStack(0, 0, "");
 
-        public ItemStack(int itemId, int count, string displayName)
+        public ItemStack(int itemId, int count, string displayName, CompositionLogic composition = null)
         {
             this.itemId = itemId;
             this.count = count;
             this.displayName = displayName;
+            this.composition = composition;
         }
 
         public int MaxStack => Item != null ? Item.maxStackSize : 1;
@@ -50,7 +52,22 @@ namespace Core.Item
 
         public ItemStack Clone()
         {
-            return new ItemStack(itemId, count, displayName);
+            return new ItemStack(itemId, count, displayName, composition?.Clone());
+        }
+
+        public void MergeComposition(CompositionLogic other, int otherAmount)
+        {
+            if (other == null)
+                return;
+
+            if (composition == null)
+            {
+                composition = other;
+                return;
+            }
+
+            composition = CompositionLogic.Combine(
+                composition, count, other, otherAmount);
         }
     }
 }
