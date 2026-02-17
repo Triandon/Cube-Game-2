@@ -25,7 +25,8 @@ public class Inventory
         //Fills existing stacks
         for (int i = 0; i < slots.Length && amount > 0; i++)
         {
-            if (slots[i].itemId == itemId)
+            if (slots[i].itemId == itemId && slots[i].CanMergeWith(
+                    new ItemStack(itemId, amount, displayName, composition)))
             {
                 int before = slots[i].count;
                 

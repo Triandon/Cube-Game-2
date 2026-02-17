@@ -3,7 +3,7 @@ using UnityEngine;
 public enum MaterialCategory
 {
     Air,
-    Earth,
+    Soil,
     Rock,
     Metal,
     Organic,

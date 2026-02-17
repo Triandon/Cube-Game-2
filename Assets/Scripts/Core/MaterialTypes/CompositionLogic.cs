@@ -121,6 +121,29 @@ public class CompositionLogic
         copy.Normalize();
         return copy;
     }
+
+    public bool IsWithinTolerance(CompositionLogic other, float tolerance)
+    {
+        if (other == null) return false;
+
+        var dictA = this.contents;
+        var dictB = other.contents;
+        
+        // Check union of material ids
+        var allKeys = new HashSet<int>(dictA.Keys);
+        allKeys.UnionWith(dictB.Keys);
+
+        foreach (var key in allKeys)
+        {
+            float aVal = dictA.ContainsKey(key) ? dictA[key] : 0f;
+            float bVal = dictB.ContainsKey(key) ? dictB[key] : 0f;
+
+            if (Mathf.Abs(aVal - bVal) > tolerance)
+                return false;
+        }
+
+        return true;
+    }
 }
 
 public static class CompositionGenerator
@@ -131,8 +154,9 @@ public static class CompositionGenerator
         
         //Random
         // Add random raw values
-        comp.AddLogic(MaterialDatabase.GrassMaterial.materialId, Random.Range(0f, 1f));
-        comp.AddLogic(2, Random.Range(0f, 1f));
+        comp.AddLogic(MaterialDatabase.Dirt.materialId, Random.Range(0f, 1f));
+        comp.AddLogic(MaterialDatabase.Clay.materialId, Random.Range(0f, 1f));
+        comp.AddLogic(MaterialDatabase.SandGranite.materialId, Random.Range(0f, 1f));
         
         comp.Normalize();
 

@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 namespace Core.Item
@@ -68,6 +71,39 @@ namespace Core.Item
 
             composition = CompositionLogic.Combine(
                 composition, count, other, otherAmount);
+        }
+
+        public bool CanMergeWith(ItemStack other)
+        {
+            if (other == null) return false;
+            if (itemId != other.itemId) return false;
+            if (composition == null || other.composition == null) return false;
+
+            var dictA = composition.contents;
+            var dictB = other.composition.contents;
+            
+            //Union of all material Ids
+            var allMat = new HashSet<int>(dictA.Keys);
+            allMat.UnionWith(dictB.Keys);
+
+            foreach (var id in allMat)
+            {
+                var mat = MaterialRegistry.GetMaterial(id);
+                if (mat == null) continue;
+
+                float aVal = dictA.ContainsKey(id) ? dictA[id] : 0f;
+                float bVal = dictB.ContainsKey(id) ? dictB[id] : 0;
+                
+                //If any mat is continuous
+                if (mat.isContinuous)
+                    return true;
+                
+                // Per mat tolerance check
+                if (Mathf.Abs(aVal - bVal) > mat.mergeTolerance)
+                    return false;
+            }
+
+            return true;
         }
     }
 }

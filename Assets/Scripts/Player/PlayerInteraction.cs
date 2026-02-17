@@ -70,7 +70,7 @@ public class PlayerInteraction : MonoBehaviour
                     if (block.id == BlockDataBase.SnowBlock.id)
                     {
                         composition = CompositionLogic.Add(
-                            (MaterialDatabase.GraniteMaterial.materialId,
+                            (MaterialDatabase.Granite.materialId,
                                 Random.Range(0.1f, 0.8f)));
                     }
                     else

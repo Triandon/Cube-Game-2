@@ -106,7 +106,8 @@ public class InventoryCursor : MonoBehaviour
         }
 
         // Same item → merge
-        if (target.itemId == CursorStack.itemId)
+        if (target.itemId == CursorStack.itemId &&
+            target.CanMergeWith(CursorStack))
         {
             int before = target.count;
             int remaining = target.AddItemToStack(CursorStack.count);
@@ -153,7 +154,8 @@ public class InventoryCursor : MonoBehaviour
             if (i == fromIndex) continue;
 
             ItemStack target = inventory.slots[i];
-            if (target.itemId == source.itemId && target.count < target.MaxStack)
+            if (target.itemId == source.itemId && target.count < target.MaxStack &&
+                target.CanMergeWith(source))
             {
                 int before = target.count;
                 source.count = target.AddItemToStack(source.count);
