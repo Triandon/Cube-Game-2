@@ -38,7 +38,7 @@ public abstract class InventoryHolder : MonoBehaviour
 
     public void CloseInventory()
     {
-        OnInventoryClosed.Invoke(this);
+        OnInventoryClosed?.Invoke(this);
     }
 
     public void SaveInventory()

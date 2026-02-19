@@ -9,6 +9,9 @@ public class InventoryCursor : MonoBehaviour
 
     public void HandleSlotClick(Inventory inventory, int slotIndex)
     {
+        if (inventory == null || slotIndex < 0 || slotIndex >= inventory.Size)
+            return;
+        
         ItemStack slotStack = inventory.slots[slotIndex];
 
         // SHIFT → fast move
@@ -21,17 +24,7 @@ public class InventoryCursor : MonoBehaviour
         // Cursor empty → pick up
         if (CursorStack.IsEmpty)
         {
-            if (slotStack.IsEmpty) return;
-
-            CursorStack = new ItemStack(
-                slotStack.itemId,
-                slotStack.count,
-                slotStack.displayName,
-                slotStack.composition?.Clone()
-            );
-
-            inventory.slots[slotIndex] = ItemStack.Empty;
-            inventory.InventoryChanged();
+            TryPickUpSlot(inventory, slotIndex);
             return;
         }
 
@@ -41,12 +34,15 @@ public class InventoryCursor : MonoBehaviour
 
     public void HandleSlotRightClick(Inventory inventory, int slotIndex)
     {
+        if (inventory == null || slotIndex < 0 || slotIndex >= inventory.Size)
+            return;
+        
         ItemStack stack = inventory.slots[slotIndex];
         
-        //Case 1 -> take half
+        // Case 1 -> take half
         if (CursorStack.IsEmpty)
         {
-            if(stack.IsEmpty) return;
+            if (stack.IsEmpty) return;
 
             int half = Mathf.CeilToInt(stack.count / 2f);
 
@@ -78,7 +74,8 @@ public class InventoryCursor : MonoBehaviour
             CursorStack.count--;
         }
         //Same but fill with 1 to existing stack
-        else if (stack.itemId == CursorStack.itemId && stack.count < stack.MaxStack)
+        else if (stack.itemId == CursorStack.itemId && stack.count < stack.MaxStack &&
+                 stack.CanMergeWith(CursorStack))
         {
             stack.MergeComposition(CursorStack.composition, 1);
             stack.count++;
@@ -193,4 +190,61 @@ public class InventoryCursor : MonoBehaviour
     {
         CursorStack = ItemStack.Empty;
     }
+
+    private void TryPickUpSlot(Inventory inventory, int slotIndex)
+    {
+        ItemStack slotStack = inventory.slots[slotIndex];
+        if (slotStack.IsEmpty)
+            return;
+
+        ItemStack picked = slotStack.Clone();
+        if (picked.IsEmpty)
+            return;
+
+        CursorStack = picked;
+        inventory.slots[slotIndex] = ItemStack.Empty;
+        inventory.InventoryChanged();
+    }
+
+    public bool CanAcceptStack(ItemStack stack)
+    {
+        if (stack == null || stack.IsEmpty)
+            return false;
+
+        if (CursorStack.IsEmpty)
+            return true;
+
+        if (CursorStack.itemId != stack.itemId)
+            return false;
+
+        if (!CursorStack.CanMergeWith(stack))
+            return false;
+
+        return CursorStack.count + stack.count <= CursorStack.MaxStack;
+    }
+
+    public bool TryAddToCursor(ItemStack stack)
+    {
+        if (stack == null || stack.IsEmpty)
+            return false;
+
+        if (CursorStack.IsEmpty)
+        {
+            CursorStack = stack.Clone();
+            return true;
+        }
+
+        if (CursorStack.itemId != stack.itemId || !CursorStack.CanMergeWith(stack))
+            return false;
+
+        int remaining = CursorStack.AddItemToStack(stack.count);
+        int added = stack.count - remaining;
+
+        if (added > 0)
+            CursorStack.MergeComposition(stack.composition, added);
+
+        return remaining == 0;
+    }
+
+
 }

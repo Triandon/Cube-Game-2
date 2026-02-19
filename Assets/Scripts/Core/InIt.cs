@@ -18,6 +18,7 @@ namespace Core
             );
             ItemDatabase.Init();
             MaterialDatabase.Init();
+            RecipeDataBase.Init(); 
         }
 
         // Start is called once before the first execution of Update after the MonoBehaviour is created

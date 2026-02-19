@@ -557,6 +557,18 @@ namespace Core
                 var holder = go.AddComponent<ChestInventoryHolder>();
                 holder.Init(worldPos);
                 chunk.blockEntities[local] = holder;
+                return;
+            }
+
+            if (block is CraftingTableBlock)
+            {
+                GameObject go = new GameObject("CraftingTableEntity");
+                go.transform.SetParent(chunk.renderer.transform, false);
+                go.transform.position = worldPos + Vector3.one * 0.5f;
+
+                var holder = go.AddComponent<CraftingTableInventoryHolder>();
+                holder.Init(worldPos);
+                chunk.blockEntities[local] = holder;
             }
         }
 

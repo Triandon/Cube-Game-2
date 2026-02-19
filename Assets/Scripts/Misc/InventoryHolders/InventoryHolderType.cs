@@ -6,5 +6,6 @@ public enum InventoryHolderType
     Chest,
     Backpack,
     Entity,
-    Block
+    Block,
+    CraftingTable
 }

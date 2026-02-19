@@ -78,13 +78,13 @@ public class InventoryViewManager : MonoBehaviour
         BuildSlots();
     }
 
-    public void SlotClicked(InventorySlotUI clickedSlot)
+    public virtual void SlotClicked(InventorySlotUI clickedSlot)
     {
         cursor.HandleSlotClick(inventory, clickedSlot.SlotIndex);
         tooltipUI?.Hide();
     }
     
-    public void SlotRightClicked(InventorySlotUI clickedSlot)
+    public virtual void SlotRightClicked(InventorySlotUI clickedSlot)
     {
         cursor.HandleSlotRightClick(inventory, clickedSlot.SlotIndex);
         tooltipUI?.Hide();

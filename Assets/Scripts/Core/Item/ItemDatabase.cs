@@ -34,6 +34,8 @@ namespace Core.Item
             
             //DeadGrass Item
             ItemRegistry.RegisterItem(new Item(id: 9, itemName:"DeadGrassBlock_Item", isBlock:true, blockId:9, textureIndex: 9, 64));
+            
+            ItemRegistry.RegisterItem(new Item(10, itemName:"CraftingTable", isBlock:true, blockId:10, textureIndex:10, 1));
         }
     
         public static void Init(){}
