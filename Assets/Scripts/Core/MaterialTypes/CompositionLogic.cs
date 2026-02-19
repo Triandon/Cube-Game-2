@@ -5,12 +5,14 @@ using UnityEngine;
 [System.Serializable]
 public class CompositionLogic
 {
+    [SerializeField]
     private List<MaterialEntry> entries = new List<MaterialEntry>();
     
     //% add up to 1.0
     public Dictionary<int, float> contents =>
         entries.ToDictionary(e => e.materialId, e => e.amount);
 
+    [System.Serializable]
     public struct MaterialEntry
     {
         public int materialId; 

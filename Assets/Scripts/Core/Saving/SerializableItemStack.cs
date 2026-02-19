@@ -7,6 +7,7 @@ public class SerializableItemStack
     public int itemId;
     public int count;
     public string displayName;
+    public CompositionLogic composition;
 }
 
 [System.Serializable]

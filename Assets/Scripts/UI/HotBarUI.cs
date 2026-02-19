@@ -107,7 +107,7 @@ public class HotBarUI : InventoryViewManager
 
         GameObject go = Instantiate(itemEntityPref, spawnPos, Quaternion.identity,emptyGoItemListThing.transform);
         go.GetComponent<ItemEntity>().Init(
-            new ItemStack(stack.itemId, 1, stack.displayName));
+            new ItemStack(stack.itemId, 1, stack.displayName, stack.composition));
     }
      
 }

@@ -18,7 +18,7 @@ public class ItemEntity : MonoBehaviour
 
     public void Init(ItemStack stack)
     {
-        this.stack = new ItemStack(stack.itemId, stack.count, stack.displayName);
+        this.stack = new ItemStack(stack.itemId, stack.count, stack.displayName, stack.composition);
 
         Block block = BlockRegistry.GetBlock((byte)stack.itemId);
         if(block == null) return;

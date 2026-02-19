@@ -123,7 +123,8 @@ namespace Core
                 {
                     itemId = stack.itemId,
                     count = stack.count,
-                    displayName = stack.displayName
+                    displayName = stack.displayName,
+                    composition = stack.composition != null ? stack.composition.Clone() : null
                 });
             }
 
@@ -146,6 +147,7 @@ namespace Core
                 inventory.slots[i].itemId = savedStack.itemId;
                 inventory.slots[i].count = savedStack.count;
                 inventory.slots[i].displayName = savedStack.displayName;
+                inventory.slots[i].composition = savedStack.composition != null ? savedStack.composition.Clone() : null;
             }
 
             inventory.InventoryChanged();

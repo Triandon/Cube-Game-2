@@ -191,7 +191,7 @@ public class PlayerInteraction : MonoBehaviour
         
         if(stack == null || stack.IsEmpty) return;
 
-        bool success = inventory.AddItem(stack.itemId, stack.count, stack.displayName, null);
+        bool success = inventory.AddItem(stack.itemId, stack.count, stack.displayName, stack.composition);
         if (success)
         {
             Destroy(itemEntity.gameObject);

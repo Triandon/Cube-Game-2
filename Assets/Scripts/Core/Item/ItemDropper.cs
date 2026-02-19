@@ -40,7 +40,7 @@ public class ItemDropper : MonoBehaviour
             );
 
             go.GetComponent<ItemEntity>().Init(
-                new ItemStack(stack.itemId, 1, stack.displayName)
+                new ItemStack(stack.itemId, 1, stack.displayName, stack.composition)
             );
         }
     }
