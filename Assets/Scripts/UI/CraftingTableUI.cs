@@ -33,7 +33,7 @@ public class CraftingTableUI : InventoryViewManager
         if (inventory == null)
             return;
 
-        if (clickedSlot.SlotIndex == CraftingTableLogic.OutputSlot)
+        if (currentHolder != null && currentHolder.IsOutputSlot(clickedSlot.SlotIndex))
         {
             HandleOutputClick();
             return;
@@ -41,10 +41,22 @@ public class CraftingTableUI : InventoryViewManager
         
         base.SlotClicked(clickedSlot);
     }
+    
+    public override string GetSlotCountText(int slotIndex, ItemStack stack)
+    {
+        if (currentHolder != null && currentHolder.IsOutputSlot(slotIndex) && !stack.IsEmpty)
+        {
+            int craftableCount = currentHolder.GetCraftableCount();
+            return craftableCount > 0 ? $"{craftableCount}x{stack.count}" : "";
+        }
+
+        return base.GetSlotCountText(slotIndex, stack);
+    }
+
 
     public override void SlotRightClicked(InventorySlotUI clickedSlot)
     {
-        if (clickedSlot.SlotIndex == CraftingTableLogic.OutputSlot)
+        if (currentHolder != null && currentHolder.IsOutputSlot(clickedSlot.SlotIndex))
             return;
         
         base.SlotRightClicked(clickedSlot);
@@ -55,12 +67,11 @@ public class CraftingTableUI : InventoryViewManager
         currentHolder?.SaveInventory();
         currentHolder = null;
         root.SetActive(false);
-        cursor.ClearCursor();
     }
 
     private void HandleOutputClick()
     {
-        ItemStack output = inventory.slots[CraftingTableLogic.OutputSlot];
+        ItemStack output = inventory.slots[CraftingTableInventoryHolder.OutputSlot];
         
         if (output.IsEmpty || currentHolder == null)
             return;

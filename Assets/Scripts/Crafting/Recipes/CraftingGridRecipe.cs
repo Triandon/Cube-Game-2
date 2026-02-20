@@ -39,6 +39,52 @@ namespace Core.Crafting
         {
             return outputFactory != null ? outputFactory(context) : ItemStack.Empty; 
         }
+        
+        public int GetMaxCraftCount(ProcessContext context, ItemStack[] inputSlots)
+        {
+            if (inputSlots == null || !TryFindMatch(context, out int offsetX, out int offsetY))
+            {
+                return 0;
+            }
+
+            int maxCrafts = int.MaxValue;
+            bool hasConsumableIngredient = false;
+
+            for (int y = 0; y < PatternHeight; y++)
+            {
+                for (int x = 0; x < PatternWidth; x++)
+                {
+                    int patternIndex = y * PatternWidth + x;
+                    RecipeIngredient ingredient = pattern[patternIndex];
+                    if (ingredient == null || !ingredient.consume)
+                    {
+                        continue;
+                    }
+
+                    int gridX = offsetX + x;
+                    int gridY = offsetY + y;
+                    int slotIndex = gridY * context.CraftingGrid.Width + gridX;
+                    ItemStack stack = inputSlots[slotIndex];
+
+                    if (stack == null || stack.IsEmpty || ingredient.consumeCount <= 0)
+                    {
+                        return 0;
+                    }
+
+                    int craftsFromThisSlot = stack.count / ingredient.consumeCount;
+                    maxCrafts = Math.Min(maxCrafts, craftsFromThisSlot);
+                    hasConsumableIngredient = true;
+                }
+            }
+
+            if (!hasConsumableIngredient || maxCrafts == int.MaxValue)
+            {
+                return 0;
+            }
+
+            return Math.Max(0, maxCrafts);
+        }
+
 
         public bool TryConsumeInputs(ProcessContext context, ItemStack[] inputSlots)
         {

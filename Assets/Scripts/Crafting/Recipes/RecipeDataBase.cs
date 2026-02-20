@@ -13,7 +13,7 @@ public static class RecipeDataBase
     public static void RegisterRecipes()
     {
         RecipeManager.RegisterRecipe(new CraftingGridRecipe(
-            id: "craft_deadgrass_to_sandstone",
+            id: "deadgrass_to_sandstone",
             patternWidth: 2,
             patternHeight: 2,
             pattern: new[]
@@ -21,7 +21,18 @@ public static class RecipeDataBase
                 MakeIngredient(9), MakeIngredient(9),
                 MakeIngredient(9), MakeIngredient(9)
             },
-            outputFactory: _ => new ItemStack(8, 1, "SandStoneBlock_Item")
+            outputFactory: _ => new ItemStack(8, 2, "SandStoneBlock_Item")
+        ));
+        
+        RecipeManager.RegisterRecipe(new CraftingGridRecipe(
+            id: "sandstone_to_deadgrass",
+            patternWidth: 1,
+            patternHeight: 1,
+            pattern: new[]
+            {
+                MakeIngredient(8)
+            },
+            outputFactory: _ => new ItemStack(9, 12)
         ));
 
         

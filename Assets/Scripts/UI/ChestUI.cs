@@ -56,6 +56,5 @@ public class ChestUI : InventoryViewManager
         currentHolder?.SaveInventory();
         currentHolder = null;
         root.SetActive(false);
-        cursor.ClearCursor();
     }
 }

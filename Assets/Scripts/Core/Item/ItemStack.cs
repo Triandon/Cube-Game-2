@@ -19,12 +19,21 @@ namespace Core.Item
 
         public static ItemStack Empty => new ItemStack(0, 0, "");
 
-        public ItemStack(int itemId, int count, string displayName, CompositionLogic composition = null)
+        public ItemStack(int itemId, int count, string displayName = null, CompositionLogic composition = null)
         {
             this.itemId = itemId;
             this.count = count;
-            this.displayName = displayName;
             this.composition = composition;
+
+            if (!string.IsNullOrWhiteSpace(displayName))
+            {
+                this.displayName = displayName;
+            }
+            else
+            {
+                Item item = ItemRegistry.GetItem(itemId);
+                this.displayName = item != null ? item.itemName : "";
+            }
         }
 
         public int MaxStack => Item != null ? Item.maxStackSize : 1;

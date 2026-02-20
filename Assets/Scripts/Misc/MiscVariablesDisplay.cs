@@ -100,6 +100,13 @@ public class MiscVariablesDisplay : MonoBehaviour
 
             if (Input.GetKeyDown(KeyCode.Escape))
             {
+                chunkManager.SaveWorld();
+                InventoryHolder[] allHolders = FindObjectsOfType<InventoryHolder>();
+                foreach (var holder in allHolders)
+                {
+                    holder.SaveInventory();
+                }
+                
                 Cursor.lockState = CursorLockMode.None;
                 SceneManager.LoadScene("Scenes/Menu");
             }

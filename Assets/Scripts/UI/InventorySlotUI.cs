@@ -60,7 +60,10 @@ public class InventorySlotUI : MonoBehaviour, IPointerClickHandler, IPointerEnte
             icon.enabled = false;
         }
 
-        countText.text = stack.count > 1 ? stack.count.ToString() : "";
+        countText.text = owner != null
+            ? owner.GetSlotCountText(slotIndex, stack)
+            : (stack.count > 1 ? stack.count.ToString() : "");
+
     }
     
     public void OnUISlotClicked()

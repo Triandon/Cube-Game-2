@@ -33,6 +33,19 @@ namespace Core.Blocks.BlockLogic
             return inventory.slots[OutputSlot];
         }
 
+        public static int GetCraftableCount(Inventory inventory)
+        {
+            ProcessContext context = BuildContext(inventory);
+            IProcessRecipe recipe = RecipeManager.FindMatch(context);
+
+            if (recipe is not CraftingGridRecipe craftingGridRecipe)
+            {
+                return 0;
+            }
+
+            return craftingGridRecipe.GetMaxCraftCount(context, inventory.slots);
+        }
+
         public static bool TryCraftOnce(Inventory inventory)
         {
             ProcessContext context = BuildContext(inventory);
