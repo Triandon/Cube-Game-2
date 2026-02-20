@@ -77,6 +77,11 @@ namespace Core.Item
         {
             if (other == null) return false;
             if (itemId != other.itemId) return false;
+            
+            // Items with no composition can stack!
+            if (composition == null && other.composition == null) return true;
+            
+            // If only one stack has composition, the separate!
             if (composition == null || other.composition == null) return false;
 
             var dictA = composition.contents;
@@ -94,9 +99,9 @@ namespace Core.Item
                 float aVal = dictA.ContainsKey(id) ? dictA[id] : 0f;
                 float bVal = dictB.ContainsKey(id) ? dictB[id] : 0;
                 
-                //If any mat is continuous
+                //If any mat is continuous, skip tolerance check
                 if (mat.isContinuous)
-                    return true;
+                    continue;
                 
                 // Per mat tolerance check
                 if (Mathf.Abs(aVal - bVal) > mat.mergeTolerance)

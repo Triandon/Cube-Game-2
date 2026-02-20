@@ -37,7 +37,7 @@ namespace Core.Crafting
 
         public ItemStack CreateOutput(ProcessContext context)
         {
-            return outputFactory != null ? outputFactory(context) : ItemStack.Empty;
+            return outputFactory != null ? outputFactory(context) : ItemStack.Empty; 
         }
 
         public bool TryConsumeInputs(ProcessContext context, ItemStack[] inputSlots)
