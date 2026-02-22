@@ -26,6 +26,7 @@ public class PlayerInteraction : MonoBehaviour
         chunkManager = FindAnyObjectByType<ChunkManager>();
         inventory = GetComponent<InventoryHolder>().Inventory;
         hotBarUI = FindAnyObjectByType<HotBarUI>();
+        player = transform;
         
         GetComponent<PlayerInventoryHolder>().OpenInventory();
     }

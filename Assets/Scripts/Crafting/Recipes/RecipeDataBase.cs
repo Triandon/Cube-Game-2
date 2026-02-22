@@ -34,6 +34,14 @@ public static class RecipeDataBase
             },
             outputFactory: _ => new ItemStack(9, 12)
         ));
+        
+        RecipeManager.RegisterRecipe(new CrushingRecipe(
+            id: "deadgrass_to_sandstone_crushing",
+            processType: ProcessType.Crushing,
+            input: MakeIngredient(9),
+            totalCrushingTime: 4,
+            outputFactory: _ => new ItemStack(8, 1)
+            ));
 
         
         Debug.Log("Blocks registered (static)");

@@ -11,13 +11,15 @@ public class CrushingRecipe : IProcessRecipe
 
     private readonly RecipeIngredient input;
     private readonly Func<ProcessContext, ItemStack> outputFactory;
+    public int TotalCrushingTime { get; }
 
     public CrushingRecipe(string id, ProcessType processType, RecipeIngredient input,
-        Func<ProcessContext, ItemStack> outputFactory)
+        int totalCrushingTime ,Func<ProcessContext, ItemStack> outputFactory)
     {
         Id = id;
         ProcessType = processType;
         this.input = input;
+        TotalCrushingTime = Mathf.Max(1, totalCrushingTime);
         this.outputFactory = outputFactory;
     }
     
@@ -40,5 +42,10 @@ public class CrushingRecipe : IProcessRecipe
     public ItemStack CreateOutput(ProcessContext context)
     {
         return outputFactory != null ? outputFactory(context) : ItemStack.Empty;
+    }
+
+    public bool IsCompleted(int currentCrushingTime)
+    {
+        return currentCrushingTime >= TotalCrushingTime;
     }
 }

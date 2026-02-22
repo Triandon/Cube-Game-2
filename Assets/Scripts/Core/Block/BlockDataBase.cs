@@ -16,6 +16,7 @@ namespace Core.Block
         public static Block SandStoneBlock;
         public static Block DeadGrassBlock;
         public static Block CraftingTableBlock;
+        public static Block CrusherBlock;
         
         static BlockDataBase()
         {
@@ -62,8 +63,12 @@ namespace Core.Block
             BlockRegistry.RegisterBlock(DeadGrassBlock);
             
             //Crafting table block
-            CraftingTableBlock = new CraftingTableBlock(10, "CraftingTable_Block", top: 10, side: 10, bottom: 10);
+            CraftingTableBlock = new CraftingTableBlock(10, "CraftingTable_Block", top: 11, side: 10, bottom: 11);
             BlockRegistry.RegisterBlock(CraftingTableBlock);
+            
+            // Crusher
+            CrusherBlock = new CrusherBlock(11, "CrusherBlock", top: 13, side: 12, bottom: 12);
+            BlockRegistry.RegisterBlock(CrusherBlock);
             
             Debug.Log("Blocks registered (static)");
         }

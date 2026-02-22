@@ -115,7 +115,7 @@ public static class ThreadedChunkProcessor
         
         // column caches
         int[,] heightCache = new int[S2, S2];
-        ChunkClimate[,] climateCache = new ChunkClimate[S2, S2];
+        //ChunkClimate[,] climateCache = new ChunkClimate[S2, S2];
         byte[,] surfaceBlockCache = new byte[S2, S2];
 
         // build column data ONCE
@@ -128,11 +128,7 @@ public static class ThreadedChunkProcessor
             int height = TerrainGeneration.SampleHeight(wx, wz);
             ChunkClimate climate = BiomeManager.GetClimateAt(wx, wz);
 
-            heightCache[x + 1, z + 1] =
-                TerrainGeneration.SampleHeight(wx, wz);
-
-            climateCache[x + 1, z + 1] =
-                BiomeManager.GetClimateAt(wx, wz);
+            heightCache[x + 1, z + 1] = height;
 
             surfaceBlockCache[x + 1, z + 1] =
                 BiomeManager.ChooseSurfaceBlock(

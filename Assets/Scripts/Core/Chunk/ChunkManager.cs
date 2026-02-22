@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using Core.Block;
+using Misc.InventoryHolders;
 using UnityEngine;
 
 namespace Core
@@ -567,6 +568,18 @@ namespace Core
                 go.transform.position = worldPos + Vector3.one * 0.5f;
 
                 var holder = go.AddComponent<CraftingTableInventoryHolder>();
+                holder.Init(worldPos);
+                chunk.blockEntities[local] = holder;
+                return;
+            }
+
+            if (block is CrusherBlock)
+            {
+                GameObject go = new GameObject("CrusherEntity");
+                go.transform.SetParent(chunk.renderer.transform, false);
+                go.transform.position = worldPos + Vector3.one * 0.5f;
+                
+                var holder = go.AddComponent<CrushingInventoryHolder>();
                 holder.Init(worldPos);
                 chunk.blockEntities[local] = holder;
             }
