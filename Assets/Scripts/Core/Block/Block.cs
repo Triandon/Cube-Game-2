@@ -57,10 +57,11 @@ namespace Core.Block
         }
         
         // Called when a block is activated (right clicked)
-        public virtual void OnActivated(
+        public virtual bool OnActivated(
             Vector3Int position, BlockStateContainer state, Block block, Transform player)
         {
-            //Debug.Log("Block activated with block: " + block + " and with id: " + block.id);
+            // true => interaction  false => default behavior
+            return false;
         }
 
         // Called when a block is LEFT-Clicked

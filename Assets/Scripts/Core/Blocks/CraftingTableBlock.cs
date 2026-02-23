@@ -11,22 +11,25 @@ public class CraftingTableBlock : Block
         
     }
 
-    public override void OnActivated(Vector3Int position, BlockStateContainer state, Block block, Transform player)
+    public override bool OnActivated(Vector3Int position, BlockStateContainer state, Block block, Transform player)
     {
         ChunkManager cm = Object.FindAnyObjectByType<ChunkManager>();
         if (cm == null)
-            return;
+            return false;
 
         Chunk chunk = cm.GetChunkFromWorldPos(position);
         if (chunk == null)
-            return;
+            return false;
 
         Vector3Int local = chunk.WorldToLocal(position);
 
         if (chunk.blockEntities.TryGetValue(local, out InventoryHolder holder))
         {
             holder.OpenInventory();
+            return true;
         }
+
+        return false;
     }
 
     public override void OnMined(Vector3Int position, BlockStateContainer state, Transform player)

@@ -13,33 +13,33 @@ public class CrusherBlock : Block
         
     }
 
-    public override void OnActivated(Vector3Int position, BlockStateContainer state, Block block, Transform player)
+    public override bool OnActivated(Vector3Int position, BlockStateContainer state, Block block, Transform player)
     {
         ChunkManager cm = Object.FindAnyObjectByType<ChunkManager>();
         if (cm == null)
-            return;
+            return false;
 
         Chunk chunk = cm.GetChunkFromWorldPos(position);
         if (chunk == null)
-            return;
+            return false;
 
         Vector3Int local = chunk.WorldToLocal(position);
 
         if (!chunk.blockEntities.TryGetValue(local, out InventoryHolder genericHolder))
         {
-            return;
+            return false;
         }
 
-        if (genericHolder is not CrushingInventoryHolder holder)
+        if (genericHolder is not CrusherInventoryHolder holder)
         {
-            return;
+            return false;
         }
 
         HotBarUI hotBar = Object.FindAnyObjectByType<HotBarUI>();
         InventoryHolder playerHolder = player != null ? player.GetComponent<InventoryHolder>() : null;
         
         if (hotBar == null || playerHolder == null || playerHolder.Inventory == null)
-            return;
+            return false;
 
         if (!holder.HasInputItem())
         {
@@ -52,14 +52,16 @@ public class CrusherBlock : Block
                 playerHolder.Inventory.RemoveItemFromSlot(selectedSlot, 1);
             }
             
-            return;
+            return true;
         }
 
         ItemStack output = holder.RegisterCrushClick();
         if (output == null || output.IsEmpty)
-            return;
+            return true;
         
         ItemDropper.Instance.DropItemStack(output, position + new Vector3(0.5f, 1.05f, 0.5f));
+
+        return true;
     }
 
     public override void OnMined(Vector3Int position, BlockStateContainer state, Transform player)

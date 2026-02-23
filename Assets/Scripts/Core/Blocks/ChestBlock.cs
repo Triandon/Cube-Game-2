@@ -26,23 +26,24 @@ public class ChestBlock : Block
         state.SetState("facing", facing);
     }
 
-    public override void OnActivated(Vector3Int position, BlockStateContainer state, Block block, Transform player)
+    public override bool OnActivated(Vector3Int position, BlockStateContainer state, Block block, Transform player)
     {
-        Debug.Log("Chest clicked: " + position);
-        
         ChunkManager cm = Object.FindAnyObjectByType<ChunkManager>();
         
-        if(cm == null) return;
+        if(cm == null) return false;
 
         Chunk chunk = cm.GetChunkFromWorldPos(position);
-        if(chunk == null) return;
+        if(chunk == null) return false;
 
         Vector3Int local = chunk.WorldToLocal(position);
 
         if (chunk.blockEntities.TryGetValue(local, out InventoryHolder holder))
         {
             holder.OpenInventory();
+            return true;
         }
+
+        return false;
     }
 
     public override void OnMined(Vector3Int position, BlockStateContainer state, Transform player)

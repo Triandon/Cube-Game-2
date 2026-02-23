@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using Core.Block;
+using Core.Block.TileEntities;
 using Misc.InventoryHolders;
 using UnityEngine;
 
@@ -541,7 +542,7 @@ namespace Core
         private void SpawnBlockEntityAtWorldPos(Block.Block block, Vector3Int worldPos)
         {
             Chunk chunk = GetChunkFromWorldPos(worldPos);
-            if(chunk == null)
+            if (chunk == null)
                 return;
 
             Vector3Int local = chunk.WorldToLocal(worldPos);
@@ -549,40 +550,13 @@ namespace Core
             if (chunk.blockEntities.ContainsKey(local))
                 return;
 
-            if (block is ChestBlock)
+            if (!BlockEntityRegistry.TryCreate(block.id, chunk.renderer.transform,
+                    worldPos, out InventoryHolder holder))
             {
-                GameObject go = new GameObject("ChestEntity_With_No_Name :(");
-                go.transform.SetParent(chunk.renderer.transform, false);
-                go.transform.position = worldPos + Vector3.one * 0.5f;
-
-                var holder = go.AddComponent<ChestInventoryHolder>();
-                holder.Init(worldPos);
-                chunk.blockEntities[local] = holder;
                 return;
             }
 
-            if (block is CraftingTableBlock)
-            {
-                GameObject go = new GameObject("CraftingTableEntity");
-                go.transform.SetParent(chunk.renderer.transform, false);
-                go.transform.position = worldPos + Vector3.one * 0.5f;
-
-                var holder = go.AddComponent<CraftingTableInventoryHolder>();
-                holder.Init(worldPos);
-                chunk.blockEntities[local] = holder;
-                return;
-            }
-
-            if (block is CrusherBlock)
-            {
-                GameObject go = new GameObject("CrusherEntity");
-                go.transform.SetParent(chunk.renderer.transform, false);
-                go.transform.position = worldPos + Vector3.one * 0.5f;
-                
-                var holder = go.AddComponent<CrushingInventoryHolder>();
-                holder.Init(worldPos);
-                chunk.blockEntities[local] = holder;
-            }
+            chunk.blockEntities[local] = holder;
         }
 
         private void RemoveBlockEntityAtWorldPos(Vector3Int worldPos)

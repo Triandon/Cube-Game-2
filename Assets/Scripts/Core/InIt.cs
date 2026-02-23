@@ -1,4 +1,5 @@
 using Core.Block;
+using Core.Block.TileEntities;
 using Core.Item;
 using UnityEngine;
 
@@ -9,6 +10,7 @@ namespace Core
         private void Awake()
         {
             BlockDataBase.Init();
+            BlockEntityDataBase.Init();
             // Load atlas
             Material itemAtlas = Resources.Load<Material>("Materials/AtlasMaterial");
             ItemRegistry.InitAtlas(

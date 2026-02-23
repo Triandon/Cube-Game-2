@@ -5,7 +5,7 @@ using UnityEngine;
 
 namespace Misc.InventoryHolders
 {
-    public class CrushingInventoryHolder : InventoryHolder
+    public class CrusherInventoryHolder : InventoryHolder
     {
         public override InventoryHolderType HolderType => InventoryHolderType.CrushingBlock;
 

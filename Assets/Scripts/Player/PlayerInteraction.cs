@@ -95,12 +95,17 @@ public class PlayerInteraction : MonoBehaviour
             Vector3Int hitTarget = GetTargetBlockPos(lastHit, false);
             byte hitBlockId = chunkManager.GetBlockAtWorldPos(hitTarget);
             Block hitBlock = BlockRegistry.GetBlock(hitBlockId);
-            BlockStateContainer state = chunkManager.GetBlockStateAtWorldPos(target);
+            BlockStateContainer state = chunkManager.GetBlockStateAtWorldPos(hitTarget);
+
+            bool interactionConsumed = false;
 
             if (hitBlock != null && hitBlock.id != 0)
             {
-                hitBlock?.OnActivated(hitTarget,state,hitBlock,player);
+                interactionConsumed = hitBlock.OnActivated(hitTarget,state,hitBlock,player);
             }
+            
+            if (interactionConsumed)
+                return;
 
             if (stack != null && !stack.IsEmpty && stack.Item.isBlock)
             {

@@ -38,7 +38,7 @@ namespace Core.Item
             ItemRegistry.RegisterItem(new Item(10, itemName:"CraftingTable", isBlock:true, blockId:10, textureIndex:10, 1));
             
             //Crusher
-            ItemRegistry.RegisterItem(new Item(11, itemName:"CrusherBlock", isBlock:true, blockId: 11, textureIndex: 11, maxStackSize: 1));
+            ItemRegistry.RegisterItem(new Item(11, itemName:"CrusherBlock", isBlock:true, blockId: 11, textureIndex: 13, maxStackSize: 1));
         }
     
         public static void Init(){}
