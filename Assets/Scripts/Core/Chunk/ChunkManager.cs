@@ -841,37 +841,179 @@ namespace Core
             }
                 
         }
-        
 
+        private bool IsOutsideRenderDistance(Vector3Int coord)
+        {
+            return Mathf.Abs(coord.x - playerChunkCord.x) > viewDistance ||
+                   Mathf.Abs(coord.y - playerChunkCord.y) > viewDistance ||
+                   Mathf.Abs(coord.z - playerChunkCord.z) > viewDistance;
+        }
+
+        private static void InsertCandidate<T>(T item, float sqrDistance, T[] bestItems,
+            float[] bestDistances, ref int count, ref int worstIndex)
+        {
+            if (bestItems.Length == 0)
+                return;
+
+            if (count < bestItems.Length)
+            {
+                bestItems[count] = item;
+                bestDistances[count] = sqrDistance;
+                count++;
+
+                if (count == 1 || sqrDistance > bestDistances[worstIndex])
+                {
+                    worstIndex = count - 1;
+                }
+                
+                return;
+            }
+            
+            if (sqrDistance >= bestDistances[worstIndex])
+                return;
+
+            bestItems[worstIndex] = item;
+            bestDistances[worstIndex] = sqrDistance;
+
+            worstIndex = 0;
+            for (int i = 1; i < count; i++)
+            {
+                if (bestDistances[i] > bestDistances[worstIndex])
+                {
+                    worstIndex = i;
+                }
+            }
+        }
+
+        private List<Vector3Int> TakeClosestGenerationCoords(int limit)
+        {
+            if (limit <= 0 || generationQue.Count == 0)
+                return new List<Vector3Int>(0);
+
+            Vector3Int[] bestCoords = new Vector3Int[limit];
+            float[] bestDistances = new float[limit];
+            int count = 0;
+            int worstIndex = 0;
+
+            List<Vector3Int> toRemove = null;
+
+            foreach (var coord in generationQue)
+            {
+                if (IsOutsideRenderDistance(coord))
+                {
+                    toRemove ??= new List<Vector3Int>();
+                    toRemove.Add(coord);
+                    continue;
+                }
+                
+                float dx = player.position.x - coord.x * Chunk.CHUNK_SIZE;
+                float dy = player.position.y - coord.y * Chunk.CHUNK_SIZE;
+                float dz = player.position.z - coord.z * Chunk.CHUNK_SIZE;
+                float sqrDistance = dx * dx + dy * dy + dz * dz;
+
+                InsertCandidate(coord, sqrDistance, bestCoords, bestDistances, ref count, ref worstIndex);
+            }
+
+            if (toRemove != null)
+            {
+                foreach (var coord in toRemove)
+                {
+                    generationQue.Remove(coord);
+                }
+            }
+
+            List<Vector3Int> result = new List<Vector3Int>(count);
+            for (int i = 0; i < count; i++)
+            {
+                result.Add(bestCoords[i]);
+            }
+            
+            result.Sort((a, b) =>
+            {
+                float adx = player.position.x - a.x * Chunk.CHUNK_SIZE;
+                float ady = player.position.y - a.y * Chunk.CHUNK_SIZE;
+                float adz = player.position.z - a.z * Chunk.CHUNK_SIZE;
+                float aSqr = adx * adx + ady * ady + adz * adz;
+
+                float bdx = player.position.x - b.x * Chunk.CHUNK_SIZE;
+                float bdy = player.position.y - b.y * Chunk.CHUNK_SIZE;
+                float bdz = player.position.z - b.z * Chunk.CHUNK_SIZE;
+                float bSqr = bdx * bdx + bdy * bdy + bdz * bdz;
+
+                return aSqr.CompareTo(bSqr);
+            });
+
+            return result;
+        }
+        
+        private List<Chunk> TakeClosestMeshChunks(int limit)
+        {
+            if (limit <= 0 || meshQue.Count == 0)
+                return new List<Chunk>(0);
+
+            Chunk[] bestChunks = new Chunk[limit];
+            float[] bestDistances = new float[limit];
+            int count = 0;
+            int worstIndex = 0;
+
+            List<Chunk> toRemove = null;
+
+            foreach (var chunk in meshQue)
+            {
+                if (chunk == null || chunk.renderer == null || chunk.renderer.gameObject == null ||
+                    IsOutsideRenderDistance(chunk.coord))
+                {
+                    toRemove ??= new List<Chunk>();
+                    toRemove.Add(chunk);
+                    continue;
+                }
+
+                float dx = player.position.x - chunk.coord.x * Chunk.CHUNK_SIZE;
+                float dy = player.position.y - chunk.coord.y * Chunk.CHUNK_SIZE;
+                float dz = player.position.z - chunk.coord.z * Chunk.CHUNK_SIZE;
+                float sqrDistance = dx * dx + dy * dy + dz * dz;
+
+                InsertCandidate(chunk, sqrDistance, bestChunks, bestDistances, ref count, ref worstIndex);
+            }
+
+            if (toRemove != null)
+            {
+                foreach (var chunk in toRemove)
+                    meshQue.Remove(chunk);
+            }
+
+            List<Chunk> result = new List<Chunk>(count);
+            for (int i = 0; i < count; i++)
+                result.Add(bestChunks[i]);
+
+            result.Sort((a, b) =>
+            {
+                float adx = player.position.x - a.coord.x * Chunk.CHUNK_SIZE;
+                float ady = player.position.y - a.coord.y * Chunk.CHUNK_SIZE;
+                float adz = player.position.z - a.coord.z * Chunk.CHUNK_SIZE;
+                float aSqr = adx * adx + ady * ady + adz * adz;
+
+                float bdx = player.position.x - b.coord.x * Chunk.CHUNK_SIZE;
+                float bdy = player.position.y - b.coord.y * Chunk.CHUNK_SIZE;
+                float bdz = player.position.z - b.coord.z * Chunk.CHUNK_SIZE;
+                float bSqr = bdx * bdx + bdy * bdy + bdz * bdz;
+
+                return aSqr.CompareTo(bSqr);
+            });
+
+            return result;
+        }
+
+        
         private void SortChunksLists()
         {
-            // Remove null/destroyed chunks first
-            meshQue.RemoveWhere(c => c == null || c.renderer.gameObject == null);
+            // Generation QUE and sorting!
             
-            int buildChunksThisFrame = Mathf.Min(chunksPerFrame, meshQue.Count);
             int generatingChunksThisFrame = Mathf.Min(chunksPerFrame, generationQue.Count);
 
-            var ordered = generationQue.OrderBy(c =>
-            {
-                float dx = player.position.x - c.x * Chunk.CHUNK_SIZE;
-                float dy = player.position.y - c.y * Chunk.CHUNK_SIZE;
-                float dz = player.position.z - c.z * Chunk.CHUNK_SIZE;
-                return dx * dx + dy * dy + dz * dz;
-            }).Take(generatingChunksThisFrame).ToList();
-            
-            // Before generating chunks in Update()
-            generationQue.RemoveWhere(coord => 
-                Mathf.Abs(coord.x - playerChunkCord.x) > viewDistance ||
-                Mathf.Abs(coord.y - playerChunkCord.y) > viewDistance ||
-                Mathf.Abs(coord.z - playerChunkCord.z) > viewDistance);
-            
-            meshQue.RemoveWhere(c => 
-                Mathf.Abs(c.coord.x - playerChunkCord.x) > viewDistance ||
-                Mathf.Abs(c.coord.y - playerChunkCord.y) > viewDistance ||
-                Mathf.Abs(c.coord.z - playerChunkCord.z) > viewDistance);
+            List<Vector3Int> orderedGeneration = TakeClosestGenerationCoords(generatingChunksThisFrame);
 
-
-            foreach (var coord in ordered)
+            foreach (var coord in orderedGeneration)
             {
                 generationQue.Remove(coord);
                 chunkCount++;
@@ -902,23 +1044,11 @@ namespace Core
             // Build meshes from meshQue (distance prioritized)
             if (meshQue.Count > 0 && chunksPerFrame > 0)
             {
-                // Sort by distance to player using chunk coordinates
-                List<Chunk> sortedChunks = meshQue
-                    .Where(c => c != null)
-                    .OrderBy(c =>
-                    {
-                        // Compute world position from coord
-                        Vector3 worldPos = new Vector3(
-                            c.coord.x * Chunk.CHUNK_SIZE,
-                            c.coord.y * Chunk.CHUNK_SIZE,
-                            c.coord.z * Chunk.CHUNK_SIZE
-                        );
-                        return Vector3.SqrMagnitude(player.position - worldPos);
-                    })
-                    .ToList();
+                int buildChunksThisFrame = Mathf.Min(chunksPerFrame, meshQue.Count);
+                List<Chunk> sortedChunks = TakeClosestMeshChunks(buildChunksThisFrame);
 
                 // Build closest chunks first
-                for (int i = 0; i < buildChunksThisFrame; i++)
+                for (int i = 0; i < sortedChunks.Count; i++)
                 {
                     Chunk chunkToBuild = sortedChunks[i];
                     if (chunkToBuild != null && chunkToBuild.renderer.gameObject != null &&
@@ -931,9 +1061,6 @@ namespace Core
                     meshQue.Remove(chunkToBuild);
                 }
             }
-
-            
-            
             
         }
 
