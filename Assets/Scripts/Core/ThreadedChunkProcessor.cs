@@ -30,6 +30,11 @@ public static class ThreadedChunkProcessor
             center = ExtractCenter(padded);
         }
         
+        // 1.1
+        // Skip mesh generation for all air chunks!
+        if (IsAllAir(center))
+            return new ChunkGenResult(coord, center, null, null);
+        
         //2 Detect block entities
         List<Vector3Int> blockEntities = DetectBlockEntities(center);
 
@@ -227,6 +232,21 @@ public static class ThreadedChunkProcessor
         }
 
         return result;
+    }
+
+    private static bool IsAllAir(byte[,,] blocks)
+    {
+        int S = Chunk.CHUNK_SIZE;
+        
+        for (int x = 0; x < S; x++)
+        for (int y = 0; y < S; y++)
+        for (int z = 0; z < S; z++)
+        {
+            if (blocks[x, y, z] != 0)
+                return false;
+        }
+
+        return true;
     }
     
 }
