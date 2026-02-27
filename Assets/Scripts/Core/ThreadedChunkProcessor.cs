@@ -32,11 +32,10 @@ public static class ThreadedChunkProcessor
         
         // 1.1
         // Skip mesh generation for all air chunks!
-        if (IsAllAir(center))
-            return new ChunkGenResult(coord, center, null, null);
-        
         //2 Detect block entities
-        List<Vector3Int> blockEntities = DetectBlockEntities(center);
+        bool isAllAir = AnalyzeBlocks(center, out List<Vector3Int> blockEntities);
+        if (isAllAir)
+            return new ChunkGenResult(coord, center, new MeshData(), null);
 
         // ------------------------------------
         // 3. THREAD-SAFE BLOCK QUERY
@@ -234,19 +233,31 @@ public static class ThreadedChunkProcessor
         return result;
     }
 
-    private static bool IsAllAir(byte[,,] blocks)
+    private static bool AnalyzeBlocks(byte[,,] center, out List<Vector3Int> blockEntities)
     {
         int S = Chunk.CHUNK_SIZE;
+        bool isAllAir = true;
+
+        blockEntities = null;
         
         for (int x = 0; x < S; x++)
         for (int y = 0; y < S; y++)
         for (int z = 0; z < S; z++)
         {
-            if (blocks[x, y, z] != 0)
-                return false;
+            byte id = center[x, y, z];
+            if (id == 0) continue;
+
+            isAllAir = false;
+
+            Block block = BlockRegistry.GetBlock(id);
+            if (block != null && block.HasBlockEntity)
+            {
+                blockEntities ??= new List<Vector3Int>();
+                blockEntities.Add(new Vector3Int(x, y, z));
+            }
         }
 
-        return true;
+        return isAllAir;
     }
     
 }
