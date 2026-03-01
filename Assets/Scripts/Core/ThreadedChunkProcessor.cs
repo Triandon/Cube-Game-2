@@ -33,9 +33,12 @@ public static class ThreadedChunkProcessor
         // 1.1
         // Skip mesh generation for all air chunks!
         //2 Detect block entities
-        bool isAllAir = AnalyzeBlocks(center, out List<Vector3Int> blockEntities);
+        bool isAllAir = AnalyzeBlocks(center, out List<Vector3Int> blockEntities,
+            out List<Vector3Int> instantTickLocals, out List<Vector3Int> scheduledTickLocals,
+            out List<Vector3Int> randomTickLocals);
         if (isAllAir)
-            return new ChunkGenResult(coord, center, new MeshData(), null);
+            return new ChunkGenResult(coord, center, new MeshData(), null,
+                instantTickLocals, scheduledTickLocals, randomTickLocals);
 
         // ------------------------------------
         // 3. THREAD-SAFE BLOCK QUERY
@@ -73,7 +76,8 @@ public static class ThreadedChunkProcessor
         // ------------------------------------
         // 5. RETURN RESULT
         // ------------------------------------
-        return new ChunkGenResult(coord, center, meshData,blockEntities);
+        return new ChunkGenResult(coord, center, meshData,blockEntities,
+            instantTickLocals, scheduledTickLocals, randomTickLocals);
     }
 
     private static byte[,,] BuildPaddedFromCenter(byte[,,] center)
@@ -233,12 +237,17 @@ public static class ThreadedChunkProcessor
         return result;
     }
 
-    private static bool AnalyzeBlocks(byte[,,] center, out List<Vector3Int> blockEntities)
+    private static bool AnalyzeBlocks(byte[,,] center, out List<Vector3Int> blockEntities,
+        out List<Vector3Int> instantTickLocals, out List<Vector3Int> scheduledTickLocals,
+        out List<Vector3Int> randomTickLocals)
     {
         int S = Chunk.CHUNK_SIZE;
         bool isAllAir = true;
 
         blockEntities = null;
+        instantTickLocals = null;
+        scheduledTickLocals = null;
+        randomTickLocals = null;
         
         for (int x = 0; x < S; x++)
         for (int y = 0; y < S; y++)
@@ -250,10 +259,33 @@ public static class ThreadedChunkProcessor
             isAllAir = false;
 
             Block block = BlockRegistry.GetBlock(id);
-            if (block != null && block.HasBlockEntity)
+            if (block == null)
+                continue;
+
+            Vector3Int localPos = new Vector3Int(x, y, z);
+
+            if (block.HasBlockEntity)
             {
                 blockEntities ??= new List<Vector3Int>();
-                blockEntities.Add(new Vector3Int(x, y, z));
+                blockEntities.Add(localPos);
+            }
+
+            if (block.HasInstantTick)
+            {
+                instantTickLocals ??= new List<Vector3Int>();
+                instantTickLocals.Add(localPos);
+            }
+
+            if (block.HasScheduledTick)
+            {
+                scheduledTickLocals ??= new List<Vector3Int>();
+                scheduledTickLocals.Add(localPos);
+            }
+
+            if (block.HasRandomTick)
+            {
+                randomTickLocals ??= new List<Vector3Int>();
+                randomTickLocals.Add(localPos);
             }
         }
 

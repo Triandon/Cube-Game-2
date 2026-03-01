@@ -10,21 +10,33 @@ namespace Core
         public int worldSize = 50;
         public int worldSizeY = 3;
 
+        private TickCaller tickCaller;
+        
         private void Awake()
         {
             Instance = this;
-        }
 
-        // Start is called once before the first execution of Update after the MonoBehaviour is created
+            tickCaller = GetComponent<TickCaller>();
+            if (tickCaller == null)
+            {
+                tickCaller = gameObject.AddComponent<TickCaller>();
+            }
+        }
+        
         void Start()
         {
-        
+            ChunkManager cm = FindAnyObjectByType<ChunkManager>();
+            tickCaller?.Init(cm);
         }
-
-        // Update is called once per frame
+        
         void Update()
         {
-        
+            tickCaller?.Tick(Time.deltaTime);
+        }
+
+        public TickCaller GetTickCaller()
+        {
+            return tickCaller;
         }
 
         //Check if the chunk coordinate is inside the world

@@ -20,6 +20,10 @@ namespace Core.Block
         public bool isTransparent = false;
         public virtual bool HasBlockEntity => false;
 
+        public virtual bool HasInstantTick => false;
+        public virtual bool HasScheduledTick => false;
+        public virtual bool HasRandomTick => false;
+
         public Block(byte id, string name, int top, int side, int bottom, int front = -1)
         {
             this.id = id;
@@ -75,6 +79,24 @@ namespace Core.Block
         public virtual void OnMined(
             Vector3Int position, BlockStateContainer state, Transform player
         )
+        {
+            
+        }
+
+        // Called every frame (REALLY! Not recommended!)
+        public virtual void OnInstantTick(Vector3Int position, ChunkManager chunkManager)
+        {
+            
+        }
+
+        // Called from the queued tick scheduler. Delta is the time since this block's last scheduled call.
+        public virtual void OnScheduledTick(Vector3Int position, float deltaTime, ChunkManager chunkManager)
+        {
+            
+        }
+
+        // Called on random intervals (Not recommended)
+        public virtual void OnRandomTick(Vector3Int position, ChunkManager chunkManager)
         {
             
         }

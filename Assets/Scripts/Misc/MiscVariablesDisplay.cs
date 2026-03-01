@@ -48,7 +48,7 @@ public class MiscVariablesDisplay : MonoBehaviour
     {
         chunkCount = chunkManager.chunkCount;
         renderDistance = chunkManager.viewDistance;
-        chunksCurrentlyBuilding = chunkManager.chunksPerFrame;
+        chunksCurrentlyBuilding = chunkManager.visualChunksPerFrame;
         playerPos = Vector3Int.FloorToInt(player.position);
         
         ChunkCountText.text = $"Chunk Count: {chunkCount}";

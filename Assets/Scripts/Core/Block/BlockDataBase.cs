@@ -1,3 +1,4 @@
+using Core.Blocks;
 using UnityEngine;
 
 namespace Core.Block
@@ -30,7 +31,7 @@ namespace Core.Block
             BlockRegistry.RegisterBlock(GrassBlock);
 
             // Dirt block
-            DirtBlock = new Block(2, "Dirt_Block", top: 0, side: 0, bottom: 0);
+            DirtBlock = new DirtBlock(2, "Dirt_Block", top: 0, side: 0, bottom: 0);
             BlockRegistry.RegisterBlock(DirtBlock);
         
             //Stone Block

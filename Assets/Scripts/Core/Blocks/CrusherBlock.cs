@@ -1,5 +1,6 @@
 using Core;
 using Core.Block;
+using Core.Blocks.BlockLogic;
 using Core.Item;
 using Misc.InventoryHolders;
 using UnityEngine;
@@ -7,6 +8,7 @@ using UnityEngine;
 public class CrusherBlock : Block
 {
     public override bool HasBlockEntity => true;
+    public override bool HasScheduledTick => true;
 
     public CrusherBlock(byte id, string name, int top, int side, int bottom, int front = -1) : base(id, name, top, side, bottom, front)
     {
@@ -55,7 +57,7 @@ public class CrusherBlock : Block
             return true;
         }
 
-        ItemStack output = holder.RegisterCrushClick();
+        ItemStack output = ProcessCrushing(holder, 1f);
         if (output == null || output.IsEmpty)
             return true;
         
@@ -86,4 +88,56 @@ public class CrusherBlock : Block
             Object.Destroy(holder.gameObject);
         }
     }
+
+    public override void OnScheduledTick(Vector3Int position, float deltaTime, ChunkManager chunkManager)
+    {
+        if (chunkManager == null)
+            return;
+        
+        Chunk chunk = chunkManager.GetChunkFromWorldPos(position);
+        if (chunk == null)
+            return;
+
+        Vector3Int local = chunk.WorldToLocal(position);
+        if (!chunk.blockEntities.TryGetValue(local, out InventoryHolder genericHolder))
+            return;
+
+        if (genericHolder is not CrusherInventoryHolder holder || !holder.HasInputItem())
+            return;
+
+        float progressDelta = Mathf.Max(0f, deltaTime) * 1f;
+        if (progressDelta <= 0f)
+            return;
+        
+        ItemStack output = ProcessCrushing(holder, progressDelta);
+        if (output == null || output.IsEmpty)
+            return;
+
+        ItemDropper.Instance.DropItemStack(output, position + new Vector3(0.5f, 1.05f, 0.5f));
+    }
+    
+    private static ItemStack ProcessCrushing(CrusherInventoryHolder holder, float progressDelta)
+    {
+        if (holder == null || !holder.HasInputItem())
+            return ItemStack.Empty;
+
+        ItemStack input = holder.GetInputItem();
+        float progress = holder.CurrentCrushingProgress;
+
+        ItemStack output = CrushingLogic.AdvanceProcess(input, ref progress, progressDelta, out bool completed);
+
+        holder.CurrentCrushingProgress = progress;
+
+        if (!completed)
+        {
+            holder.Inventory?.InventoryChanged();
+            return ItemStack.Empty;
+        }
+
+        holder.ClearInputItem();
+        holder.Inventory?.InventoryChanged();
+
+        return output;
+    }
+
 }

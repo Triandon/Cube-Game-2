@@ -28,6 +28,7 @@ namespace Core
 
         // How many chunks should be building at once.
         public int chunksPerFrame = 4;
+        public int visualChunksPerFrame = 4;
         private FPSCounter fpsCounter;
         private int fps;
         public bool dynamicChunkRendering = true;
@@ -35,6 +36,7 @@ namespace Core
         public int initialPoolSize = 20; // pre-instantiate this many chunks
 
         private ThreadedChunkWorker threadedWorker;
+        private TickCaller tickCaller;
 
         // --- new: track pending requests so we don't enqueue duplicates
         private HashSet<Vector3Int> pendingRequests = new HashSet<Vector3Int>();
@@ -63,6 +65,7 @@ namespace Core
         {
             settings = Settings.Instance;
             SetLodDistance();
+            tickCaller = World.Instance != null ? World.Instance.GetTickCaller() : null;
             
             BlockRegistry.BuildThreadLookup();
 
@@ -191,6 +194,9 @@ namespace Core
             {
                 meshQue.Add(chunk);
             }
+            
+            tickCaller?.RegisterChunk(chunk, res.instantTickLocals, res.scheduledTickLocals,
+                res.randomTickLocals);
             
             // Save first gen chunk
             if (!hasSavedBefore)
@@ -370,6 +376,7 @@ namespace Core
 
         private void RemoveChunk(Chunk chunk, Vector3Int coord)
         {
+            tickCaller?.UnregisterChunk(chunk);
             if (chunk.isDirty)
             {
                 WorldSaveSystem.SaveChunk(coord, chunk);
@@ -427,6 +434,7 @@ namespace Core
 
                 if (distanceX > viewDistance || distanceY > viewDistance || distanceZ > viewDistance)
                 {
+                    tickCaller?.UnregisterChunk(chunk);
                     if (chunk.isDirty)
                     {
                         // Save changes before removing
@@ -529,6 +537,7 @@ namespace Core
             
             // Sets block at the local chunk
             chunk.SetBlockLocal(local, id, state);
+            tickCaller?.OnBlockChanged(worldPos, oldId, id);
             
             // Enqueue neighbors if block is on border
             if (local.x == 0 || local.x == Chunk.CHUNK_SIZE - 1 ||
@@ -713,11 +722,17 @@ namespace Core
                 chunksPerFrame = 2 * mult;
             else
                 chunksPerFrame = 1 * mult;
-
-            if (meshQue.Count <= 0 && generationQue.Count <= 0 && transformQueue.Count <= 0)
+            
+            if (meshQue.Count <= 0 && generationQue.Count <= 0) //&& transformQueue.Count <= 0)
             {
-                chunksPerFrame = 0;
+                visualChunksPerFrame = 0;
             }
+            else
+            {
+                visualChunksPerFrame = chunksPerFrame;
+            }
+            
+            //Todo Found out why tranformQueu.Count is always atleas 1! It should be 0.
         }
 
         public void SaveWorld()
@@ -1009,21 +1024,24 @@ namespace Core
         {
             // Generation QUE and sorting!
             
-            int generatingChunksThisFrame = Mathf.Min(chunksPerFrame, generationQue.Count);
+            int generatingChunksThisFrame = Mathf.Min(visualChunksPerFrame, generationQue.Count);
 
             List<Vector3Int> orderedGeneration = TakeClosestGenerationCoords(generatingChunksThisFrame);
 
-            foreach (var coord in orderedGeneration)
+            if (generationQue.Count > 0)
             {
-                generationQue.Remove(coord);
-                chunkCount++;
-                GenerateChunk(coord, chunkCount);
+                foreach (var coord in orderedGeneration)
+                {
+                    generationQue.Remove(coord);
+                    chunkCount++;
+                    GenerateChunk(coord, chunkCount);
+                }
             }
             
             if (transformQueue.Count > 0)
             {
-                int transformChunksThisFrame = Mathf.Min(chunksPerFrame, transformQueue.Count);
-                transformChunksThisFrame = Mathf.Clamp(transformChunksThisFrame/2, 1, transformQueue.Count);
+                int transformChunksThisFrame = Mathf.Min(visualChunksPerFrame, transformQueue.Count);
+                transformChunksThisFrame = Mathf.Clamp(transformChunksThisFrame/2, 0, transformQueue.Count);
             
                 //Transform que
                 for (int i = 0; i < transformChunksThisFrame; i++)
@@ -1042,9 +1060,9 @@ namespace Core
             }
 
             // Build meshes from meshQue (distance prioritized)
-            if (meshQue.Count > 0 && chunksPerFrame > 0)
+            if (meshQue.Count > 0 && visualChunksPerFrame > 0)
             {
-                int buildChunksThisFrame = Mathf.Min(chunksPerFrame, meshQue.Count);
+                int buildChunksThisFrame = Mathf.Min(visualChunksPerFrame, meshQue.Count);
                 List<Chunk> sortedChunks = TakeClosestMeshChunks(buildChunksThisFrame);
 
                 // Build closest chunks first
@@ -1061,7 +1079,7 @@ namespace Core
                     meshQue.Remove(chunkToBuild);
                 }
             }
-            
+            //Debug.Log(generationQue.Count+ " " + meshQue.Count + " " + transformQueue.Count);
         }
 
         private void SetLodDistance()

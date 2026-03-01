@@ -9,9 +9,15 @@ namespace Misc.InventoryHolders
     {
         public override InventoryHolderType HolderType => InventoryHolderType.CrushingBlock;
 
-        [SerializeField] private int currentCrushingTime;
+        [SerializeField] private float currentCrushingTime;
 
-        public int CurrentCrushingTime => currentCrushingTime;
+        public int CurrentCrushingTime => Mathf.FloorToInt(currentCrushingTime);
+
+        public float CurrentCrushingProgress
+        {
+            get => currentCrushingTime;
+            set => currentCrushingTime = Mathf.Max(0f, value);
+        }
 
         public void Init(Vector3Int worldBlockPos)
         {
@@ -49,33 +55,20 @@ namespace Misc.InventoryHolders
             return true;
         }
 
-        public ItemStack RegisterCrushClick()
+        public ItemStack GetInputItem()
         {
             if (!HasInputItem())
                 return ItemStack.Empty;
+            return inventory.slots[CrushingLogic.InputSlot];
+        }
 
-            ItemStack input = inventory.slots[CrushingLogic.InputSlot];
-            CrushingRecipe recipe = CrushingLogic.FindRecipe(input);
-
-            if (recipe == null)
-                return ItemStack.Empty;
-
-            currentCrushingTime++;
-
-            if (!recipe.IsCompleted(currentCrushingTime))
-            {
-                inventory.InventoryChanged();
-                return ItemStack.Empty;
-            }
-            
-            ProcessContext context = CrushingLogic.BuildContext(input, currentCrushingTime, recipe.TotalCrushingTime);
-            ItemStack output = recipe.CreateOutput(context);
-
+        public void ClearInputItem()
+        {
+            if (inventory == null || inventory.slots.Length <= CrushingLogic.InputSlot)
+                return;
+            // Consumes the item!
             inventory.slots[CrushingLogic.InputSlot] = ItemStack.Empty;
             currentCrushingTime = 0;
-            inventory.InventoryChanged();
-
-            return output == null ? ItemStack.Empty : output;
         }
     }
 }
