@@ -26,6 +26,9 @@ namespace Core
         private readonly Queue<Vector3Int> scheduledQueue = new Queue<Vector3Int>();
         private readonly Dictionary<Vector3Int, float> lastScheduledTickTime = new Dictionary<Vector3Int, float>();
 
+        private readonly Dictionary<Vector3Int, HashSet<Vector3Int>> chunkTickPositions =
+            new Dictionary<Vector3Int, HashSet<Vector3Int>>();
+        
         private readonly List<Vector3Int> randomTickBuffer = new List<Vector3Int>();
         private readonly System.Random random = new System.Random();
 
@@ -57,10 +60,14 @@ namespace Core
             if (chunk == null)
                 return;
 
+            ClearChunkRegistrations(chunk.coord);
+
+            HashSet<Vector3Int> chunkPositions = GetOrCreateChunkSet(chunk.coord);
+            
             Vector3Int origin = chunk.coord * Chunk.CHUNK_SIZE;
             
-            RegisterTickPositions(origin, instantLocals, instantTickBlocks);
-            RegisterTickPositions(origin, randomLocals, randomTickBlocks);
+            RegisterTickPositions(origin, instantLocals, instantTickBlocks, chunkPositions);
+            RegisterTickPositions(origin, randomLocals, randomTickBlocks, chunkPositions);
 
             if (scheduledLocals == null || scheduledLocals.Count == 0)
                 return;
@@ -71,6 +78,7 @@ namespace Core
                 if (!scheduledTickBlocks.Add(worldPos))
                     continue;
 
+                chunkPositions.Add(worldPos);
                 scheduledQueue.Enqueue(worldPos);
                 lastScheduledTickTime[worldPos] = Time.time;
             }
@@ -78,33 +86,25 @@ namespace Core
 
         public void UnregisterChunk(Chunk chunk)
         {
-            if (chunk == null || chunk.blocks == null)
+            if (chunk == null)
                 return;
 
-            Vector3Int origin = chunk.coord * Chunk.CHUNK_SIZE;
-
-            for (int x = 0; x < Chunk.CHUNK_SIZE; x++)
-            for (int y = 0; y < Chunk.CHUNK_SIZE; y++)
-            for (int z = 0; z < Chunk.CHUNK_SIZE; z++)
-            {
-                byte id = chunk.blocks[x, y, z];
-                if (id == 0)
-                    continue;
-
-                Vector3Int worldPos = origin + new Vector3Int(x, y, z);
-                UnregisterPosition(worldPos);
-            }
+            ClearChunkRegistrations(chunk.coord);
         }
         
         private static void RegisterTickPositions(Vector3Int origin, List<Vector3Int> locals,
-            HashSet<Vector3Int> target)
+            HashSet<Vector3Int> target, HashSet<Vector3Int> chunkPos)
         {
             if (locals == null || locals.Count == 0)
                 return;
 
             for (int i = 0; i < locals.Count; i++)
             {
-                target.Add(origin + locals[i]);
+                Vector3Int worldPos = origin + locals[i];
+                if (!target.Add(worldPos))
+                    continue;
+
+                chunkPos.Add(worldPos);
             }
         }
 
@@ -130,10 +130,12 @@ namespace Core
             if (block.HasInstantTick)
             {
                 instantTickBlocks.Add(worldPos);
+                TrackChunkPosition(worldPos);
             }
 
             if (block.HasScheduledTick && scheduledTickBlocks.Add(worldPos))
             {
+                TrackChunkPosition(worldPos);
                 scheduledQueue.Enqueue(worldPos);
                 lastScheduledTickTime[worldPos] = Time.time;
             }
@@ -141,6 +143,7 @@ namespace Core
             if (block.HasRandomTick)
             {
                 randomTickBlocks.Add(worldPos);
+                TrackChunkPosition(worldPos);
             }
         }
 
@@ -150,6 +153,57 @@ namespace Core
             scheduledTickBlocks.Remove(worldPos);
             randomTickBlocks.Remove(worldPos);
             lastScheduledTickTime.Remove(worldPos);
+
+            Vector3Int chunkCoord = WorldToChunkCoord(worldPos);
+            if (!chunkTickPositions.TryGetValue(chunkCoord, out HashSet<Vector3Int> chunkSet))
+                return;
+
+            chunkSet.Remove(worldPos);
+            if (chunkSet.Count == 0)
+            {
+                chunkTickPositions.Remove(chunkCoord);
+            }
+        }
+        
+        private void ClearChunkRegistrations(Vector3Int chunkCoord)
+        {
+            if (!chunkTickPositions.TryGetValue(chunkCoord, out HashSet<Vector3Int> chunkSet))
+                return;
+
+            foreach (Vector3Int worldPos in chunkSet)
+            {
+                instantTickBlocks.Remove(worldPos);
+                scheduledTickBlocks.Remove(worldPos);
+                randomTickBlocks.Remove(worldPos);
+                lastScheduledTickTime.Remove(worldPos);
+            }
+
+            chunkTickPositions.Remove(chunkCoord);
+        }
+
+        private HashSet<Vector3Int> GetOrCreateChunkSet(Vector3Int chunkCoord)
+        {
+            if (chunkTickPositions.TryGetValue(chunkCoord, out HashSet<Vector3Int> existing))
+                return existing;
+
+            var created = new HashSet<Vector3Int>();
+            chunkTickPositions.Add(chunkCoord, created);
+            return created;
+        }
+
+        private void TrackChunkPosition(Vector3Int worldPos)
+        {
+            Vector3Int chunkCoord = WorldToChunkCoord(worldPos);
+            HashSet<Vector3Int> chunkSet = GetOrCreateChunkSet(chunkCoord);
+            chunkSet.Add(worldPos);
+        }
+
+        private static Vector3Int WorldToChunkCoord(Vector3Int worldPos)
+        {
+            return new Vector3Int(
+                Mathf.FloorToInt((float)worldPos.x / Chunk.CHUNK_SIZE),
+                Mathf.FloorToInt((float)worldPos.y / Chunk.CHUNK_SIZE),
+                Mathf.FloorToInt((float)worldPos.z / Chunk.CHUNK_SIZE));
         }
 
         private void RunInstantTicks()
