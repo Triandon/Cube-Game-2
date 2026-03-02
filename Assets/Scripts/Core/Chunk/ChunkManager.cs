@@ -723,16 +723,14 @@ namespace Core
             else
                 chunksPerFrame = 1 * mult;
             
-            if (meshQue.Count <= 0 && generationQue.Count <= 0) //&& transformQueue.Count <= 0)
-            {
-                visualChunksPerFrame = 0;
-            }
-            else
+            if (!(meshQue.Count <= 0 && generationQue.Count <= 0 && transformQueue.Count <= 0))
             {
                 visualChunksPerFrame = chunksPerFrame;
             }
-            
-            //Todo Found out why tranformQueu.Count is always atleas 1! It should be 0.
+            else
+            {
+                visualChunksPerFrame = 0;
+            }
         }
 
         public void SaveWorld()
@@ -1024,7 +1022,7 @@ namespace Core
         {
             // Generation QUE and sorting!
             
-            int generatingChunksThisFrame = Mathf.Min(visualChunksPerFrame, generationQue.Count);
+            int generatingChunksThisFrame = Mathf.Min(chunksPerFrame, generationQue.Count);
 
             List<Vector3Int> orderedGeneration = TakeClosestGenerationCoords(generatingChunksThisFrame);
 
@@ -1040,8 +1038,7 @@ namespace Core
             
             if (transformQueue.Count > 0)
             {
-                int transformChunksThisFrame = Mathf.Min(visualChunksPerFrame, transformQueue.Count);
-                transformChunksThisFrame = Mathf.Clamp(transformChunksThisFrame/2, 0, transformQueue.Count);
+                int transformChunksThisFrame = Mathf.Min(chunksPerFrame, transformQueue.Count);
             
                 //Transform que
                 for (int i = 0; i < transformChunksThisFrame; i++)
@@ -1054,15 +1051,17 @@ namespace Core
                         t.chunk.renderer.transform.position = t.tragetPos;
                         t.chunk.renderer.gameObject.SetActive(true);
                         
-                        EnqueueNeighborRebuilds(t.chunk.coord);
+                        //EnqueueNeighborRebuilds(t.chunk.coord);
+                        // The transform does not change the meshing of neighbor chunks
+                        // was needed before ill think
                     }
                 }
             }
 
             // Build meshes from meshQue (distance prioritized)
-            if (meshQue.Count > 0 && visualChunksPerFrame > 0)
+            if (meshQue.Count > 0 && chunksPerFrame > 0)
             {
-                int buildChunksThisFrame = Mathf.Min(visualChunksPerFrame, meshQue.Count);
+                int buildChunksThisFrame = Mathf.Min(chunksPerFrame, meshQue.Count);
                 List<Chunk> sortedChunks = TakeClosestMeshChunks(buildChunksThisFrame);
 
                 // Build closest chunks first
