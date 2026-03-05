@@ -8,8 +8,8 @@ namespace Core
     public class TickCaller : MonoBehaviour
     {
         [Header("Scheduled Tick Tuning")]
-        [SerializeField] private int minimumScheduledCallsPerFrame = 24;
-        [SerializeField] private int callsPerChunkBuildBudget = 4;
+        [SerializeField] private int minimumScheduledCallsPerFrame = 16;
+        [SerializeField] private int callsPerChunkBuildBudget = 6;
         // Calls in the world = chunkmanager.chunksPrFrame * callsPrChunkBuild
         // Additionaly a min value at minScheduledCallsPrFrame.
         // ChunkPrFrame = 3, callsPrBuild = 8  => budget=3*8 = 24
@@ -231,11 +231,9 @@ namespace Core
                 return;
 
             int dynamicBudget = minimumScheduledCallsPerFrame;
-            if (chunkManager != null)
-            {
-                dynamicBudget = Math.Max(minimumScheduledCallsPerFrame,
-                    chunkManager.chunksPerFrame * callsPerChunkBuildBudget);
-            }
+            
+            dynamicBudget = Math.Max(minimumScheduledCallsPerFrame,
+                chunkManager.chunksPerFrame * callsPerChunkBuildBudget);
 
             int calls = Math.Min(dynamicBudget, scheduledQueue.Count);
 

@@ -9,7 +9,7 @@ public class MiscVariablesDisplay : MonoBehaviour
     public TextMeshProUGUI RenderDistanceText;
     public TextMeshProUGUI chunkBuilding;
     public TextMeshProUGUI playerCordsText, usernameDisplayText, currentLodDistanceText;
-    public TextMeshProUGUI chunkClimateText;
+    public TextMeshProUGUI chunkClimateText, genQue, transQue, meshQue;
 
     [SerializeField] private GameObject keyInfo, debugPanel, chatBoxGO, cursorGO;
     
@@ -55,6 +55,10 @@ public class MiscVariablesDisplay : MonoBehaviour
         RenderDistanceText.text = $"Render Distance: {renderDistance}";
         chunkBuilding.text = $"CCB: {chunksCurrentlyBuilding}";
         playerCordsText.text = "Coords: " + playerPos;
+
+        genQue.text = "Gen Que " + chunkManager.generationQue.Count;
+        transQue.text = "Trans Que " + chunkManager.transformQueue.Count;
+        meshQue.text = "Mesh Que " + chunkManager.meshQue.Count;
 
         Vector3Int playerChunk = GetPlayerChunkCoord();
         ChunkClimate climate = BiomeManager.GetChunkClimate(playerChunk);

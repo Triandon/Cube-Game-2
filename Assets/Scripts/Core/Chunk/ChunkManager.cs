@@ -18,13 +18,14 @@ namespace Core
 
         private Dictionary<Vector3Int, Chunk> chunks = new Dictionary<Vector3Int, Chunk>();
         private Vector3Int playerChunkCord;
+        private Vector3 lastChunkUpdatePosition;
         public int chunkCount;
 
-        public HashSet<Chunk> meshQue = new HashSet<Chunk>();
+        public HashSet<Chunk> meshQue = new HashSet<Chunk>(); //p
         private Queue<GameObject> chunkPool = new Queue<GameObject>();
-        private HashSet<Vector3Int> generationQue = new HashSet<Vector3Int>();
-        private Queue<(Chunk chunk, Vector3Int tragetPos)> transformQueue =
-            new Queue<(Chunk chunk, Vector3Int tragetPos)>();
+        public HashSet<Vector3Int> generationQue = new HashSet<Vector3Int>(); //p
+        public Queue<(Chunk chunk, Vector3Int tragetPos)> transformQueue =
+            new Queue<(Chunk chunk, Vector3Int tragetPos)>(); //p
 
         // How many chunks should be building at once.
         public int chunksPerFrame = 4;
@@ -40,6 +41,8 @@ namespace Core
 
         // --- new: track pending requests so we don't enqueue duplicates
         private HashSet<Vector3Int> pendingRequests = new HashSet<Vector3Int>();
+        protected HashSet<Vector3Int> knownAllAirChunks = new HashSet<Vector3Int>();
+        
         private Settings settings;
         private int lodDistance;
         
@@ -72,16 +75,9 @@ namespace Core
             // start worker threads (use processorCount -1 or 1 minimum)
             threadedWorker = new ThreadedChunkWorker(Math.Max(1, SystemInfo.processorCount - 1));
             threadedWorker.Start();
-            
-
-            // Always spawn first chunk at 0,0,0 if missing
-            if (!chunks.ContainsKey(Vector3Int.zero))
-            {
-                chunkCount++;
-                GenerateChunk(Vector3Int.zero, chunkCount);
-            }
 
             UpdatePlayerChunkCoord();
+            lastChunkUpdatePosition = player != null ? player.position : Vector3.zero;
             UpdateChunks();
         }
 
@@ -92,11 +88,11 @@ namespace Core
 
             // Pull worker results onto the main thread immediately
             ProcessWorkerResults();
-
-            Vector3Int currentPlayerChunk = GetPlayerChunkCoord();
-            if (currentPlayerChunk != playerChunkCord)
+            
+            if (HasMovedChunkDistance())
             {
-                playerChunkCord = currentPlayerChunk;
+                playerChunkCord = GetPlayerChunkCoord();
+                lastChunkUpdatePosition = player.position;
                 UpdateChunks();
                 UpdateChunkCollidersForPlayerMove();
                 UpdateChunkLODs();
@@ -142,12 +138,24 @@ namespace Core
         {
             if (res == null) return;
 
-            // If chunk was removed while worker was working, ignore
-            if (!chunks.TryGetValue(res.coord, out Chunk chunk))
+            // If chunk outside of render distance
+            if (IsOutsideRenderDistance(res.coord))
             {
-                // clear pendingRequests entry in case it still exists
                 pendingRequests.Remove(res.coord);
                 return;
+            }
+
+            if (!chunks.TryGetValue(res.coord, out Chunk chunk))
+            {
+                if (res.isAllAir)
+                {
+                    knownAllAirChunks.Add(res.coord);
+                    pendingRequests.Remove(res.coord);
+                    return;
+                }
+
+                chunkCount++;
+                chunk = GenerateChunkShell(res.coord, chunkCount);
             }
 
             bool hasSavedBefore = WasChunkLoadedFromDisk(res.coord);
@@ -187,7 +195,6 @@ namespace Core
             {
                 chunk.meshData = res.meshData;
                 chunkRender.ApplyMeshData(res.meshData, NeedsColliders(chunk));
-                meshQue.Add(chunk);
                 EnqueueNeighborRebuilds(chunk.coord);
             }
             else
@@ -239,6 +246,18 @@ namespace Core
         {
             playerChunkCord = GetPlayerChunkCoord();
         }
+        
+        private bool HasMovedChunkDistance()
+        {
+            if (player == null)
+                return false;
+
+            Vector3 delta = player.position - lastChunkUpdatePosition;
+            return Mathf.Abs(delta.x) >= Chunk.CHUNK_SIZE ||
+                   Mathf.Abs(delta.y) >= Chunk.CHUNK_SIZE ||
+                   Mathf.Abs(delta.z) >= Chunk.CHUNK_SIZE;
+        }
+
 
         public void UpdateChunks()
         {
@@ -259,13 +278,16 @@ namespace Core
 
                 if (World.Instance.IsChunkInsideOfWorld(logicalCoord))
                 {
-                    if (!chunks.ContainsKey(logicalCoord) && !pendingRequests.Contains(logicalCoord) && !generationQue.Contains(logicalCoord))
+                    if (!chunks.ContainsKey(logicalCoord) && !knownAllAirChunks.Contains(logicalCoord) &&
+                        !pendingRequests.Contains(logicalCoord) && !generationQue.Contains(logicalCoord))
                     {
                         generationQue.Add(logicalCoord);
                     }
                 }
             }
 
+            knownAllAirChunks.RemoveWhere(coord => !neededChunks.Contains(coord));
+            
             // Remove chunks no longer needed
             List<Vector3Int> chunksToRemove = new List<Vector3Int>();
             foreach (var kvp in chunks)
@@ -290,7 +312,7 @@ namespace Core
             new Vector3Int(0,0,1), new Vector3Int(0,0,-1)
         };
 
-        private Chunk GenerateChunk(Vector3Int coord, int chunkNumber)
+        private Chunk GenerateChunkShell(Vector3Int coord, int chunkNumber)
         {
             Chunk chunk = new Chunk(coord);
             GameObject go;
@@ -298,7 +320,7 @@ namespace Core
                 coord.z * Chunk.CHUNK_SIZE);
 
             chunk.lod = ComputeLOD(coord);
-            
+
             if (chunkPool.Count > 0)
             {
                 go = chunkPool.Dequeue();
@@ -308,12 +330,16 @@ namespace Core
                 // Reset old data
                 chunk.blocks = new byte[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
                 chunk.isDirty = false;
-                
+
                 go.SetActive(false);
-                if (go.transform.position != worldPos)
-                {
-                    transformQueue.Enqueue((chunk,worldPos));
-                }
+                //if (go.transform.position != worldPos)
+                //{
+                    //transformQueue.Enqueue((chunk, worldPos));
+                //}
+                
+                // Always enqueue pooled chunks so they become active again,
+                // even when reused at the same world position.
+                transformQueue.Enqueue((chunk,worldPos));
                 
             }
             else
@@ -326,16 +352,25 @@ namespace Core
             }
 
             chunk.chunkNumber = chunkNumber;
-            
-            go.name = "Chunk_" + coord.x + "_" + coord.y + "_" + coord.z + "_chunk_nr" + chunk.chunkNumber + "_LOD" + chunk.lod;
+
+            go.name = "Chunk_" + coord.x + "_" + coord.y + "_" + coord.z + "_chunk_nr" + chunk.chunkNumber + "_LOD" +
+                      chunk.lod;
             ChunkRendering rendering = go.GetComponent<ChunkRendering>();
             chunk.renderer = rendering;
             rendering.SetChunkData(chunk);
-            
-            int lodScale = chunk.GetLodScale();
+
+            chunks.Add(coord, chunk);
+            return chunk;
+        }
+
+        private void EnqueueChunkDataRequest(Vector3Int coord)
+        {
+            int lodScale = chunks.TryGetValue(coord, out var existingChunk)
+                ? existingChunk.GetLodScale()
+                : 1 << (int)ComputeLOD(coord);
 
             ChunkMeshGeneratorThreaded.NeighborLODInfo neighborLODInfo =
-                new ChunkMeshGeneratorThreaded.NeighborLODInfo()
+                new ChunkMeshGeneratorThreaded.NeighborLODInfo
                 {
                     posX = GetNeighborLod(coord + Vector3Int.right, lodScale),
                     negX = GetNeighborLod(coord + Vector3Int.left, lodScale),
@@ -345,33 +380,22 @@ namespace Core
                     negZ = GetNeighborLod(coord + Vector3Int.back, lodScale),
                 };
 
-            ChunkGenRequest req;
+            byte[,,] savedBlocks = null;
+            bool meshOnly = false;
+
+            if (WorldSaveSystem.ChunkSaveExist(coord))
+            {
+                Chunk tempChunk = new Chunk(coord);
+                WorldSaveSystem.LoadChunk(coord, tempChunk);
+                savedBlocks = tempChunk.blocks;
+                meshOnly = true;
+            }
+
             var neighbors = CaptureNeighborSnapshots(coord);
-            
-            // Load saved changes on main thread
-            if (WorldSaveSystem.ChunkSaveExist(coord)) //No safe checks if the file exist not if the terrain is done generating
-            //Todo make so it also checks if the terrian is ready builded
-            {
-                WorldSaveSystem.LoadChunk(coord, chunk);
-                req = new ChunkGenRequest(coord, lodScale, neighborLODInfo, 
-                    chunk.blocks, true, neighbors);
-                
-                //Debug.Log("NOT Building terrain, with mesh");
-            }
-            else
-            {
-                req = new ChunkGenRequest(coord, lodScale, neighborLODInfo, 
-                    null, false, neighbors);
-                
-                //Debug.Log("Building terrain, with mesh");
-            }
-            
-            // Mark request pending and enqueue
-            chunks.Add(coord, chunk);
+            var req = new ChunkGenRequest(coord, lodScale, neighborLODInfo, savedBlocks, meshOnly, neighbors);
+
             pendingRequests.Add(coord);
             threadedWorker.EnqueueRequest(req);
-
-            return chunk;
         }
 
         private void RemoveChunk(Chunk chunk, Vector3Int coord)
@@ -814,11 +838,6 @@ namespace Core
         
         private void EnqueueNeighborRebuilds(Vector3Int coord)
         {
-            if(!chunks.TryGetValue(coord, out Chunk c))
-                return;
-            
-            meshQue.Add(c);
-
             foreach (var d in dirs)
             {
                 if (chunks.TryGetValue(coord + d, out Chunk neighbor) &&
@@ -1031,8 +1050,7 @@ namespace Core
                 foreach (var coord in orderedGeneration)
                 {
                     generationQue.Remove(coord);
-                    chunkCount++;
-                    GenerateChunk(coord, chunkCount);
+                    EnqueueChunkDataRequest(coord);
                 }
             }
             
@@ -1072,13 +1090,15 @@ namespace Core
                         chunkToBuild.renderer.gameObject.activeInHierarchy)
                     {
                         StartCoroutine(BuildChunkMeshNextFrame(chunkToBuild));
+                        
+                        // Remove only when the chunk is scheduled for the rebuild.
+                        // If inactive, (still waiting in trans que) keep it que
+                        meshQue.Remove(chunkToBuild);
                     }
-
-                    // Remove from queue regardless (we're attempting to build it)
-                    meshQue.Remove(chunkToBuild);
                 }
             }
-            //Debug.Log(generationQue.Count+ " " + meshQue.Count + " " + transformQueue.Count);
+            Debug.Log(generationQue.Count+ " " + meshQue.Count + " " + transformQueue.Count);
+            Debug.Log(meshQue);
         }
 
         private void SetLodDistance()

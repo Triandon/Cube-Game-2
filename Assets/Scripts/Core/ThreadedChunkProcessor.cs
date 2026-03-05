@@ -38,7 +38,7 @@ public static class ThreadedChunkProcessor
             out List<Vector3Int> randomTickLocals);
         if (isAllAir)
             return new ChunkGenResult(coord, center, new MeshData(), null,
-                instantTickLocals, scheduledTickLocals, randomTickLocals);
+                true,instantTickLocals, scheduledTickLocals, randomTickLocals);
 
         // ------------------------------------
         // 3. THREAD-SAFE BLOCK QUERY
@@ -77,7 +77,7 @@ public static class ThreadedChunkProcessor
         // 5. RETURN RESULT
         // ------------------------------------
         return new ChunkGenResult(coord, center, meshData,blockEntities,
-            instantTickLocals, scheduledTickLocals, randomTickLocals);
+            false,instantTickLocals, scheduledTickLocals, randomTickLocals);
     }
 
     private static byte[,,] BuildPaddedFromCenter(byte[,,] center)
