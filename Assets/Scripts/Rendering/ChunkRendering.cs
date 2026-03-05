@@ -103,8 +103,8 @@ public class ChunkRendering : MonoBehaviour
         shearedRenderMesh.SetTriangles(meshData.triangles, 0);
         shearedRenderMesh.SetUVs(0, meshData.uvs);
         shearedRenderMesh.SetUVs(1, meshData.uvMeta);
-        shearedRenderMesh.RecalculateNormals();
-        shearedRenderMesh.RecalculateTangents();
+        shearedRenderMesh.RecalculateNormals(); // Later calc them on a sepperate thread, and apply them. Saves a lot of main thread performance!
+        //shearedRenderMesh.RecalculateTangents();
         shearedRenderMesh.RecalculateBounds();
         
         meshFilter.sharedMesh = shearedRenderMesh;
@@ -190,8 +190,8 @@ public class ChunkRendering : MonoBehaviour
         shearedColliderMesh.Clear();
         shearedColliderMesh.SetVertices(meshData.colliderVertices);
         shearedColliderMesh.SetTriangles(meshData.colliderTriangles, 0);
-        shearedColliderMesh.RecalculateNormals();
-        shearedColliderMesh.RecalculateTangents();
+        //shearedColliderMesh.RecalculateNormals();
+        //shearedColliderMesh.RecalculateTangents();
         shearedColliderMesh.RecalculateBounds();
         
         meshCollider.sharedMesh = null;

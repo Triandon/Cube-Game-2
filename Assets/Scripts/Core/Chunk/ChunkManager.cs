@@ -21,7 +21,7 @@ namespace Core
         private Vector3 lastChunkUpdatePosition;
         public int chunkCount;
 
-        public HashSet<Chunk> meshQue = new HashSet<Chunk>(); //p
+        public HashSet<Chunk> meshQue = new HashSet<Chunk>(); //mabye make private
         private Queue<GameObject> chunkPool = new Queue<GameObject>();
         public HashSet<Vector3Int> generationQue = new HashSet<Vector3Int>(); //p
         public Queue<(Chunk chunk, Vector3Int tragetPos)> transformQueue =
@@ -162,6 +162,8 @@ namespace Core
 
             // Apply block data
             chunk.blocks = res.blocks ?? new byte[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
+            chunk.states = res.states ?? new BlockStateContainer[Chunk.CHUNK_SIZE,
+                Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
 
             //Rebuilds block entities  AFTER chunk is ready, the entity is a GO
             if (res.blockEntityLocals != null && res.blockEntityLocals.Count > 0)
@@ -381,6 +383,7 @@ namespace Core
                 };
 
             byte[,,] savedBlocks = null;
+            BlockStateContainer[,,] savedStates = null;
             bool meshOnly = false;
 
             if (WorldSaveSystem.ChunkSaveExist(coord))
@@ -388,11 +391,12 @@ namespace Core
                 Chunk tempChunk = new Chunk(coord);
                 WorldSaveSystem.LoadChunk(coord, tempChunk);
                 savedBlocks = tempChunk.blocks;
+                savedStates = tempChunk.states;
                 meshOnly = true;
             }
 
             var neighbors = CaptureNeighborSnapshots(coord);
-            var req = new ChunkGenRequest(coord, lodScale, neighborLODInfo, savedBlocks, meshOnly, neighbors);
+            var req = new ChunkGenRequest(coord, lodScale, neighborLODInfo, savedBlocks, savedStates, meshOnly, neighbors);
 
             pendingRequests.Add(coord);
             threadedWorker.EnqueueRequest(req);
@@ -803,12 +807,10 @@ namespace Core
             return transformQueue.Any(t => t.chunk == chunk);
         }
 
-        private IEnumerator BuildChunkMeshNextFrame(Chunk chunk)
+        private void BuildChunkMesh(Chunk chunk)
         {
-            yield return null;
-            
             if (chunk == null || chunk.renderer == null)
-                yield break;
+                return;
             
             chunk.renderer.Rebuild(NeedsColliders(chunk));
             chunk.isColliderDirty = false;
@@ -1089,7 +1091,7 @@ namespace Core
                     if (chunkToBuild != null && chunkToBuild.renderer.gameObject != null &&
                         chunkToBuild.renderer.gameObject.activeInHierarchy)
                     {
-                        StartCoroutine(BuildChunkMeshNextFrame(chunkToBuild));
+                        BuildChunkMesh(chunkToBuild);
                         
                         // Remove only when the chunk is scheduled for the rebuild.
                         // If inactive, (still waiting in trans que) keep it que

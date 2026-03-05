@@ -37,8 +37,8 @@ public static class ThreadedChunkProcessor
             out List<Vector3Int> instantTickLocals, out List<Vector3Int> scheduledTickLocals,
             out List<Vector3Int> randomTickLocals);
         if (isAllAir)
-            return new ChunkGenResult(coord, center, new MeshData(), null,
-                true,instantTickLocals, scheduledTickLocals, randomTickLocals);
+            return new ChunkGenResult(coord, center, req.states, new MeshData(), null,
+                true, instantTickLocals, scheduledTickLocals, randomTickLocals);
 
         // ------------------------------------
         // 3. THREAD-SAFE BLOCK QUERY
@@ -57,7 +57,19 @@ public static class ThreadedChunkProcessor
             return padded[px, py, pz];
         };
         
-        Func<int,int,int,BlockStateContainer> getState = (x, y, z) => null;
+        // 3.1 Get states. Similar
+        Func<int,int,int,BlockStateContainer> getState = (x, y, z) =>
+        {
+            var states = req.states;
+            if (states == null)
+                return null;
+
+            if ((uint)x >= (uint)S || (uint)y >= (uint)S || (uint)z >= (uint)S)
+                return null;
+
+            return states[x, y, z];
+        };
+
 
         // ------------------------------------
         // 4. MESH GENERATION
@@ -76,7 +88,7 @@ public static class ThreadedChunkProcessor
         // ------------------------------------
         // 5. RETURN RESULT
         // ------------------------------------
-        return new ChunkGenResult(coord, center, meshData,blockEntities,
+        return new ChunkGenResult(coord, center, req.states ,meshData,blockEntities,
             false,instantTickLocals, scheduledTickLocals, randomTickLocals);
     }
 
