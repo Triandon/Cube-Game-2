@@ -87,13 +87,13 @@ public class CraftingTableUI : InventoryViewManager
         inventory.InventoryChanged();
     }
 
-    private void OnEnable()
+    protected override void OnEnable()
     {
         base.OnEnable();
         InventoryHolder.OnInventoryClosed += OnInventoryClose;
     }
 
-    private void OnDisable()
+    protected override void OnDisable()
     {
         base.OnDisable();
         InventoryHolder.OnInventoryClosed -= OnInventoryClose;

@@ -6,13 +6,13 @@ public class ChestUI : InventoryViewManager
     [SerializeField] private GameObject root;
     private InventoryHolder currentHolder;
 
-    private void OnEnable()
+    protected override void OnEnable()
     {
         base.OnEnable();
         InventoryHolder.OnInventoryClosed += OnInventoryClose;
     }
     
-    private void OnDisable()
+    protected override void OnDisable()
     {
         base.OnDisable();
         InventoryHolder.OnInventoryClosed -= OnInventoryClose;

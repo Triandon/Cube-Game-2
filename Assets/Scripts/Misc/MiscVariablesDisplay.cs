@@ -86,7 +86,7 @@ public class MiscVariablesDisplay : MonoBehaviour
             if (Input.GetKeyDown(KeyCode.Z))
             {
                 chunkManager.SaveWorld();
-                InventoryHolder[] allHolders = FindObjectsOfType<InventoryHolder>();
+                InventoryHolder[] allHolders = FindObjectsByType<InventoryHolder>(FindObjectsSortMode.None);
                 foreach (var holder in allHolders)
                 {
                     holder.SaveInventory();
@@ -101,7 +101,7 @@ public class MiscVariablesDisplay : MonoBehaviour
             if (Input.GetKeyDown(KeyCode.Escape))
             {
                 chunkManager.SaveWorld();
-                InventoryHolder[] allHolders = FindObjectsOfType<InventoryHolder>();
+                InventoryHolder[] allHolders = FindObjectsByType<InventoryHolder>(FindObjectsSortMode.None);
                 foreach (var holder in allHolders)
                 {
                     holder.SaveInventory();

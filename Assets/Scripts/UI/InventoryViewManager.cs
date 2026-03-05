@@ -26,12 +26,12 @@ public class InventoryViewManager : MonoBehaviour
     
     protected ItemStack cursorStack = ItemStack.Empty;
 
-    protected void OnEnable()
+    protected virtual void OnEnable()
     {
         InventoryHolder.OnInventoryDisplayRequested += OnInventoryRequested;
     }
 
-    protected void OnDisable()
+    protected virtual void OnDisable()
     {
         InventoryHolder.OnInventoryDisplayRequested -= OnInventoryRequested;
 
@@ -195,6 +195,6 @@ public class InventoryViewManager : MonoBehaviour
     private void Awake()
     {
         if (tooltipUI == null)
-            tooltipUI = FindObjectOfType<TooltipUI>(true);
+            tooltipUI = FindFirstObjectByType<TooltipUI>(FindObjectsInactive.Include);
     }
 }

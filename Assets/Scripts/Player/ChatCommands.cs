@@ -83,7 +83,7 @@ public static class ChatCommands
 		    return;
 	    }
 
-	    InventoryHolder[] holders = Object.FindObjectsOfType<InventoryHolder>();
+	    InventoryHolder[] holders = Object.FindObjectsByType<InventoryHolder>(FindObjectsSortMode.None);
 	    InventoryHolder target = null;
 
 	    foreach (var h in holders)
