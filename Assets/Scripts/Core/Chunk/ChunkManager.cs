@@ -1097,8 +1097,8 @@ namespace Core
                     }
                 }
             }
-            Debug.Log(generationQue.Count+ " " + meshQue.Count + " " + transformQueue.Count);
-            Debug.Log(meshQue);
+            //Debug.Log(generationQue.Count+ " " + meshQue.Count + " " + transformQueue.Count);
+            //Debug.Log(meshQue);
         }
 
         private void SetLodDistance()

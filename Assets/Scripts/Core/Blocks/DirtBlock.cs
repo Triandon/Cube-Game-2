@@ -40,7 +40,6 @@ namespace Core.Blocks
             if (currentGrowTime >= TotalGrowTime)
             {
                 chunkManager.SetBlockAtWorldPos(position, BlockDataBase.GrassBlock.id);
-                Debug.Log("Grown Grass!");
                 return;
             }
             
