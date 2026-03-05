@@ -1,7 +1,8 @@
+using System;
 using Core.Item;
 using UnityEngine;
 
-[SerializeField]
+[Serializable]
 public class RecipeIngredient
 {
     public ItemStackPredicate predicate = new ItemStackPredicate();

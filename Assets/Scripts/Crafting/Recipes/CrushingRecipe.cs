@@ -3,7 +3,7 @@ using Core.Item;
 using Crafting;
 using UnityEngine;
 
-[SerializeField]
+[Serializable]
 public class CrushingRecipe : IProcessRecipe
 {
     public string Id { get; }

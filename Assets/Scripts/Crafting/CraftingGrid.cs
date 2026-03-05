@@ -5,7 +5,7 @@ using UnityEngine;
 
 namespace Crafting
 {
-    [SerializeField]
+    [Serializable]
     public class CraftingGrid
     {
         public int Width { get; }
