@@ -21,6 +21,9 @@ public abstract class InventoryHolder : MonoBehaviour
     private Settings settings;
     protected virtual void Awake()
     {
+        if (inventory != null)
+            return;
+        
         inventory = new Inventory(inventorySize);
         WorldSaveSystem.LoadInventory(ownerName,inventory);
         inventory.InventoryChanged();

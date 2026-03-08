@@ -157,6 +157,16 @@ namespace Core
                 chunkCount++;
                 chunk = GenerateChunkShell(res.coord, chunkCount);
             }
+            
+            Vector3 chunkWorldPos = new Vector3(
+                res.coord.x * Chunk.CHUNK_SIZE,
+                res.coord.y * Chunk.CHUNK_SIZE,
+                res.coord.z * Chunk.CHUNK_SIZE);
+
+            if (chunk.renderer != null)
+            {
+                chunk.renderer.transform.position = chunkWorldPos;
+            }
 
             bool hasSavedBefore = WasChunkLoadedFromDisk(res.coord);
 
