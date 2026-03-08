@@ -14,6 +14,8 @@ namespace Core.Blocks.BlockLogic
 
         public static ProcessContext BuildContext(Inventory inventory)
         {
+            RecipeDataBase.Init();
+            
             ItemStack[] gridItems = new ItemStack[InputSlotCount];
             for (int i = 0; i < InputSlotCount; i++)
             {

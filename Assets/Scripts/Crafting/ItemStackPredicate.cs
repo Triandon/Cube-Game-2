@@ -2,7 +2,7 @@ using System;
 using Core.Item;
 using UnityEngine;
 
-[Serializable]
+[System.Serializable]
 public class ItemStackPredicate
 {
     public int requiredItemId;
