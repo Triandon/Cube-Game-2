@@ -34,6 +34,12 @@ namespace Core.Blocks
                 return;
             }
 
+            if (HasBlockAbove(position, chunkManager))
+            {
+                SetGrowTime(position, chunkManager, 0);
+                return;
+            }
+
             float currentGrowTime = GetGrowTime(position, chunkManager);
             currentGrowTime += Mathf.Max(0f, deltaTime);
 
@@ -107,6 +113,10 @@ namespace Core.Blocks
             return state;
         }
 
+        private static bool HasBlockAbove(Vector3Int pos, ChunkManager cm)
+        {
+            return cm.GetBlockAtWorldPos(pos + Vector3Int.up) != 0;
+        }
 
     }
 }

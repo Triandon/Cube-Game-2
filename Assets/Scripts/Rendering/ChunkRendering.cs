@@ -103,7 +103,10 @@ public class ChunkRendering : MonoBehaviour
         shearedRenderMesh.SetTriangles(meshData.triangles, 0);
         shearedRenderMesh.SetUVs(0, meshData.uvs);
         shearedRenderMesh.SetUVs(1, meshData.uvMeta);
-        shearedRenderMesh.RecalculateNormals(); // Later calc them on a sepperate thread, and apply them. Saves a lot of main thread performance!
+        //shearedRenderMesh.RecalculateNormals(); // Later calc them on a sepperate thread, and apply them. Saves a lot of main thread performance!
+        
+        shearedRenderMesh.SetNormals(meshData.normals);
+        
         //shearedRenderMesh.RecalculateTangents();
         shearedRenderMesh.RecalculateBounds();
         
