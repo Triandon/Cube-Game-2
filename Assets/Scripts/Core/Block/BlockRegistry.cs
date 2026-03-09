@@ -65,12 +65,12 @@ namespace Core.Block
                 Block b = kv.Value;
                 if (key >= 0 && key < 256)
                 {
-                    arr[key] = new Block(b.id, b.blockName, b.topIndex, b.sideIndex, b.bottomIndex, b.frontIndex);
+                    arr[key] = b;
                 }
-
-                ThreadBlockInfo = arr;
-                Debug.Log($"BlockRegistry: built thread lookup for {blocksById.Count} blocks.");
             }
+            
+            ThreadBlockInfo = arr;
+            Debug.Log($"BlockRegistry: built thread lookup for {blocksById.Count} blocks.");
         }
     }
 }

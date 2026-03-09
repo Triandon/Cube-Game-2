@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using Core;
 using Core.Block;
@@ -56,6 +57,8 @@ public static class ChunkMeshGeneratorThreaded
         {
             GreedyDirection(getBlock, getState, dir, mesh,mask, lodScale, neighbors);
         }
+        
+        AddCustomBlockMeshes(getBlock, getState, mesh, lodScale);
         return mesh;
     }
     
@@ -131,7 +134,27 @@ public static class ChunkMeshGeneratorThreaded
 
                     bool forceFace = isBorderSlice && neighborScale < lodScale;
 
-                    if (current != 0 && (neighbor == 0 || forceFace))
+                    if (IsCustomMeshBlock(current))
+                    {
+                        continue;
+                    }
+
+                    bool neighborFullyCoversFace = false;
+                    if (current != 0 && neighbor != 0)
+                    {
+                        BlockShape fullCube = new BlockShape { min = Vector3.zero, max = Vector3.one };
+                        if (TryGetBlockShape(
+                                neighbor,
+                                getState?.Invoke(x + dir.x * lodScale, y + dir.y * lodScale, z + dir.z * lodScale),
+                                out BlockShape neighborShape))
+                        {
+                            neighborFullyCoversFace = IsFaceCovered(fullCube, neighborShape, dir);
+                        }
+                    }
+
+
+
+                    if (current != 0 && (neighbor == 0 || forceFace || !neighborFullyCoversFace))
                     {
                         // Use the thread-safe BlockInfo table if available, fallback safe handling
                         int atlasIdx = -1;
@@ -272,6 +295,244 @@ public static class ChunkMeshGeneratorThreaded
         return 0;
     }
     
+    private struct BlockShape
+    {
+        public Vector3 min;
+        public Vector3 max;
+    }
+
+    private static bool IsCustomMeshBlock(byte blockId)
+    {
+        if (blockId == 0) return false;
+        var tbi = BlockRegistry.ThreadBlockInfo;
+        if (tbi == null || blockId < 0 || blockId >= tbi.Length) return false;
+        return tbi[blockId] is SlabBlock;
+    }
+
+    private static bool TryGetBlockShape(byte blockId, BlockStateContainer state, out BlockShape shape)
+    {
+        shape = default;
+
+        if (blockId == 0) return false;
+
+        var tbi = BlockRegistry.ThreadBlockInfo;
+        if (tbi == null || blockId < 0 || blockId >= tbi.Length)
+            return false;
+
+        Block block = tbi[blockId];
+        if (block == null)
+            return false;
+
+        if (block is not SlabBlock)
+        {
+            shape.min = Vector3.zero;
+            shape.max = Vector3.one;
+            return true;
+        }
+
+        float height = 0.5f;
+        string h = state?.GetState(SlabBlock.HeightState);
+        if (!string.IsNullOrEmpty(h))
+            float.TryParse(h, NumberStyles.Float, CultureInfo.InvariantCulture, out height);
+
+        height = Mathf.Clamp(height, 0.1f, 1f);
+
+        string orientation = state?.GetState(SlabBlock.OrientationState) ?? "up";
+        shape.min = Vector3.zero;
+        shape.max = Vector3.one;
+
+        switch (orientation)
+        {
+            case "down":
+                shape.min.y = 1f - height;
+                break;
+            case "north":
+                shape.min.z = 1f - height;
+                break;
+            case "south":
+                shape.max.z = height;
+                break;
+            case "east":
+                shape.min.x = 1f - height;
+                break;
+            case "west":
+                shape.max.x = height;
+                break;
+            default: // up
+                shape.max.y = height;
+                break;
+        }
+
+        return true;
+    }
+
+    private static void AddCustomBlockMeshes(Func<int,int,int,byte> getBlock,
+        Func<int, int, int, BlockStateContainer> getState,
+        MeshData mesh,
+        int lodScale)
+    {
+        if (lodScale != 1)
+            return;
+
+        for (int x = 0; x < CHUNK_SIZE; x++)
+        for (int y = 0; y < CHUNK_SIZE; y++)
+        for (int z = 0; z < CHUNK_SIZE; z++)
+        {
+            byte blockId = getBlock(x, y, z);
+            if (!IsCustomMeshBlock(blockId))
+                continue;
+
+            var block = BlockRegistry.ThreadBlockInfo[blockId];
+            BlockStateContainer state = getState?.Invoke(x, y, z);
+            if (!TryGetBlockShape(blockId, state, out BlockShape shape))
+                continue;
+
+            AddShapeFace(getBlock, getState, mesh, new Vector3Int(x, y, z), shape, Vector3Int.up, block.topIndex);
+            AddShapeFace(getBlock, getState, mesh, new Vector3Int(x, y, z), shape, Vector3Int.down, block.bottomIndex);
+            AddShapeFace(getBlock, getState, mesh, new Vector3Int(x, y, z), shape, Vector3Int.right, block.sideIndex);
+            AddShapeFace(getBlock, getState, mesh, new Vector3Int(x, y, z), shape, Vector3Int.left, block.sideIndex);
+            AddShapeFace(getBlock, getState, mesh, new Vector3Int(x, y, z), shape, Vector3Int.forward, block.sideIndex);
+            AddShapeFace(getBlock, getState, mesh, new Vector3Int(x, y, z), shape, Vector3Int.back, block.sideIndex);
+        }
+    }
+
+    private static void AddShapeFace(Func<int,int,int,byte> getBlock,
+        Func<int, int, int, BlockStateContainer> getState,
+        MeshData mesh,
+        Vector3Int pos,
+        BlockShape shape,
+        Vector3Int dir,
+        int atlasIndex)
+    {
+        if (atlasIndex < 0 || !ShouldRenderShapeFace(getBlock, getState, pos, shape, dir))
+            return;
+
+        Vector3[] faceVerts = VoxelData.GetFaceVertices(dir);
+        if (faceVerts == null || faceVerts.Length != 4) return;
+
+        Vector3 min = shape.min;
+        Vector3 max = shape.max;
+
+        Vector3 scale = max - min;
+        int baseIndex = mesh.vertices.Count;
+        foreach (Vector3 vert in faceVerts)
+        {
+            Vector3 local = new Vector3(
+                min.x + vert.x * scale.x,
+                min.y + vert.y * scale.y,
+                min.z + vert.z * scale.z);
+            mesh.vertices.Add(pos + local);
+            mesh.normals.Add(dir);
+        }
+
+        int i0 = baseIndex + 0;
+        int i1 = baseIndex + 1;
+        int i2 = baseIndex + 2;
+        int i3 = baseIndex + 3;
+
+        int t0a = i0, t0b = i2, t0c = i1;
+        int t1a = i2, t1b = i3, t1c = i1;
+
+        Vector3 triA = mesh.vertices[t0b] - mesh.vertices[t0a];
+        Vector3 triB = mesh.vertices[t0c] - mesh.vertices[t0a];
+        Vector3 triNormal = Vector3.Cross(triA, triB);
+
+        if (Vector3.Dot(triNormal, (Vector3)dir) < 0f)
+        {
+            t0b = i1;
+            t0c = i2;
+            t1b = i1;
+            t1c = i3;
+        }
+
+        mesh.triangles.Add(t0a);
+        mesh.triangles.Add(t0b);
+        mesh.triangles.Add(t0c);
+        mesh.triangles.Add(t1a);
+        mesh.triangles.Add(t1b);
+        mesh.triangles.Add(t1c);
+
+        int width = Mathf.RoundToInt(Mathf.Max(1f, (dir.y != 0 ? scale.x : dir.x != 0 ? scale.z : scale.x)));
+        int height = Mathf.RoundToInt(Mathf.Max(1f, (dir.y != 0 ? scale.z : dir.x != 0 ? scale.y : scale.y)));
+        AddFaceUV(dir, atlasIndex, width, height, mesh);
+
+        int colBase = mesh.colliderVertices.Count;
+        mesh.colliderVertices.Add(mesh.vertices[baseIndex + 0]);
+        mesh.colliderVertices.Add(mesh.vertices[baseIndex + 1]);
+        mesh.colliderVertices.Add(mesh.vertices[baseIndex + 2]);
+        mesh.colliderVertices.Add(mesh.vertices[baseIndex + 3]);
+
+        int c0 = colBase + 0;
+        int c1 = colBase + 1;
+        int c2 = colBase + 2;
+        int c3 = colBase + 3;
+
+        int ct0a = c0, ct0b = c2, ct0c = c1;
+        int ct1a = c2, ct1b = c3, ct1c = c1;
+
+        if (Vector3.Dot(triNormal, (Vector3)dir) < 0f)
+        {
+            ct0b = c1;
+            ct0c = c2;
+            ct1b = c1;
+            ct1c = c3;
+        }
+
+        mesh.colliderTriangles.Add(ct0a);
+        mesh.colliderTriangles.Add(ct0b);
+        mesh.colliderTriangles.Add(ct0c);
+        mesh.colliderTriangles.Add(ct1a);
+        mesh.colliderTriangles.Add(ct1b);
+        mesh.colliderTriangles.Add(ct1c);
+    }
+    
+    private static bool ShouldRenderShapeFace(Func<int,int,int,byte> getBlock,
+        Func<int, int, int, BlockStateContainer> getState,
+        Vector3Int pos,
+        BlockShape shape,
+        Vector3Int dir)
+    {
+        Vector3Int neighborPos = pos + dir;
+        byte neighborId = getBlock(neighborPos.x, neighborPos.y, neighborPos.z);
+        if (neighborId == 0)
+            return true;
+
+        if (!TryGetBlockShape(neighborId, getState?.Invoke(neighborPos.x, neighborPos.y, neighborPos.z), out BlockShape neighborShape))
+            return true;
+
+        return !IsFaceCovered(shape, neighborShape, dir);
+    }
+
+    private static bool IsFaceCovered(BlockShape self, BlockShape other, Vector3Int dir)
+    {
+        const float eps = 0.0001f;
+
+        if (dir == Vector3Int.right)
+            return Mathf.Abs(self.max.x - (other.min.x + 1f)) < eps &&
+                   other.min.y <= self.min.y + eps && other.max.y >= self.max.y - eps &&
+                   other.min.z <= self.min.z + eps && other.max.z >= self.max.z - eps;
+        if (dir == Vector3Int.left)
+            return Mathf.Abs(self.min.x - (other.max.x - 1f)) < eps &&
+                   other.min.y <= self.min.y + eps && other.max.y >= self.max.y - eps &&
+                   other.min.z <= self.min.z + eps && other.max.z >= self.max.z - eps;
+        if (dir == Vector3Int.up)
+            return Mathf.Abs(self.max.y - (other.min.y + 1f)) < eps &&
+                   other.min.x <= self.min.x + eps && other.max.x >= self.max.x - eps &&
+                   other.min.z <= self.min.z + eps && other.max.z >= self.max.z - eps;
+        if (dir == Vector3Int.down)
+            return Mathf.Abs(self.min.y - (other.max.y - 1f)) < eps &&
+                   other.min.x <= self.min.x + eps && other.max.x >= self.max.x - eps &&
+                   other.min.z <= self.min.z + eps && other.max.z >= self.max.z - eps;
+        if (dir == Vector3Int.forward)
+            return Mathf.Abs(self.max.z - (other.min.z + 1f)) < eps &&
+                   other.min.x <= self.min.x + eps && other.max.x >= self.max.x - eps &&
+                   other.min.y <= self.min.y + eps && other.max.y >= self.max.y - eps;
+
+        return Mathf.Abs(self.min.z - (other.max.z - 1f)) < eps &&
+               other.min.x <= self.min.x + eps && other.max.x >= self.max.x - eps &&
+               other.min.y <= self.min.y + eps && other.max.y >= self.max.y - eps;
+    }
+
 
     
     private static void AddQuadFromMask(int u, int v, int width, int height, int w, Vector3Int dir, int atlasIndex, MeshData mesh, int lodScale)

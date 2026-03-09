@@ -18,6 +18,7 @@ namespace Core.Block
         public static Block DeadGrassBlock;
         public static Block CraftingTableBlock;
         public static Block CrusherBlock;
+        public static Block SlabBlock;
         
         static BlockDataBase()
         {
@@ -70,6 +71,11 @@ namespace Core.Block
             // Crusher
             CrusherBlock = new CrusherBlock(11, "CrusherBlock", top: 13, side: 12, bottom: 12);
             BlockRegistry.RegisterBlock(CrusherBlock);
+            
+            // SlabBlock
+            // Slab block (fixed half-height slab with orientation)
+            SlabBlock = new SlabBlock(12, "SlabBlock", top: 12, side: 12, bottom: 12);
+            BlockRegistry.RegisterBlock(SlabBlock);
             
             Debug.Log("Blocks registered (static)");
         }

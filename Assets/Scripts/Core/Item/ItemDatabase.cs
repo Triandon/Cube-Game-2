@@ -39,6 +39,9 @@ namespace Core.Item
             
             //Crusher
             ItemRegistry.RegisterItem(new Item(11, itemName:"CrusherBlock", isBlock:true, blockId: 11, textureIndex: 13, maxStackSize: 1));
+            
+            //Slab
+            ItemRegistry.RegisterItem(new Item(12, itemName:"SlabBlock", isBlock:true, blockId: 12, textureIndex: 12, maxStackSize: 64));
         }
     
         public static void Init(){}
