@@ -405,8 +405,8 @@ namespace Core
                 meshOnly = true;
             }
 
-            var neighbors = CaptureNeighborSnapshots(coord);
-            var req = new ChunkGenRequest(coord, lodScale, neighborLODInfo, savedBlocks, savedStates, meshOnly, neighbors);
+            var (neighbors, neighborStates) = CaptureNeighborSnapshots(coord);
+            var req = new ChunkGenRequest(coord, lodScale, neighborLODInfo, savedBlocks, savedStates, meshOnly, neighbors, neighborStates);
 
             pendingRequests.Add(coord);
             threadedWorker.EnqueueRequest(req);
@@ -784,9 +784,10 @@ namespace Core
             }
         }
 
-        private Dictionary<Vector3Int, byte[,,]> CaptureNeighborSnapshots(Vector3Int coord)
+        private (Dictionary<Vector3Int, byte[,,]> blocks, Dictionary<Vector3Int, BlockStateContainer[,,]> states) CaptureNeighborSnapshots(Vector3Int coord)
         {
-            var dict = new Dictionary<Vector3Int, byte[,,]>();
+            var blockDict = new Dictionary<Vector3Int, byte[,,]>();
+            var stateDict = new Dictionary<Vector3Int, BlockStateContainer[,,]>();
             
             for (int ox = -1; ox <= 1; ox++)
             for (int oy = -1; oy <= 1; oy++)
@@ -798,10 +799,12 @@ namespace Core
                     continue;
 
                 // SNAPSHOT (important!)
-                dict[nc] = (byte[,,])c.blocks.Clone();
+                blockDict[nc] = (byte[,,])c.blocks.Clone();
+                if (c.states != null)
+                    stateDict[nc] = (BlockStateContainer[,,])c.states.Clone();
             }
 
-            return dict;
+            return (blockDict, stateDict);
         }
 
         private bool IsChunkBusy(Vector3Int coord, Chunk chunk)

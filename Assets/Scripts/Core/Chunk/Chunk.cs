@@ -101,9 +101,72 @@ namespace Core
 
         public BlockStateContainer GetStateAt(int x, int y, int z)
         {
-            if (x < 0 || y < 0 || z < 0 || x >= CHUNK_SIZE || y >= CHUNK_SIZE || z >= CHUNK_SIZE) 
+            if (states == null)
                 return null;
-            return states[x, y, z];
+
+            // If inside chunk, return directly
+            if (x >= 0 && x < CHUNK_SIZE &&
+                y >= 0 && y < CHUNK_SIZE &&
+                z >= 0 && z < CHUNK_SIZE)
+            {
+                return states[x, y, z];
+            }
+
+            // Outside this chunk -> request from neighbor chunk
+            int localX = x;
+            int localY = y;
+            int localZ = z;
+            Vector3Int neighborCoord = coord;
+
+            if (x < 0)
+            {
+                neighborCoord.x -= 1;
+                localX = x + CHUNK_SIZE;
+            }
+            else if (x >= CHUNK_SIZE)
+            {
+                neighborCoord.x += 1;
+                localX = x - CHUNK_SIZE;
+            }
+
+            if (y < 0)
+            {
+                neighborCoord.y -= 1;
+                localY = y + CHUNK_SIZE;
+            }
+            else if (y >= CHUNK_SIZE)
+            {
+                neighborCoord.y += 1;
+                localY = y - CHUNK_SIZE;
+            }
+
+            if (z < 0)
+            {
+                neighborCoord.z -= 1;
+                localZ = z + CHUNK_SIZE;
+            }
+            else if (z >= CHUNK_SIZE)
+            {
+                neighborCoord.z += 1;
+                localZ = z - CHUNK_SIZE;
+            }
+
+            if (neighborCoord == coord)
+            {
+                return states[localX, localY, localZ];
+            }
+
+            if (chunkManager == null || World.Instance == null)
+                return null;
+
+            if (!World.Instance.IsChunkInsideOfWorld(neighborCoord))
+                return null;
+
+            Chunk neighbor = chunkManager.GetChunk(neighborCoord);
+            if (neighbor == null)
+                return null;
+
+            return neighbor.GetStateAt(localX, localY, localZ);
         }
 
         public Block.Block GetBlockObjet(int x, int y, int z)

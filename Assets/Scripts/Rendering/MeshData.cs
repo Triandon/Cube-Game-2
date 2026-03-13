@@ -340,14 +340,14 @@ public static class ChunkMeshGeneratorThreaded
             return false;
 
         float height = 1f;
-        string h = state?.GetState(BlockStateKeys.HeightState);
+        string h = GetStateValueOrDefault(block, state, BlockStateKeys.HeightState);
         
         if (!string.IsNullOrEmpty(h))
             float.TryParse(h, NumberStyles.Float, CultureInfo.InvariantCulture, out height);
 
         height = Mathf.Clamp(height, 0.1f, 1f);
 
-        string orientation = state?.GetState(BlockStateKeys.DirectionalFacing) ?? "up";
+        string orientation = GetStateValueOrDefault(block, state, BlockStateKeys.DirectionalFacing) ?? "up";
         shape.min = Vector3.zero;
         shape.max = Vector3.one;
 
@@ -375,6 +375,16 @@ public static class ChunkMeshGeneratorThreaded
 
         return true;
     }
+    
+    private static string GetStateValueOrDefault(Block block, BlockStateContainer state, string stateKey)
+    {
+        string value = state?.GetState(stateKey);
+        if (!string.IsNullOrEmpty(value))
+            return value;
+
+        return block?.GetState(stateKey);
+    }
+
     
     private static bool IsHorizontalSlabCandidate(BlockShape shape)
     {

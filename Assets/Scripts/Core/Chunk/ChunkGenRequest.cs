@@ -12,10 +12,12 @@ public class ChunkGenRequest
     public BlockStateContainer[,,] states;
     public bool meshOnly; // true = skips terrain gen
     public Dictionary<Vector3Int, byte[,,]> neighborBlocks;
+    public Dictionary<Vector3Int, BlockStateContainer[,,]> neighborStates;
 
     public ChunkGenRequest(Vector3Int coord, 
         int lodScale, ChunkMeshGeneratorThreaded.NeighborLODInfo neighborLods,
-        byte[,,] blocks, BlockStateContainer[,,] states, bool meshOnly, Dictionary<Vector3Int, byte[,,]> neighborBlocks)
+        byte[,,] blocks, BlockStateContainer[,,] states, bool meshOnly, Dictionary<Vector3Int, byte[,,]> neighborBlocks,
+        Dictionary<Vector3Int, BlockStateContainer[,,]> neighborStates)
     {
         this.coord = coord;
         this.lodScale = lodScale;
@@ -24,5 +26,6 @@ public class ChunkGenRequest
         this.states = states;
         this.meshOnly = meshOnly;
         this.neighborBlocks = neighborBlocks;
+        this.neighborStates = neighborStates;
     }
 }

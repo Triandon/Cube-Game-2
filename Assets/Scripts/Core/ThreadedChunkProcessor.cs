@@ -17,17 +17,20 @@ public static class ThreadedChunkProcessor
         
         byte[,,] center;
         byte[,,] padded;
+        BlockStateContainer[,,] paddedStates;
 
         //1 Builds block data
         if (req.meshOnly)
         {
             center = req.blocks;
             padded = BuildPaddedFromCenter(center);
+            paddedStates = BuildPaddedStatesFromCenter(coord, req.states, req.neighborStates);
         }
         else
         {
             padded = GenerateTerrainPadded(coord, req.neighborBlocks);
             center = ExtractCenter(padded);
+            paddedStates = null;
         }
         
         // 1.1
@@ -60,14 +63,18 @@ public static class ThreadedChunkProcessor
         // 3.1 Get states. Similar
         Func<int,int,int,BlockStateContainer> getState = (x, y, z) =>
         {
-            var states = req.states;
+            var states = paddedStates;
             if (states == null)
                 return null;
 
-            if ((uint)x >= (uint)S || (uint)y >= (uint)S || (uint)z >= (uint)S)
-                return null;
+            int px = x + 1;
+            int py = y + 1;
+            int pz = z + 1;
 
-            return states[x, y, z];
+            if ((uint)px >= (uint)(S + 2) || (uint)py >= (uint)(S + 2) || (uint)pz >= (uint)(S + 2))
+                return null;
+            
+            return states[px, py, pz];
         };
 
 
@@ -105,6 +112,55 @@ public static class ThreadedChunkProcessor
 
         return padded;
     }
+    
+    private static BlockStateContainer[,,] BuildPaddedStatesFromCenter(
+        Vector3Int coord,
+        BlockStateContainer[,,] centerStates,
+        Dictionary<Vector3Int, BlockStateContainer[,,]> neighbors)
+    {
+        int S = Chunk.CHUNK_SIZE;
+
+        if (centerStates == null && (neighbors == null || neighbors.Count == 0))
+            return null;
+
+        BlockStateContainer[,,] padded = new BlockStateContainer[S + 2, S + 2, S + 2];
+
+        if (centerStates != null)
+        {
+            for (int x = 0; x < S; x++)
+            for (int y = 0; y < S; y++)
+            for (int z = 0; z < S; z++)
+                padded[x + 1, y + 1, z + 1] = centerStates[x, y, z];
+        }
+
+        if (neighbors != null)
+        {
+            foreach (var kv in neighbors)
+            {
+                Vector3Int delta = kv.Key - coord;
+                BlockStateContainer[,,] n = kv.Value;
+                if (n == null)
+                    continue;
+
+                if (delta == Vector3Int.right)
+                    CopyFace(n, padded, srcX: 0, dstX: S + 1);
+                else if (delta == Vector3Int.left)
+                    CopyFace(n, padded, srcX: S - 1, dstX: 0);
+                else if (delta == Vector3Int.forward)
+                    CopyFace(n, padded, srcZ: 0, dstZ: S + 1);
+                else if (delta == Vector3Int.back)
+                    CopyFace(n, padded, srcZ: S - 1, dstZ: 0);
+                else if (delta == Vector3Int.up)
+                    CopyFace(n, padded, srcY: 0, dstY: S + 1);
+                else if (delta == Vector3Int.down)
+                    CopyFace(n, padded, srcY: S - 1, dstY: 0);
+            }
+        }
+
+        return padded;
+    }
+
+
 
     private static byte[,,] ExtractCenter(byte[,,] padded)
     {
@@ -223,6 +279,32 @@ public static class ThreadedChunkProcessor
             dst[dx, dy, dz] = src[sx, sy, sz];
         }
     }
+    
+    private static void CopyFace<T>(
+        T[,,] src,
+        T[,,] dst,
+        int srcX = -1, int dstX = -1,
+        int srcY = -1, int dstY = -1,
+        int srcZ = -1, int dstZ = -1)
+    {
+        int S = Chunk.CHUNK_SIZE;
+
+        for (int x = 0; x < S; x++)
+        for (int y = 0; y < S; y++)
+        for (int z = 0; z < S; z++)
+        {
+            int sx = srcX >= 0 ? srcX : x;
+            int sy = srcY >= 0 ? srcY : y;
+            int sz = srcZ >= 0 ? srcZ : z;
+
+            int dx = dstX >= 0 ? dstX : x;
+            int dy = dstY >= 0 ? dstY : y;
+            int dz = dstZ >= 0 ? dstZ : z;
+
+            dst[dx, dy, dz] = src[sx, sy, sz];
+        }
+    }
+
 
     
     private static List<Vector3Int> DetectBlockEntities(byte[,,] center)
