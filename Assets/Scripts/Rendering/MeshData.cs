@@ -58,7 +58,7 @@ public static class ChunkMeshGeneratorThreaded
 
         foreach (var dir in dirs)
         {
-            GreedyDirection(getBlock, dir, mesh, mask, lodScale, neighbors, shapeCache);
+            GreedyDirection(getBlock, getState, dir, mesh, mask, lodScale, neighbors, shapeCache);
         }
         
         AddCustomBlockMeshes(getBlock, getState, mesh, lodScale, shapeCache);
@@ -67,7 +67,8 @@ public static class ChunkMeshGeneratorThreaded
     
     // Greedy meshing path intentionally handles only full cube blocks.
     private static void GreedyDirection(Func<int,int,int,byte> getBlock,
-        Vector3Int dir, MeshData mesh, MaskCell[,] mask, int lodScale, NeighborLODInfo neighbors, ShapeCacheCell[,,] shapeCache)
+            Func<int, int, int, BlockStateContainer> getState,
+            Vector3Int dir, MeshData mesh, MaskCell[,] mask, int lodScale, NeighborLODInfo neighbors, ShapeCacheCell[,,] shapeCache)
     {
         int neighborScale =
             dir == Vector3Int.right   ? neighbors.posX :
@@ -124,7 +125,21 @@ public static class ChunkMeshGeneratorThreaded
                     else
                     {
                         byte neighbor = SampleBlock(getBlock, nx, ny, nz, lodScale);
-                        neighborBlocksFace = neighbor != 0;
+                        if (neighbor == 0)
+                        {
+                            neighborBlocksFace = false;
+                        }
+                        else
+                        {
+                            // Border neighbor: only occlude if the neighbor shape actually covers this full-cube face.
+                            
+                            BlockShape fullCube = new BlockShape { min = Vector3.zero, max = Vector3.one };
+                            BlockStateContainer neighborState = getState?.Invoke(nx, ny, nz);
+                            if (TryGetBlockShape(neighbor, neighborState, out BlockShape neighborShape))
+                                neighborBlocksFace = IsFaceCovered(fullCube, neighborShape, dir);
+                            else
+                                neighborBlocksFace = true;
+                        }
                     }
 
                     if (neighborBlocksFace && !forceFace)
