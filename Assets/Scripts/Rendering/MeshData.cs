@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
-using System.Linq;
+using System.Runtime.CompilerServices;
 using Core;
 using Core.Block;
 using UnityEngine;
@@ -39,6 +39,31 @@ public static class ChunkMeshGeneratorThreaded
         public int posY, negY;
         public int posZ, negZ;
     }
+
+    private enum FacingDirection : byte
+    {
+        None,
+        North,
+        South,
+        East,
+        West
+    }
+
+    private struct BlockEval
+    {
+        public byte blockId;
+        public bool isCustomShape;
+        public bool hasShape;
+        public BlockShape shape;
+        public FacingDirection facing;
+        public int sideAtlas;
+        public int topAtlas;
+        public int bottomAtlas;
+        public int frontAtlas;
+    }
+
+    private static int ToCacheIndex(int x, int y, int z) => (x * CHUNK_SIZE + y) * CHUNK_SIZE + z;
+    private static bool IsInChunkBounds(int x, int y, int z) => (uint)x < CHUNK_SIZE && (uint)y < CHUNK_SIZE && (uint)z < CHUNK_SIZE;
     
     public static MeshData GenerateMeshData(Func<int,int,int,byte> getBlock,
         Func<int, int, int, BlockStateContainer> getState, int lodScale, NeighborLODInfo neighbors)
@@ -47,6 +72,19 @@ public static class ChunkMeshGeneratorThreaded
 
         // Local re-usable structures for mask and loops
         MaskCell[,] mask = new MaskCell[CHUNK_SIZE, CHUNK_SIZE];
+        int cacheSize = CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE;
+        byte[] blockCache = new byte[cacheSize];
+        BlockStateContainer[] stateCache = new BlockStateContainer[cacheSize];
+        bool[] stateReady = new bool[cacheSize];
+        BlockEval[] evalCache = new BlockEval[cacheSize];
+        bool[] evalReady = new bool[cacheSize];
+
+        for (int x = 0; x < CHUNK_SIZE; x++)
+        for (int y = 0; y < CHUNK_SIZE; y++)
+        for (int z = 0; z < CHUNK_SIZE; z++)
+        {
+            blockCache[ToCacheIndex(x, y, z)] = getBlock(x, y, z);
+        }
 
         Vector3Int[] dirs = new Vector3Int[]
         {
@@ -57,16 +95,16 @@ public static class ChunkMeshGeneratorThreaded
 
         foreach (var dir in dirs)
         {
-            GreedyDirection(getBlock, getState, dir, mesh,mask, lodScale, neighbors);
+            GreedyDirection(getBlock, getState, dir, mesh, mask, lodScale, neighbors, blockCache, stateCache, stateReady, evalCache, evalReady);
         }
-        
-        AddCustomBlockMeshes(getBlock, getState, mesh, lodScale);
+
+        AddCustomBlockMeshes(getBlock, getState, mesh, lodScale, blockCache, stateCache, stateReady, evalCache, evalReady);
         return mesh;
     }
     
     // Greedy direction implementation adapted to be fully data-only and match original behavior
-    private static void GreedyDirection(Func<int,int,int,byte> getBlock, Func<int, int, int, BlockStateContainer> getState, 
-        Vector3Int dir, MeshData mesh,MaskCell[,] mask, int lodScale, NeighborLODInfo neighbors)
+    private static void GreedyDirection(Func<int,int,int,byte> getBlock, Func<int, int, int, BlockStateContainer> getState,
+        Vector3Int dir, MeshData mesh, MaskCell[,] mask, int lodScale, NeighborLODInfo neighbors, byte[] blockCache, BlockStateContainer[] stateCache, bool[] stateReady, BlockEval[] evalCache, bool[] evalReady)
     {
         int neighborScale =
             dir == Vector3Int.right   ? neighbors.posX :
@@ -75,159 +113,70 @@ public static class ChunkMeshGeneratorThreaded
             dir == Vector3Int.down    ? neighbors.negY :
             dir == Vector3Int.forward ? neighbors.posZ :
             neighbors.negZ;
-        
-        int uMax = CHUNK_SIZE;
-        int vMax = CHUNK_SIZE;
-        int wMax = CHUNK_SIZE;
 
         int mSize = CHUNK_SIZE / lodScale;
 
-        for (int w = 0; w < wMax; w += lodScale)
+        for (int w = 0; w < CHUNK_SIZE; w += lodScale)
         {
             bool isBorderSlice =
-                (dir == Vector3Int.left     && w == 0) ||
-                (dir == Vector3Int.right    && w == wMax - lodScale) ||
-                (dir == Vector3Int.down     && w == 0) ||
-                (dir == Vector3Int.up       && w == wMax - lodScale) ||
-                (dir == Vector3Int.back     && w == 0) ||
-                (dir == Vector3Int.forward  && w == wMax - lodScale);
+                (dir == Vector3Int.left && w == 0) ||
+                (dir == Vector3Int.right && w == CHUNK_SIZE - lodScale) ||
+                (dir == Vector3Int.down && w == 0) ||
+                (dir == Vector3Int.up && w == CHUNK_SIZE - lodScale) ||
+                (dir == Vector3Int.back && w == 0) ||
+                (dir == Vector3Int.forward && w == CHUNK_SIZE - lodScale);
 
-            
-            // build mask for this slice
-            for (int u = 0; u < uMax; u += lodScale)
+            for (int u = 0; u < CHUNK_SIZE; u += lodScale)
             {
                 int mu = u / lodScale;
-                
-                for (int v = 0; v < vMax; v += lodScale)
+
+                for (int v = 0; v < CHUNK_SIZE; v += lodScale)
                 {
                     int mv = v / lodScale;
-                    
-                    mask[mu, mv].occluded = false;
-                    mask[mu, mv].atlasIndex = -1;
+                    ref MaskCell cell = ref mask[mu, mv];
+                    cell.occluded = false;
+                    cell.atlasIndex = -1;
 
-                    int x = 0, y = 0, z = 0;
-                    if (dir.x != 0)
-                    {
-                        x = w;
-                        y = u;
-                        z = v;
-                    }
-                    else if (dir.y != 0)
-                    {
-                        x = u;
-                        y = w;
-                        z = v;
-                    }
-                    else // z != 0
-                    {
-                        x = u;
-                        y = v;
-                        z = w;
-                    }
+                    GetWorldCoordsForDir(dir, w, u, v, out int x, out int y, out int z);
 
-                    byte current = SampleBlock(getBlock, x, y, z, lodScale);
-                    byte neighbor = SampleBlock(
-                        getBlock,
-                        x + dir.x * lodScale,
-                        y + dir.y * lodScale,
-                        z + dir.z * lodScale,
-                        lodScale
-                    );
+                    byte current = SampleBlock(blockCache, getBlock, x, y, z, lodScale);
+                    if (current == 0)
+                        continue;
+
+                    BlockEval currentEval = GetBlockEval(getBlock, getState, x, y, z, current, blockCache, stateCache, stateReady, evalCache, evalReady);
+                    if (currentEval.isCustomShape)
+                        continue;
+
+                    int nx = x + dir.x * lodScale;
+                    int ny = y + dir.y * lodScale;
+                    int nz = z + dir.z * lodScale;
+                    byte neighbor = SampleBlock(blockCache, getBlock, nx, ny, nz, lodScale);
 
                     bool forceFace = isBorderSlice && neighborScale < lodScale;
-
-                    if (IsCustomMeshBlock(current, getState?.Invoke(x, y, z)))
-                    {
-                        continue;
-                    }
-
                     bool neighborFullyCoversFace = false;
-                    if (current != 0 && neighbor != 0)
+
+                    if (!forceFace && neighbor != 0)
                     {
-                        BlockShape fullCube = new BlockShape { min = Vector3.zero, max = Vector3.one };
-                        if (TryGetBlockShape(
-                                neighbor,
-                                getState?.Invoke(x + dir.x * lodScale, y + dir.y * lodScale, z + dir.z * lodScale),
-                                out BlockShape neighborShape))
+                        BlockEval neighborEval = GetBlockEval(getBlock, getState, nx, ny, nz, neighbor, blockCache, stateCache, stateReady, evalCache, evalReady);
+                        if (neighborEval.hasShape)
                         {
-                            neighborFullyCoversFace = IsFaceCovered(fullCube, neighborShape, dir);
+                            BlockShape fullCube = new BlockShape { min = Vector3.zero, max = Vector3.one };
+                            neighborFullyCoversFace = IsFaceCovered(fullCube, neighborEval.shape, dir);
                         }
                     }
 
-
-
-                    if (current != 0 && (neighbor == 0 || forceFace || !neighborFullyCoversFace))
+                    if (neighbor == 0 || forceFace || !neighborFullyCoversFace)
                     {
-                        // Use the thread-safe BlockInfo table if available, fallback safe handling
-                        int atlasIdx = -1;
-                        var tbi = BlockRegistry.ThreadBlockInfo;
-                        if (tbi != null && current >= 0 && current < tbi.Length)
-                        {
-                            var block = tbi[current];
-                            BlockStateContainer state = getState?.Invoke(x, y, z);
-
-                            if (block != null)
-                            {
-                                if (dir == Vector3Int.up) atlasIdx = block.topIndex;
-                                else if (dir == Vector3Int.down) atlasIdx = block.bottomIndex;
-                                else
-                                {
-                                    // Default to sides
-                                    atlasIdx = block.sideIndex;
-                                    
-                                    //Check if the block has facing state
-                                    string facing = state?.GetState("facing");
-                                    bool isFront = false;
-                                    if (facing != null)
-                                    {
-                                        if ((dir == Vector3Int.forward && facing == "north") ||
-                                            (dir == Vector3Int.back && facing == "south") ||
-                                            (dir == Vector3Int.right && facing == "east") ||
-                                            (dir == Vector3Int.left && facing == "west"))
-                                        {
-                                            isFront = true;
-                                        }
-
-                                        atlasIdx = isFront ? block.frontIndex : block.sideIndex;
-                                    }
-                                }
-                            }
-
-
-                            // Legacy code;
-                            //var info = tbi[current];
-                            //atlasIdx = info.sideIndex;
-                            //if (dir == Vector3Int.up) atlasIdx = info.topIndex;
-                            //if (dir == Vector3Int.down) atlasIdx = info.bottomIndex;
-                        }
-                        else
-                        {
-                            // As a fallback (if ThreadBlockInfo not set), try to use main-thread BlockRegistry safely.
-                            // WARNING: calling BlockRegistry.GetBlock on a worker thread is unsafe.
-                            // On main thread it will work but in worker threads you must ensure ThreadBlockInfo is built.
-                            var block = BlockRegistry.GetBlock((int)current);
-                            if (block != null)
-                            {
-                                atlasIdx = block.sideIndex;
-                                if (dir == Vector3Int.up) atlasIdx = block.topIndex;
-                                if (dir == Vector3Int.down) atlasIdx = block.bottomIndex;
-                            }
-                        }
-
+                        int atlasIdx = GetAtlasIndexForFace(currentEval, dir);
                         if (atlasIdx >= 0)
                         {
-                            mask[mu, mv].occluded = true;
-                            mask[mu, mv].atlasIndex = atlasIdx;
-                        }
-                        else
-                        {
-                            mask[mu, mv].occluded = false;
+                            cell.occluded = true;
+                            cell.atlasIndex = atlasIdx;
                         }
                     }
                 }
             }
 
-            // Greedy merge the mask into quads
             for (int u = 0; u < mSize; u++)
             {
                 for (int v = 0; v < mSize;)
@@ -240,13 +189,10 @@ public static class ChunkMeshGeneratorThreaded
 
                     int atlasIndex = mask[u, v].atlasIndex;
 
-                    // extend width (v direction)
                     int width = 1;
-                    while (v + width < mSize && mask[u, v + width].occluded &&
-                           mask[u, v + width].atlasIndex == atlasIndex)
+                    while (v + width < mSize && mask[u, v + width].occluded && mask[u, v + width].atlasIndex == atlasIndex)
                         width++;
 
-                    // extend height (u direction)
                     int height = 1;
                     bool done = false;
                     while (u + height < mSize && !done)
@@ -263,33 +209,197 @@ public static class ChunkMeshGeneratorThreaded
                         if (!done) height++;
                     }
 
-                    // clear mask region
                     for (int du = 0; du < height; du++)
-                        for (int dv = 0; dv < width; dv++)
-                            mask[u + du, v + dv].occluded = false;
+                    for (int dv = 0; dv < width; dv++)
+                        mask[u + du, v + dv].occluded = false;
 
-                    // Add the merged quad: compute its 4 corner positions in chunk-local space
                     AddQuadFromMask(u, v, width, height, w, dir, atlasIndex, mesh, lodScale);
-                    
-                    // advance v cursor
                     v += width;
                 }
             }
-
-        } // end w loop
+        }
     }
-    
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void GetWorldCoordsForDir(Vector3Int dir, int w, int u, int v, out int x, out int y, out int z)
+    {
+        if (dir.x != 0)
+        {
+            x = w; y = u; z = v;
+        }
+        else if (dir.y != 0)
+        {
+            x = u; y = w; z = v;
+        }
+        else
+        {
+            x = u; y = v; z = w;
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static int GetAtlasIndexForFace(BlockEval eval, Vector3Int dir)
+    {
+        if (dir == Vector3Int.up) return eval.topAtlas;
+        if (dir == Vector3Int.down) return eval.bottomAtlas;
+
+        if (eval.facing == FacingDirection.None)
+            return eval.sideAtlas;
+
+        bool isFront =
+            (dir == Vector3Int.forward && eval.facing == FacingDirection.North) ||
+            (dir == Vector3Int.back && eval.facing == FacingDirection.South) ||
+            (dir == Vector3Int.right && eval.facing == FacingDirection.East) ||
+            (dir == Vector3Int.left && eval.facing == FacingDirection.West);
+
+        return isFront ? eval.frontAtlas : eval.sideAtlas;
+    }
+
+    private static BlockEval GetBlockEval(
+        Func<int, int, int, byte> getBlock,
+        Func<int, int, int, BlockStateContainer> getState,
+        int x,
+        int y,
+        int z,
+        byte knownBlock,
+        byte[] blockCache,
+        BlockStateContainer[] stateCache,
+        bool[] stateReady,
+        BlockEval[] evalCache,
+        bool[] evalReady)
+    {
+        if (!IsInChunkBounds(x, y, z) || evalCache == null || evalReady == null)
+            return BuildBlockEval(getBlock, getState, x, y, z, knownBlock, blockCache, stateCache, stateReady);
+
+        int index = ToCacheIndex(x, y, z);
+        if (evalReady[index])
+            return evalCache[index];
+
+        BlockEval eval = BuildBlockEval(getBlock, getState, x, y, z, knownBlock, blockCache, stateCache, stateReady);
+        evalCache[index] = eval;
+        evalReady[index] = true;
+        return eval;
+    }
+
+    private static BlockEval BuildBlockEval(
+        Func<int, int, int, byte> getBlock,
+        Func<int, int, int, BlockStateContainer> getState,
+        int x,
+        int y,
+        int z,
+        byte knownBlock,
+        byte[] blockCache,
+        BlockStateContainer[] stateCache,
+        bool[] stateReady)
+    {
+        BlockEval eval = default;
+        byte blockId = knownBlock != 0 ? knownBlock : GetBlock(blockCache, getBlock, x, y, z);
+        eval.blockId = blockId;
+
+        if (blockId == 0)
+            return eval;
+
+        Block block = null;
+        var tbi = BlockRegistry.ThreadBlockInfo;
+        if (tbi != null && blockId < tbi.Length)
+            block = tbi[blockId];
+        else
+            block = BlockRegistry.GetBlock(blockId);
+
+        if (block == null)
+            return eval;
+
+        eval.sideAtlas = block.sideIndex;
+        eval.topAtlas = block.topIndex;
+        eval.bottomAtlas = block.bottomIndex;
+        eval.frontAtlas = block.frontIndex;
+
+        BlockStateContainer state = GetState(stateCache, stateReady, getState, x, y, z);
+        string facing = state?.GetState("facing");
+        eval.facing = ParseFacing(facing);
+
+        if (TryGetBlockShape(blockId, state, out BlockShape shape))
+        {
+            eval.hasShape = true;
+            eval.shape = shape;
+            eval.isCustomShape = !IsFullShape(shape);
+        }
+
+        return eval;
+    }
+
+    private static FacingDirection ParseFacing(string facing)
+    {
+        if (string.IsNullOrEmpty(facing)) return FacingDirection.None;
+        switch (facing)
+        {
+            case "north": return FacingDirection.North;
+            case "south": return FacingDirection.South;
+            case "east": return FacingDirection.East;
+            case "west": return FacingDirection.West;
+            default: return FacingDirection.None;
+        }
+    }
+
+
+    private static bool TryGetBlockEvalAt(
+        Func<int, int, int, byte> getBlock,
+        Func<int, int, int, BlockStateContainer> getState,
+        int x,
+        int y,
+        int z,
+        byte[] blockCache,
+        BlockStateContainer[] stateCache,
+        bool[] stateReady,
+        BlockEval[] evalCache,
+        bool[] evalReady,
+        out BlockEval eval)
+    {
+        byte blockId = GetBlock(blockCache, getBlock, x, y, z);
+        if (blockId == 0)
+        {
+            eval = default;
+            return false;
+        }
+
+        eval = GetBlockEval(getBlock, getState, x, y, z, blockId, blockCache, stateCache, stateReady, evalCache, evalReady);
+        return eval.blockId != 0;
+    }
+
+    private static byte GetBlock(byte[] blockCache, Func<int,int,int,byte> getBlock, int x, int y, int z)
+    {
+        if (IsInChunkBounds(x, y, z) && blockCache != null)
+            return blockCache[ToCacheIndex(x, y, z)];
+
+        return getBlock(x, y, z);
+    }
+
+    private static BlockStateContainer GetState(BlockStateContainer[] stateCache, bool[] stateReady, Func<int,int,int,BlockStateContainer> getState, int x, int y, int z)
+    {
+        if (!IsInChunkBounds(x, y, z) || stateCache == null || stateReady == null)
+            return getState?.Invoke(x, y, z);
+
+        int index = ToCacheIndex(x, y, z);
+        if (!stateReady[index])
+        {
+            stateCache[index] = getState?.Invoke(x, y, z);
+            stateReady[index] = true;
+        }
+
+        return stateCache[index];
+    }
+
     private static byte SampleBlock(
+        byte[] blockCache,
         Func<int,int,int,byte> getBlock,
         int x, int y, int z,
         int scale)
     {
-        // search from TOP to BOTTOM
         for (int dy = scale - 1; dy >= 0; dy--)
         for (int dx = 0; dx < scale; dx++)
         for (int dz = 0; dz < scale; dz++)
         {
-            byte b = getBlock(x + dx, y + dy, z + dz);
+            byte b = GetBlock(blockCache, getBlock, x + dx, y + dy, z + dz);
             if (b != 0)
                 return b;
         }
@@ -301,21 +411,6 @@ public static class ChunkMeshGeneratorThreaded
     {
         public Vector3 min;
         public Vector3 max;
-    }
-
-    private static bool IsCustomMeshBlock(byte blockId, BlockStateContainer state)
-    {
-        if (blockId == 0) return false;
-        var tbi = BlockRegistry.ThreadBlockInfo;
-        if (tbi == null || blockId < 0 || blockId >= tbi.Length) return false;
-
-        Block block = tbi[blockId];
-        if (block == null) return false;
-
-        if (TryGetBlockShape(blockId, state, out BlockShape shape))
-            return !IsFullShape(shape);
-
-        return false;
     }
 
     private static bool IsFullShape(BlockShape shape)
@@ -421,7 +516,12 @@ public static class ChunkMeshGeneratorThreaded
     private static void AddGreedyHorizontalSlabFaces(
         Func<int, int, int, byte> getBlock,
         Func<int, int, int, BlockStateContainer> getState,
-        MeshData mesh)
+        MeshData mesh,
+        byte[] blockCache,
+        BlockStateContainer[] stateCache,
+        bool[] stateReady,
+        BlockEval[] evalCache,
+        bool[] evalReady)
     {
         int mSize = CHUNK_SIZE;
         MaskCell[,] mask = new MaskCell[mSize, mSize];
@@ -439,19 +539,16 @@ public static class ChunkMeshGeneratorThreaded
                     mask[x, z].plane = 0f;
                     mask[x, z].height = 0f;
 
-                    byte blockId = getBlock(x, y, z);
-                    if (blockId == 0 || !TryGetBlockShape(blockId, getState?.Invoke(x, y, z), out BlockShape shape))
+                    if (!TryGetBlockEvalAt(getBlock, getState, x, y, z, blockCache, stateCache, stateReady, evalCache, evalReady, out BlockEval eval) || !eval.hasShape)
                         continue;
+                    BlockShape shape = eval.shape;
                     if (!IsHorizontalSlabCandidate(shape))
                         continue;
-                    if (!ShouldRenderShapeFace(getBlock, getState, new Vector3Int(x, y, z), shape, dir))
+                    if (!ShouldRenderShapeFace(getBlock, getState, new Vector3Int(x, y, z), shape, dir, blockCache, stateCache, stateReady, evalCache, evalReady))
                         continue;
 
-                    Block block = BlockRegistry.ThreadBlockInfo[blockId];
-                    if (block == null) continue;
-
                     mask[x, z].occluded = true;
-                    mask[x, z].atlasIndex = dir == Vector3Int.up ? block.topIndex : block.bottomIndex;
+                    mask[x, z].atlasIndex = dir == Vector3Int.up ? eval.topAtlas : eval.bottomAtlas;
                     mask[x, z].plane = y + (dir == Vector3Int.up ? shape.max.y : shape.min.y);
                     mask[x, z].height = shape.max.y - shape.min.y;
                 }
@@ -511,7 +608,12 @@ public static class ChunkMeshGeneratorThreaded
     private static void AddGreedyVerticalSideFaces(
         Func<int, int, int, byte> getBlock,
         Func<int, int, int, BlockStateContainer> getState,
-        MeshData mesh)
+        MeshData mesh,
+        byte[] blockCache,
+        BlockStateContainer[] stateCache,
+        bool[] stateReady,
+        BlockEval[] evalCache,
+        bool[] evalReady)
     {
         int mSize = CHUNK_SIZE;
         MaskCell[,] mask = new MaskCell[mSize, mSize];
@@ -529,19 +631,16 @@ public static class ChunkMeshGeneratorThreaded
                     mask[y, z].plane = 0f;
                     mask[y, z].height = 0f;
 
-                    byte blockId = getBlock(x, y, z);
-                    if (blockId == 0 || !TryGetBlockShape(blockId, getState?.Invoke(x, y, z), out BlockShape shape))
+                    if (!TryGetBlockEvalAt(getBlock, getState, x, y, z, blockCache, stateCache, stateReady, evalCache, evalReady, out BlockEval eval) || !eval.hasShape)
                         continue;
+                    BlockShape shape = eval.shape;
                     if (!IsVerticalSideGreedyCandidate(shape, dir))
                         continue;
-                    if (!ShouldRenderShapeFace(getBlock, getState, new Vector3Int(x, y, z), shape, dir))
+                    if (!ShouldRenderShapeFace(getBlock, getState, new Vector3Int(x, y, z), shape, dir, blockCache, stateCache, stateReady, evalCache, evalReady))
                         continue;
 
-                    Block block = BlockRegistry.ThreadBlockInfo[blockId];
-                    if (block == null) continue;
-
                     mask[y, z].occluded = true;
-                    mask[y, z].atlasIndex = block.sideIndex;
+                    mask[y, z].atlasIndex = eval.sideAtlas;
                     mask[y, z].plane = x + (dir == Vector3Int.right ? shape.max.x : shape.min.x);
                     mask[y, z].height = shape.max.x - shape.min.x;
                 }
@@ -610,19 +709,16 @@ public static class ChunkMeshGeneratorThreaded
                     mask[y, x].plane = 0f;
                     mask[y, x].height = 0f;
 
-                    byte blockId = getBlock(x, y, z);
-                    if (blockId == 0 || !TryGetBlockShape(blockId, getState?.Invoke(x, y, z), out BlockShape shape))
+                    if (!TryGetBlockEvalAt(getBlock, getState, x, y, z, blockCache, stateCache, stateReady, evalCache, evalReady, out BlockEval eval) || !eval.hasShape)
                         continue;
+                    BlockShape shape = eval.shape;
                     if (!IsVerticalSideGreedyCandidate(shape, dir))
                         continue;
-                    if (!ShouldRenderShapeFace(getBlock, getState, new Vector3Int(x, y, z), shape, dir))
+                    if (!ShouldRenderShapeFace(getBlock, getState, new Vector3Int(x, y, z), shape, dir, blockCache, stateCache, stateReady, evalCache, evalReady))
                         continue;
 
-                    Block block = BlockRegistry.ThreadBlockInfo[blockId];
-                    if (block == null) continue;
-
                     mask[y, x].occluded = true;
-                    mask[y, x].atlasIndex = block.sideIndex;
+                    mask[y, x].atlasIndex = eval.sideAtlas;
                     mask[y, x].plane = z + (dir == Vector3Int.forward ? shape.max.z : shape.min.z);
                     mask[y, x].height = shape.max.z - shape.min.z;
                 }
@@ -841,48 +937,51 @@ public static class ChunkMeshGeneratorThreaded
     private static void AddCustomBlockMeshes(Func<int,int,int,byte> getBlock,
         Func<int, int, int, BlockStateContainer> getState,
         MeshData mesh,
-        int lodScale)
+        int lodScale,
+        byte[] blockCache = null,
+        BlockStateContainer[] stateCache = null,
+        bool[] stateReady = null,
+        BlockEval[] evalCache = null,
+        bool[] evalReady = null)
     {
         if (lodScale != 1)
             return;
 
-        AddGreedyHorizontalSlabFaces(getBlock, getState, mesh);
-        AddGreedyVerticalSideFaces(getBlock, getState, mesh);
+        AddGreedyHorizontalSlabFaces(getBlock, getState, mesh, blockCache, stateCache, stateReady, evalCache, evalReady);
+        AddGreedyVerticalSideFaces(getBlock, getState, mesh, blockCache, stateCache, stateReady, evalCache, evalReady);
         
         for (int x = 0; x < CHUNK_SIZE; x++)
         for (int y = 0; y < CHUNK_SIZE; y++)
         for (int z = 0; z < CHUNK_SIZE; z++)
         {
-            byte blockId = getBlock(x, y, z);
-            BlockStateContainer state = getState?.Invoke(x, y, z);
-            if (!IsCustomMeshBlock(blockId, state))
+            if (!TryGetBlockEvalAt(getBlock, getState, x, y, z, blockCache, stateCache, stateReady, evalCache, evalReady, out BlockEval eval) ||
+                !eval.isCustomShape ||
+                !eval.hasShape)
                 continue;
 
-            var block = BlockRegistry.ThreadBlockInfo[blockId];
-            if (!TryGetBlockShape(blockId, state, out BlockShape shape))
-                continue;
-            
+            BlockShape shape = eval.shape;
             bool handledByHorizontalGreedy = IsHorizontalSlabCandidate(shape);
             bool handledByXSideGreedy = IsVerticalSideGreedyCandidate(shape, Vector3Int.right);
             bool handledByZSideGreedy = IsVerticalSideGreedyCandidate(shape, Vector3Int.forward);
 
+            Vector3Int pos = new Vector3Int(x, y, z);
+
             if (!handledByHorizontalGreedy)
             {
-                AddShapeFace(getBlock, getState, mesh, new Vector3Int(x, y, z), shape, Vector3Int.up, block.topIndex);
-                AddShapeFace(getBlock, getState, mesh, new Vector3Int(x, y, z), shape, Vector3Int.down, block.bottomIndex);
+                AddShapeFace(getBlock, getState, mesh, pos, shape, Vector3Int.up, eval.topAtlas, blockCache, stateCache, stateReady, evalCache, evalReady);
+                AddShapeFace(getBlock, getState, mesh, pos, shape, Vector3Int.down, eval.bottomAtlas, blockCache, stateCache, stateReady, evalCache, evalReady);
             }
             if (!handledByXSideGreedy)
             {
-                AddShapeFace(getBlock, getState, mesh, new Vector3Int(x, y, z), shape, Vector3Int.right, block.sideIndex);
-                AddShapeFace(getBlock, getState, mesh, new Vector3Int(x, y, z), shape, Vector3Int.left, block.sideIndex);
+                AddShapeFace(getBlock, getState, mesh, pos, shape, Vector3Int.right, eval.sideAtlas, blockCache, stateCache, stateReady, evalCache, evalReady);
+                AddShapeFace(getBlock, getState, mesh, pos, shape, Vector3Int.left, eval.sideAtlas, blockCache, stateCache, stateReady, evalCache, evalReady);
             }
 
             if (!handledByZSideGreedy)
             {
-                AddShapeFace(getBlock, getState, mesh, new Vector3Int(x, y, z), shape, Vector3Int.forward, block.sideIndex);
-                AddShapeFace(getBlock, getState, mesh, new Vector3Int(x, y, z), shape, Vector3Int.back, block.sideIndex);
+                AddShapeFace(getBlock, getState, mesh, pos, shape, Vector3Int.forward, eval.sideAtlas, blockCache, stateCache, stateReady, evalCache, evalReady);
+                AddShapeFace(getBlock, getState, mesh, pos, shape, Vector3Int.back, eval.sideAtlas, blockCache, stateCache, stateReady, evalCache, evalReady);
             }
-
         }
     }
 
@@ -892,9 +991,14 @@ public static class ChunkMeshGeneratorThreaded
         Vector3Int pos,
         BlockShape shape,
         Vector3Int dir,
-        int atlasIndex)
+        int atlasIndex,
+        byte[] blockCache,
+        BlockStateContainer[] stateCache,
+        bool[] stateReady,
+        BlockEval[] evalCache,
+        bool[] evalReady)
     {
-        if (atlasIndex < 0 || !ShouldRenderShapeFace(getBlock, getState, pos, shape, dir))
+        if (atlasIndex < 0 || !ShouldRenderShapeFace(getBlock, getState, pos, shape, dir, blockCache, stateCache, stateReady, evalCache, evalReady))
             return;
 
         Vector3[] faceVerts = VoxelData.GetFaceVertices(dir);
@@ -980,17 +1084,19 @@ public static class ChunkMeshGeneratorThreaded
         Func<int, int, int, BlockStateContainer> getState,
         Vector3Int pos,
         BlockShape shape,
-        Vector3Int dir)
+        Vector3Int dir,
+        byte[] blockCache,
+        BlockStateContainer[] stateCache,
+        bool[] stateReady,
+        BlockEval[] evalCache,
+        bool[] evalReady)
     {
         Vector3Int neighborPos = pos + dir;
-        byte neighborId = getBlock(neighborPos.x, neighborPos.y, neighborPos.z);
-        if (neighborId == 0)
+        if (!TryGetBlockEvalAt(getBlock, getState, neighborPos.x, neighborPos.y, neighborPos.z, blockCache, stateCache, stateReady, evalCache, evalReady, out BlockEval neighborEval) ||
+            !neighborEval.hasShape)
             return true;
 
-        if (!TryGetBlockShape(neighborId, getState?.Invoke(neighborPos.x, neighborPos.y, neighborPos.z), out BlockShape neighborShape))
-            return true;
-
-        return !IsFaceCovered(shape, neighborShape, dir);
+        return !IsFaceCovered(shape, neighborEval.shape, dir);
     }
 
     private static bool IsFaceCovered(BlockShape self, BlockShape other, Vector3Int dir)
@@ -1264,5 +1370,4 @@ public class ChunkMeshGenerator
         };
     }
 }
-
 
