@@ -555,7 +555,7 @@ namespace Core
             Block.Block oldBlock = BlockRegistry.GetBlock(oldId);
             
 
-            if (id != 0 && block != null && block.HasStates)
+            if (id != 0 && block != null)
             {
                 state = new BlockStateContainer();
                 block?.OnPlaced(

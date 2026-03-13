@@ -29,6 +29,8 @@ public static class ChunkMeshGeneratorThreaded
     {
         public bool occluded;
         public int atlasIndex;
+        public float plane;
+        public float height;
     }
     
     public struct NeighborLODInfo
@@ -134,7 +136,7 @@ public static class ChunkMeshGeneratorThreaded
 
                     bool forceFace = isBorderSlice && neighborScale < lodScale;
 
-                    if (IsCustomMeshBlock(current))
+                    if (IsCustomMeshBlock(current, getState?.Invoke(x, y, z)))
                     {
                         continue;
                     }
@@ -301,12 +303,26 @@ public static class ChunkMeshGeneratorThreaded
         public Vector3 max;
     }
 
-    private static bool IsCustomMeshBlock(byte blockId)
+    private static bool IsCustomMeshBlock(byte blockId, BlockStateContainer state)
     {
         if (blockId == 0) return false;
         var tbi = BlockRegistry.ThreadBlockInfo;
         if (tbi == null || blockId < 0 || blockId >= tbi.Length) return false;
-        return tbi[blockId] is SlabBlock;
+
+        Block block = tbi[blockId];
+        if (block == null) return false;
+
+        if (TryGetBlockShape(blockId, state, out BlockShape shape))
+            return !IsFullShape(shape);
+
+        return false;
+    }
+
+    private static bool IsFullShape(BlockShape shape)
+    {
+        const float eps = 0.0001f;
+        return Mathf.Abs(shape.min.x) < eps && Mathf.Abs(shape.min.y) < eps && Mathf.Abs(shape.min.z) < eps &&
+               Mathf.Abs(shape.max.x - 1f) < eps && Mathf.Abs(shape.max.y - 1f) < eps && Mathf.Abs(shape.max.z - 1f) < eps;
     }
 
     private static bool TryGetBlockShape(byte blockId, BlockStateContainer state, out BlockShape shape)
@@ -323,21 +339,15 @@ public static class ChunkMeshGeneratorThreaded
         if (block == null)
             return false;
 
-        if (block is not SlabBlock)
-        {
-            shape.min = Vector3.zero;
-            shape.max = Vector3.one;
-            return true;
-        }
-
-        float height = 0.5f;
-        string h = state?.GetState(SlabBlock.HeightState);
+        float height = 1f;
+        string h = state?.GetState(BlockStateKeys.HeightState);
+        
         if (!string.IsNullOrEmpty(h))
             float.TryParse(h, NumberStyles.Float, CultureInfo.InvariantCulture, out height);
 
         height = Mathf.Clamp(height, 0.1f, 1f);
 
-        string orientation = state?.GetState(SlabBlock.OrientationState) ?? "up";
+        string orientation = state?.GetState(BlockStateKeys.DirectionalFacing) ?? "up";
         shape.min = Vector3.zero;
         shape.max = Vector3.one;
 
@@ -365,7 +375,459 @@ public static class ChunkMeshGeneratorThreaded
 
         return true;
     }
+    
+    private static bool IsHorizontalSlabCandidate(BlockShape shape)
+    {
+        const float eps = 0.0001f;
+        return Mathf.Abs(shape.min.x) < eps && Mathf.Abs(shape.max.x - 1f) < eps &&
+               Mathf.Abs(shape.min.z) < eps && Mathf.Abs(shape.max.z - 1f) < eps &&
+               shape.max.y - shape.min.y < 1f - eps;
+    }
 
+    private static bool IsVerticalSideGreedyCandidate(BlockShape shape, Vector3Int dir)
+    {
+        const float eps = 0.0001f;
+        bool fullY = Mathf.Abs(shape.min.y) < eps && Mathf.Abs(shape.max.y - 1f) < eps;
+        if (!fullY)
+            return false;
+
+        if (dir.x != 0)
+        {
+            bool fullZ = Mathf.Abs(shape.min.z) < eps && Mathf.Abs(shape.max.z - 1f) < eps;
+            float xThickness = shape.max.x - shape.min.x;
+            return fullZ && xThickness < 1f - eps;
+        }
+
+        if (dir.z != 0)
+        {
+            bool fullX = Mathf.Abs(shape.min.x) < eps && Mathf.Abs(shape.max.x - 1f) < eps;
+            float zThickness = shape.max.z - shape.min.z;
+            return fullX && zThickness < 1f - eps;
+        }
+
+        return false;
+    }
+
+    private static void AddGreedyHorizontalSlabFaces(
+        Func<int, int, int, byte> getBlock,
+        Func<int, int, int, BlockStateContainer> getState,
+        MeshData mesh)
+    {
+        int mSize = CHUNK_SIZE;
+        MaskCell[,] mask = new MaskCell[mSize, mSize];
+        Vector3Int[] dirs = { Vector3Int.up, Vector3Int.down };
+
+        foreach (Vector3Int dir in dirs)
+        {
+            for (int y = 0; y < CHUNK_SIZE; y++)
+            {
+                for (int x = 0; x < CHUNK_SIZE; x++)
+                for (int z = 0; z < CHUNK_SIZE; z++)
+                {
+                    mask[x, z].occluded = false;
+                    mask[x, z].atlasIndex = -1;
+                    mask[x, z].plane = 0f;
+                    mask[x, z].height = 0f;
+
+                    byte blockId = getBlock(x, y, z);
+                    if (blockId == 0 || !TryGetBlockShape(blockId, getState?.Invoke(x, y, z), out BlockShape shape))
+                        continue;
+                    if (!IsHorizontalSlabCandidate(shape))
+                        continue;
+                    if (!ShouldRenderShapeFace(getBlock, getState, new Vector3Int(x, y, z), shape, dir))
+                        continue;
+
+                    Block block = BlockRegistry.ThreadBlockInfo[blockId];
+                    if (block == null) continue;
+
+                    mask[x, z].occluded = true;
+                    mask[x, z].atlasIndex = dir == Vector3Int.up ? block.topIndex : block.bottomIndex;
+                    mask[x, z].plane = y + (dir == Vector3Int.up ? shape.max.y : shape.min.y);
+                    mask[x, z].height = shape.max.y - shape.min.y;
+                }
+
+                for (int x = 0; x < mSize; x++)
+                {
+                    for (int z = 0; z < mSize;)
+                    {
+                        if (!mask[x, z].occluded)
+                        {
+                            z++;
+                            continue;
+                        }
+
+                        int atlas = mask[x, z].atlasIndex;
+                        float plane = mask[x, z].plane;
+                        float h = mask[x, z].height;
+
+                        int width = 1;
+                        while (z + width < mSize && mask[x, z + width].occluded &&
+                               mask[x, z + width].atlasIndex == atlas &&
+                               Mathf.Abs(mask[x, z + width].plane - plane) < 0.0001f &&
+                               Mathf.Abs(mask[x, z + width].height - h) < 0.0001f)
+                            width++;
+
+                        int height = 1;
+                        bool done = false;
+                        while (x + height < mSize && !done)
+                        {
+                            for (int k = 0; k < width; k++)
+                            {
+                                MaskCell c = mask[x + height, z + k];
+                                if (!c.occluded || c.atlasIndex != atlas ||
+                                    Mathf.Abs(c.plane - plane) > 0.0001f ||
+                                    Mathf.Abs(c.height - h) > 0.0001f)
+                                {
+                                    done = true;
+                                    break;
+                                }
+                            }
+
+                            if (!done) height++;
+                        }
+
+                        for (int dx = 0; dx < height; dx++)
+                        for (int dz = 0; dz < width; dz++)
+                            mask[x + dx, z + dz].occluded = false;
+
+                        AddHorizontalShapeQuad(x, z, width, height, plane, dir, atlas, mesh);
+                        z += width;
+                    }
+                }
+            }
+        }
+    }
+
+    private static void AddGreedyVerticalSideFaces(
+        Func<int, int, int, byte> getBlock,
+        Func<int, int, int, BlockStateContainer> getState,
+        MeshData mesh)
+    {
+        int mSize = CHUNK_SIZE;
+        MaskCell[,] mask = new MaskCell[mSize, mSize];
+
+        // X-facing planes (merge in Y/Z)
+        foreach (Vector3Int dir in new[] { Vector3Int.right, Vector3Int.left })
+        {
+            for (int x = 0; x < CHUNK_SIZE; x++)
+            {
+                for (int y = 0; y < CHUNK_SIZE; y++)
+                for (int z = 0; z < CHUNK_SIZE; z++)
+                {
+                    mask[y, z].occluded = false;
+                    mask[y, z].atlasIndex = -1;
+                    mask[y, z].plane = 0f;
+                    mask[y, z].height = 0f;
+
+                    byte blockId = getBlock(x, y, z);
+                    if (blockId == 0 || !TryGetBlockShape(blockId, getState?.Invoke(x, y, z), out BlockShape shape))
+                        continue;
+                    if (!IsVerticalSideGreedyCandidate(shape, dir))
+                        continue;
+                    if (!ShouldRenderShapeFace(getBlock, getState, new Vector3Int(x, y, z), shape, dir))
+                        continue;
+
+                    Block block = BlockRegistry.ThreadBlockInfo[blockId];
+                    if (block == null) continue;
+
+                    mask[y, z].occluded = true;
+                    mask[y, z].atlasIndex = block.sideIndex;
+                    mask[y, z].plane = x + (dir == Vector3Int.right ? shape.max.x : shape.min.x);
+                    mask[y, z].height = shape.max.x - shape.min.x;
+                }
+
+                for (int y = 0; y < mSize; y++)
+                {
+                    for (int z = 0; z < mSize;)
+                    {
+                        if (!mask[y, z].occluded)
+                        {
+                            z++;
+                            continue;
+                        }
+
+                        int atlas = mask[y, z].atlasIndex;
+                        float plane = mask[y, z].plane;
+                        float h = mask[y, z].height;
+
+                        int width = 1;
+                        while (z + width < mSize && mask[y, z + width].occluded &&
+                               mask[y, z + width].atlasIndex == atlas &&
+                               Mathf.Abs(mask[y, z + width].plane - plane) < 0.0001f &&
+                               Mathf.Abs(mask[y, z + width].height - h) < 0.0001f)
+                            width++;
+
+                        int height = 1;
+                        bool done = false;
+                        while (y + height < mSize && !done)
+                        {
+                            for (int k = 0; k < width; k++)
+                            {
+                                MaskCell c = mask[y + height, z + k];
+                                if (!c.occluded || c.atlasIndex != atlas ||
+                                    Mathf.Abs(c.plane - plane) > 0.0001f ||
+                                    Mathf.Abs(c.height - h) > 0.0001f)
+                                {
+                                    done = true;
+                                    break;
+                                }
+                            }
+
+                            if (!done) height++;
+                        }
+
+                        for (int dy = 0; dy < height; dy++)
+                        for (int dz = 0; dz < width; dz++)
+                            mask[y + dy, z + dz].occluded = false;
+
+                        AddVerticalXShapeQuad(y, z, width, height, plane, dir, atlas, mesh);
+                        z += width;
+                    }
+                }
+            }
+        }
+
+        // Z-facing planes (merge in Y/X)
+        foreach (Vector3Int dir in new[] { Vector3Int.forward, Vector3Int.back })
+        {
+            for (int z = 0; z < CHUNK_SIZE; z++)
+            {
+                for (int y = 0; y < CHUNK_SIZE; y++)
+                for (int x = 0; x < CHUNK_SIZE; x++)
+                {
+                    mask[y, x].occluded = false;
+                    mask[y, x].atlasIndex = -1;
+                    mask[y, x].plane = 0f;
+                    mask[y, x].height = 0f;
+
+                    byte blockId = getBlock(x, y, z);
+                    if (blockId == 0 || !TryGetBlockShape(blockId, getState?.Invoke(x, y, z), out BlockShape shape))
+                        continue;
+                    if (!IsVerticalSideGreedyCandidate(shape, dir))
+                        continue;
+                    if (!ShouldRenderShapeFace(getBlock, getState, new Vector3Int(x, y, z), shape, dir))
+                        continue;
+
+                    Block block = BlockRegistry.ThreadBlockInfo[blockId];
+                    if (block == null) continue;
+
+                    mask[y, x].occluded = true;
+                    mask[y, x].atlasIndex = block.sideIndex;
+                    mask[y, x].plane = z + (dir == Vector3Int.forward ? shape.max.z : shape.min.z);
+                    mask[y, x].height = shape.max.z - shape.min.z;
+                }
+
+                for (int y = 0; y < mSize; y++)
+                {
+                    for (int x = 0; x < mSize;)
+                    {
+                        if (!mask[y, x].occluded)
+                        {
+                            x++;
+                            continue;
+                        }
+
+                        int atlas = mask[y, x].atlasIndex;
+                        float plane = mask[y, x].plane;
+                        float h = mask[y, x].height;
+
+                        int width = 1;
+                        while (x + width < mSize && mask[y, x + width].occluded &&
+                               mask[y, x + width].atlasIndex == atlas &&
+                               Mathf.Abs(mask[y, x + width].plane - plane) < 0.0001f &&
+                               Mathf.Abs(mask[y, x + width].height - h) < 0.0001f)
+                            width++;
+
+                        int height = 1;
+                        bool done = false;
+                        while (y + height < mSize && !done)
+                        {
+                            for (int k = 0; k < width; k++)
+                            {
+                                MaskCell c = mask[y + height, x + k];
+                                if (!c.occluded || c.atlasIndex != atlas ||
+                                    Mathf.Abs(c.plane - plane) > 0.0001f ||
+                                    Mathf.Abs(c.height - h) > 0.0001f)
+                                {
+                                    done = true;
+                                    break;
+                                }
+                            }
+
+                            if (!done) height++;
+                        }
+
+                        for (int dy = 0; dy < height; dy++)
+                        for (int dx = 0; dx < width; dx++)
+                            mask[y + dy, x + dx].occluded = false;
+
+                        AddVerticalZShapeQuad(y, x, width, height, plane, dir, atlas, mesh);
+                        x += width;
+                    }
+                }
+            }
+        }
+    }
+
+    private static void AddHorizontalShapeQuad(int x, int z, int width, int height, float planeY, Vector3Int dir, int atlas, MeshData mesh)
+    {
+        Vector3[] verts =
+        {
+            new Vector3(x, planeY, z),
+            new Vector3(x + height, planeY, z),
+            new Vector3(x, planeY, z + width),
+            new Vector3(x + height, planeY, z + width)
+        };
+
+        int baseIndex = mesh.vertices.Count;
+        mesh.vertices.AddRange(verts);
+        for (int i = 0; i < 4; i++) mesh.normals.Add(dir);
+
+        int i0 = baseIndex + 0;
+        int i1 = baseIndex + 1;
+        int i2 = baseIndex + 2;
+        int i3 = baseIndex + 3;
+
+        int t0a = i0, t0b = i2, t0c = i1;
+        int t1a = i2, t1b = i3, t1c = i1;
+
+        Vector3 triA = mesh.vertices[t0b] - mesh.vertices[t0a];
+        Vector3 triB = mesh.vertices[t0c] - mesh.vertices[t0a];
+        Vector3 triNormal = Vector3.Cross(triA, triB);
+        if (Vector3.Dot(triNormal, (Vector3)dir) < 0f)
+        {
+            t0b = i1;
+            t0c = i2;
+            t1b = i1;
+            t1c = i3;
+        }
+
+        mesh.triangles.Add(t0a);
+        mesh.triangles.Add(t0b);
+        mesh.triangles.Add(t0c);
+        mesh.triangles.Add(t1a);
+        mesh.triangles.Add(t1b);
+        mesh.triangles.Add(t1c);
+        AddFaceUV(dir, atlas, height, width, mesh);
+
+        int cb = mesh.colliderVertices.Count;
+        mesh.colliderVertices.AddRange(verts);
+
+        int c0 = cb + 0;
+        int c1 = cb + 1;
+        int c2 = cb + 2;
+        int c3 = cb + 3;
+
+        // Match collider winding with the final render winding for correct one-sided collision.
+        int ct0a = c0, ct0b = c2, ct0c = c1;
+        int ct1a = c2, ct1b = c3, ct1c = c1;
+
+        if (Vector3.Dot(triNormal, (Vector3)dir) < 0f)
+        {
+            ct0b = c1;
+            ct0c = c2;
+            ct1b = c1;
+            ct1c = c3;
+        }
+
+        mesh.colliderTriangles.Add(ct0a);
+        mesh.colliderTriangles.Add(ct0b);
+        mesh.colliderTriangles.Add(ct0c);
+        mesh.colliderTriangles.Add(ct1a);
+        mesh.colliderTriangles.Add(ct1b);
+        mesh.colliderTriangles.Add(ct1c);
+    }
+
+    private static void AddVerticalXShapeQuad(int y, int z, int widthZ, int heightY, float planeX, Vector3Int dir, int atlas, MeshData mesh)
+    {
+        // Vertex order is chosen so UV-U runs along Z (width) and UV-V runs along Y (height)
+        // to match greedy tiling direction expectations (x x x across, not stacked vertically).
+        Vector3[] verts =
+        {
+            new Vector3(planeX, y, z),
+            new Vector3(planeX, y, z + widthZ),
+            new Vector3(planeX, y + heightY, z),
+            new Vector3(planeX, y + heightY, z + widthZ)
+        };
+
+        AddGreedyShapeQuad(verts, dir, atlas, widthZ, heightY, mesh);
+    }
+
+    private static void AddVerticalZShapeQuad(int y, int x, int widthX, int heightY, float planeZ, Vector3Int dir, int atlas, MeshData mesh)
+    {
+        Vector3[] verts =
+        {
+            new Vector3(x, y, planeZ),
+            new Vector3(x + widthX, y, planeZ),
+            new Vector3(x, y + heightY, planeZ),
+            new Vector3(x + widthX, y + heightY, planeZ)
+        };
+
+        // Z-faces swap width/height in AddFaceUV internally, so feed swapped UV scales to preserve tiling.
+        AddGreedyShapeQuad(verts, dir, atlas, heightY, widthX, mesh);
+    }
+
+    private static void AddGreedyShapeQuad(Vector3[] verts, Vector3Int dir, int atlas, int uvWidth, int uvHeight, MeshData mesh)
+    {
+        int baseIndex = mesh.vertices.Count;
+        mesh.vertices.AddRange(verts);
+        for (int i = 0; i < 4; i++) mesh.normals.Add(dir);
+
+        int i0 = baseIndex + 0;
+        int i1 = baseIndex + 1;
+        int i2 = baseIndex + 2;
+        int i3 = baseIndex + 3;
+
+        int t0a = i0, t0b = i2, t0c = i1;
+        int t1a = i2, t1b = i3, t1c = i1;
+
+        Vector3 triA = mesh.vertices[t0b] - mesh.vertices[t0a];
+        Vector3 triB = mesh.vertices[t0c] - mesh.vertices[t0a];
+        Vector3 triNormal = Vector3.Cross(triA, triB);
+        if (Vector3.Dot(triNormal, (Vector3)dir) < 0f)
+        {
+            t0b = i1;
+            t0c = i2;
+            t1b = i1;
+            t1c = i3;
+        }
+
+        mesh.triangles.Add(t0a);
+        mesh.triangles.Add(t0b);
+        mesh.triangles.Add(t0c);
+        mesh.triangles.Add(t1a);
+        mesh.triangles.Add(t1b);
+        mesh.triangles.Add(t1c);
+        AddFaceUV(dir, atlas, uvWidth, uvHeight, mesh);
+
+        int cb = mesh.colliderVertices.Count;
+        mesh.colliderVertices.AddRange(verts);
+
+        int c0 = cb + 0;
+        int c1 = cb + 1;
+        int c2 = cb + 2;
+        int c3 = cb + 3;
+
+        // Match collider winding with the final render winding for correct one-sided collision.
+        int ct0a = c0, ct0b = c2, ct0c = c1;
+        int ct1a = c2, ct1b = c3, ct1c = c1;
+
+        if (Vector3.Dot(triNormal, (Vector3)dir) < 0f)
+        {
+            ct0b = c1;
+            ct0c = c2;
+            ct1b = c1;
+            ct1c = c3;
+        }
+
+        mesh.colliderTriangles.Add(ct0a);
+        mesh.colliderTriangles.Add(ct0b);
+        mesh.colliderTriangles.Add(ct0c);
+        mesh.colliderTriangles.Add(ct1a);
+        mesh.colliderTriangles.Add(ct1b);
+        mesh.colliderTriangles.Add(ct1c);
+    }
+    
     private static void AddCustomBlockMeshes(Func<int,int,int,byte> getBlock,
         Func<int, int, int, BlockStateContainer> getState,
         MeshData mesh,
@@ -374,25 +836,43 @@ public static class ChunkMeshGeneratorThreaded
         if (lodScale != 1)
             return;
 
+        AddGreedyHorizontalSlabFaces(getBlock, getState, mesh);
+        AddGreedyVerticalSideFaces(getBlock, getState, mesh);
+        
         for (int x = 0; x < CHUNK_SIZE; x++)
         for (int y = 0; y < CHUNK_SIZE; y++)
         for (int z = 0; z < CHUNK_SIZE; z++)
         {
             byte blockId = getBlock(x, y, z);
-            if (!IsCustomMeshBlock(blockId))
+            BlockStateContainer state = getState?.Invoke(x, y, z);
+            if (!IsCustomMeshBlock(blockId, state))
                 continue;
 
             var block = BlockRegistry.ThreadBlockInfo[blockId];
-            BlockStateContainer state = getState?.Invoke(x, y, z);
             if (!TryGetBlockShape(blockId, state, out BlockShape shape))
                 continue;
+            
+            bool handledByHorizontalGreedy = IsHorizontalSlabCandidate(shape);
+            bool handledByXSideGreedy = IsVerticalSideGreedyCandidate(shape, Vector3Int.right);
+            bool handledByZSideGreedy = IsVerticalSideGreedyCandidate(shape, Vector3Int.forward);
 
-            AddShapeFace(getBlock, getState, mesh, new Vector3Int(x, y, z), shape, Vector3Int.up, block.topIndex);
-            AddShapeFace(getBlock, getState, mesh, new Vector3Int(x, y, z), shape, Vector3Int.down, block.bottomIndex);
-            AddShapeFace(getBlock, getState, mesh, new Vector3Int(x, y, z), shape, Vector3Int.right, block.sideIndex);
-            AddShapeFace(getBlock, getState, mesh, new Vector3Int(x, y, z), shape, Vector3Int.left, block.sideIndex);
-            AddShapeFace(getBlock, getState, mesh, new Vector3Int(x, y, z), shape, Vector3Int.forward, block.sideIndex);
-            AddShapeFace(getBlock, getState, mesh, new Vector3Int(x, y, z), shape, Vector3Int.back, block.sideIndex);
+            if (!handledByHorizontalGreedy)
+            {
+                AddShapeFace(getBlock, getState, mesh, new Vector3Int(x, y, z), shape, Vector3Int.up, block.topIndex);
+                AddShapeFace(getBlock, getState, mesh, new Vector3Int(x, y, z), shape, Vector3Int.down, block.bottomIndex);
+            }
+            if (!handledByXSideGreedy)
+            {
+                AddShapeFace(getBlock, getState, mesh, new Vector3Int(x, y, z), shape, Vector3Int.right, block.sideIndex);
+                AddShapeFace(getBlock, getState, mesh, new Vector3Int(x, y, z), shape, Vector3Int.left, block.sideIndex);
+            }
+
+            if (!handledByZSideGreedy)
+            {
+                AddShapeFace(getBlock, getState, mesh, new Vector3Int(x, y, z), shape, Vector3Int.forward, block.sideIndex);
+                AddShapeFace(getBlock, getState, mesh, new Vector3Int(x, y, z), shape, Vector3Int.back, block.sideIndex);
+            }
+
         }
     }
 
