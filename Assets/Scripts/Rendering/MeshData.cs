@@ -341,54 +341,6 @@ public static class ChunkMeshGeneratorThreaded
         }
     }
 
-
-    private static bool TryGetBlockEvalAt(
-        Func<int, int, int, byte> getBlock,
-        Func<int, int, int, BlockStateContainer> getState,
-        int x,
-        int y,
-        int z,
-        byte[] blockCache,
-        BlockStateContainer[] stateCache,
-        bool[] stateReady,
-        BlockEval[] evalCache,
-        bool[] evalReady,
-        out BlockEval eval)
-    {
-        byte blockId = GetBlock(blockCache, getBlock, x, y, z);
-        if (blockId == 0)
-        {
-            eval = default;
-            return false;
-        }
-
-        eval = GetBlockEval(getBlock, getState, x, y, z, blockId, blockCache, stateCache, stateReady, evalCache, evalReady);
-        return eval.blockId != 0;
-    }
-
-    private static byte GetBlock(byte[] blockCache, Func<int,int,int,byte> getBlock, int x, int y, int z)
-    {
-        if (IsInChunkBounds(x, y, z) && blockCache != null)
-            return blockCache[ToCacheIndex(x, y, z)];
-
-        return getBlock(x, y, z);
-    }
-
-    private static BlockStateContainer GetState(BlockStateContainer[] stateCache, bool[] stateReady, Func<int,int,int,BlockStateContainer> getState, int x, int y, int z)
-    {
-        if (!IsInChunkBounds(x, y, z) || stateCache == null || stateReady == null)
-            return getState?.Invoke(x, y, z);
-
-        int index = ToCacheIndex(x, y, z);
-        if (!stateReady[index])
-        {
-            stateCache[index] = getState?.Invoke(x, y, z);
-            stateReady[index] = true;
-        }
-
-        return stateCache[index];
-    }
-
     private static byte SampleBlock(
         byte[] blockCache,
         Func<int,int,int,byte> getBlock,
