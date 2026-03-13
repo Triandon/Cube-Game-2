@@ -42,6 +42,9 @@ namespace Core.Item
             
             //Slab
             ItemRegistry.RegisterItem(new Item(12, itemName:"SlabBlock", isBlock:true, blockId: 12, textureIndex: 12, maxStackSize: 64));
+            
+            //ScaffoldingBlock
+            ItemRegistry.RegisterItem(new Item(13, itemName:"ScaffoldingBlock", isBlock:true, blockId: 13, textureIndex: 14, maxStackSize: 64));
         }
     
         public static void Init(){}

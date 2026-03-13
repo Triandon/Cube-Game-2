@@ -14,6 +14,9 @@ public class PlayerInteraction : MonoBehaviour
 
     private ChunkManager chunkManager;
     private Transform player;
+
+    private float scaffoldingPlacmentHeight = 1f;
+    private bool blockPlacementMode;
     
     //Hits rays
     public float maxDistance = 6.0f;
@@ -45,6 +48,8 @@ public class PlayerInteraction : MonoBehaviour
 
     private void HandleInput()
     {
+        HandleScaffoldingHeightHotKeysAndBlockPlacementMode();
+        
         if(Input.GetKey(KeyCode.LeftAlt))
             return;
         
@@ -121,6 +126,12 @@ public class PlayerInteraction : MonoBehaviour
     
     private void ModifyBlock(Vector3Int worldPos, byte id)
     {
+        if (id == BlockDataBase.ScaffoldingBlock.id)
+        {
+            ScaffoldingBlock.SetPlacementHeight(scaffoldingPlacmentHeight);
+            ScaffoldingBlock.SetPlacementMode(blockPlacementMode);
+        }
+        
         chunkManager.SetBlockAtWorldPos(worldPos, id);
     }
     
@@ -216,5 +227,43 @@ public class PlayerInteraction : MonoBehaviour
     {
         return Input.GetKey(KeyCode.LeftControl)
                || (Input.GetMouseButtonDown(1) && IsHandEmpty());
+    }
+
+    private void HandleScaffoldingHeightHotKeysAndBlockPlacementMode()
+    {
+        ItemStack stack = hotBarUI != null ? hotBarUI.GetSelectedStack() : null;
+        if (stack == null || stack.IsEmpty || !stack.Item.isBlock)
+            return;
+        
+        if (!(stack.Item.blockId == BlockDataBase.ScaffoldingBlock.id || stack.Item.blockId == BlockDataBase.SlabBlock.id))
+            return;
+
+        bool changed = false;
+
+        if (Input.GetKeyDown(KeyCode.N))
+        {
+            scaffoldingPlacmentHeight = Mathf.Min(1f, scaffoldingPlacmentHeight + 0.1f);
+            changed = true;
+        }
+        
+        if (Input.GetKeyDown(KeyCode.M))
+        {
+            scaffoldingPlacmentHeight = Mathf.Max(0.1f, scaffoldingPlacmentHeight - 0.1f);
+            changed = true;
+        }
+        
+        if (Input.GetKeyDown(KeyCode.V))
+        {
+            blockPlacementMode = !blockPlacementMode;
+            ScaffoldingBlock.SetPlacementMode(blockPlacementMode);
+            SlabBlock.SetPlacementMode(blockPlacementMode);
+            Debug.Log($"Scaffolding mode: {(blockPlacementMode ? "vertical" : "flat")}");
+        }
+
+        if (changed)
+        {
+            ScaffoldingBlock.SetPlacementHeight(scaffoldingPlacmentHeight);
+            Debug.Log($"Scaffolding height: {scaffoldingPlacmentHeight:0.##}");
+        }
     }
 }

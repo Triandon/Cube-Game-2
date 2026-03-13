@@ -1,28 +1,29 @@
 using Core.Block;
 using UnityEngine;
 
-public class SlabBlock : Block
+public class ScaffoldingBlock : Block
 {
-    public const string HeightState = BlockStateKeys.HeightState;
-    public const string OrientationState = BlockStateKeys.DirectionalFacing;
+    public static float PlacementHeight { get; private set; } = 1f;
     public static bool PlaceVertical { get; private set; }
-
-    private readonly float slabHeight;
     
-    public SlabBlock(byte id, string name, int top, int side, int bottom, int front = -1) : base(id, name, top, side, bottom, front)
+    public ScaffoldingBlock(byte id, string name, int top, int side, int bottom, int front = -1) : base(id, name, top, side, bottom, front)
     {
-        slabHeight = 0.5f;
-        AddState(HeightState, slabHeight.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture));
-        AddState(OrientationState, "up");
     }
-    
+
+    public static void SetPlacementHeight(float height)
+    {
+        PlacementHeight = Mathf.Clamp(height, 0.1f, 1f);
+    }
+
     public static void SetPlacementMode(bool placementMode)
     {
         PlaceVertical = placementMode;
     }
-    
+
     public override void OnPlaced(Vector3Int position, BlockStateContainer state, Transform player)
     {
+        base.OnPlaced(position, state, player);
+        
         if (state == null)
             return;
 
@@ -39,8 +40,6 @@ public class SlabBlock : Block
         }
         
         state.SetState(BlockStateKeys.DirectionalFacing, directionalFacing);
-        state.SetState(HeightState, slabHeight.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture));
+        state.SetState(BlockStateKeys.HeightState, PlacementHeight.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture));
     }
-
-
 }

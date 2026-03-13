@@ -19,6 +19,7 @@ namespace Core.Block
         public static Block CraftingTableBlock;
         public static Block CrusherBlock;
         public static Block SlabBlock;
+        public static Block ScaffoldingBlock;
         
         static BlockDataBase()
         {
@@ -76,6 +77,10 @@ namespace Core.Block
             // Slab block (fixed half-height slab with orientation)
             SlabBlock = new SlabBlock(12, "SlabBlock", top: 12, side: 12, bottom: 12);
             BlockRegistry.RegisterBlock(SlabBlock);
+            
+            // ScaffoldingBlock
+            ScaffoldingBlock = new ScaffoldingBlock(13, "ScaffoldingBlock", top: 14, side: 14, bottom: 14);
+            BlockRegistry.RegisterBlock(ScaffoldingBlock);
             
             Debug.Log("Blocks registered (static)");
         }
