@@ -45,6 +45,7 @@ public static class ChunkMeshGeneratorThreaded
     {
         var mesh = new MeshData();
         ShapeCacheCell[,,] shapeCache = BuildShapeCache(getBlock, getState);
+        bool[] borderGreedyOccluderCache = BuildBorderGreedyOccluderCache();
 
         // Local re-usable structures for mask and loops
         MaskCell[,] mask = new MaskCell[CHUNK_SIZE, CHUNK_SIZE];
@@ -58,7 +59,7 @@ public static class ChunkMeshGeneratorThreaded
 
         foreach (var dir in dirs)
         {
-            GreedyDirection(getBlock, getState, dir, mesh, mask, lodScale, neighbors, shapeCache);
+            GreedyDirection(getBlock, getState, dir, mesh, mask, lodScale, neighbors, shapeCache, borderGreedyOccluderCache);
         }
         
         AddCustomBlockMeshes(getBlock, getState, mesh, lodScale, shapeCache);
@@ -68,7 +69,8 @@ public static class ChunkMeshGeneratorThreaded
     // Greedy meshing path intentionally handles only full cube blocks.
     private static void GreedyDirection(Func<int,int,int,byte> getBlock,
             Func<int, int, int, BlockStateContainer> getState,
-            Vector3Int dir, MeshData mesh, MaskCell[,] mask, int lodScale, NeighborLODInfo neighbors, ShapeCacheCell[,,] shapeCache)
+            Vector3Int dir, MeshData mesh, MaskCell[,] mask, int lodScale, NeighborLODInfo neighbors, ShapeCacheCell[,,] shapeCache,
+            bool[] borderGreedyOccluder)
     {
         int neighborScale =
             dir == Vector3Int.right   ? neighbors.posX :
@@ -124,22 +126,11 @@ public static class ChunkMeshGeneratorThreaded
                     }
                     else
                     {
+                        // Border neighbor fast path:
+                        // only known always-full-cube blocks are allowed to occlude greedy faces.
+                        // Blocks with dynamic shape state (slabs/scaffolding/etc.) are treated as non-occluding 
                         byte neighbor = SampleBlock(getBlock, nx, ny, nz, lodScale);
-                        if (neighbor == 0)
-                        {
-                            neighborBlocksFace = false;
-                        }
-                        else
-                        {
-                            // Border neighbor: only occlude if the neighbor shape actually covers this full-cube face.
-                            
-                            BlockShape fullCube = new BlockShape { min = Vector3.zero, max = Vector3.one };
-                            BlockStateContainer neighborState = getState?.Invoke(nx, ny, nz);
-                            if (TryGetBlockShape(neighbor, neighborState, out BlockShape neighborShape))
-                                neighborBlocksFace = IsFaceCovered(fullCube, neighborShape, dir);
-                            else
-                                neighborBlocksFace = true;
-                        }
+                        neighborBlocksFace = IsFastBorderGreedyOccluder(neighbor, borderGreedyOccluder);
                     }
 
                     if (neighborBlocksFace && !forceFace)
@@ -147,6 +138,7 @@ public static class ChunkMeshGeneratorThreaded
 
                     int atlasIdx = -1;
                     var tbi = BlockRegistry.ThreadBlockInfo;
+                    BlockStateContainer currentState = getState?.Invoke(x, y, z);
 
                     if (tbi != null && current >= 0 && current < tbi.Length)
                     {
@@ -154,9 +146,7 @@ public static class ChunkMeshGeneratorThreaded
                         var block = tbi[current];
                         if (block != null)
                         {
-                            if (dir == Vector3Int.up) atlasIdx = block.topIndex;
-                            else if (dir == Vector3Int.down) atlasIdx = block.bottomIndex;
-                            else atlasIdx = block.sideIndex;
+                            atlasIdx = GetFaceAtlasIndex(block, currentState, dir);
                         }
                     }
                     else
@@ -164,9 +154,7 @@ public static class ChunkMeshGeneratorThreaded
                         var block = BlockRegistry.GetBlock((int)current);
                         if (block != null)
                         {
-                            atlasIdx = block.sideIndex;
-                            if (dir == Vector3Int.up) atlasIdx = block.topIndex;
-                            if (dir == Vector3Int.down) atlasIdx = block.bottomIndex;
+                            atlasIdx = GetFaceAtlasIndex(block, currentState, dir);
 
                         }
                     }
@@ -270,6 +258,44 @@ public static class ChunkMeshGeneratorThreaded
     private static bool IsGreedyFullCube(ShapeCacheCell[,,] shapeCache, int x, int y, int z)
     {
         return IsInsideChunk(x, y, z) && shapeCache[x, y, z].greedyFullCube;
+    }
+
+    
+    private static bool[] BuildBorderGreedyOccluderCache()
+    {
+        var tbi = BlockRegistry.ThreadBlockInfo;
+        if (tbi == null || tbi.Length == 0)
+            return Array.Empty<bool>();
+
+        bool[] cache = new bool[tbi.Length];
+        for (int i = 1; i < tbi.Length; i++)
+        {
+            Block block = tbi[i];
+            if (block == null)
+                continue;
+
+            // Conservative classification: if block type is known to have dynamic shape states,
+            // do not allow it to occlude in fast border mode.
+            if (block is SlabBlock || block is ScaffoldingBlock)
+                continue;
+
+            string height = block.GetState(BlockStateKeys.HeightState);
+            if (!string.IsNullOrEmpty(height) && height != "1")
+                continue;
+
+            string facing = block.GetState(BlockStateKeys.DirectionalFacing);
+            if (!string.IsNullOrEmpty(facing) && facing != "up")
+                continue;
+
+            cache[i] = true;
+        }
+
+        return cache;
+    }
+
+    private static bool IsFastBorderGreedyOccluder(byte blockId, bool[] borderGreedyOccluderCache)
+    {
+        return blockId > 0 && blockId < borderGreedyOccluderCache.Length && borderGreedyOccluderCache[blockId];
     }
 
 
@@ -419,14 +445,57 @@ public static class ChunkMeshGeneratorThreaded
 
             BlockShape shape = cell.shape;
             
-            AddShapeFace(getBlock, getState, mesh, shapeCache,new Vector3Int(x, y, z), shape, Vector3Int.up, block.topIndex);
-            AddShapeFace(getBlock, getState, mesh, shapeCache,new Vector3Int(x, y, z), shape, Vector3Int.down, block.bottomIndex);
-            AddShapeFace(getBlock, getState, mesh, shapeCache,new Vector3Int(x, y, z), shape, Vector3Int.right, block.sideIndex);
-            AddShapeFace(getBlock, getState, mesh, shapeCache,new Vector3Int(x, y, z), shape, Vector3Int.left, block.sideIndex);
-            AddShapeFace(getBlock, getState, mesh, shapeCache,new Vector3Int(x, y, z), shape, Vector3Int.forward, block.sideIndex);
-            AddShapeFace(getBlock, getState, mesh, shapeCache,new Vector3Int(x, y, z), shape, Vector3Int.back, block.sideIndex);
+            Vector3Int pos = new Vector3Int(x, y, z);
+            BlockStateContainer state = getState?.Invoke(x, y, z);
+
+            AddShapeFace(getBlock, getState, mesh, shapeCache, pos, shape, Vector3Int.up, GetFaceAtlasIndex(block, state, Vector3Int.up));
+            AddShapeFace(getBlock, getState, mesh, shapeCache, pos, shape, Vector3Int.down, GetFaceAtlasIndex(block, state, Vector3Int.down));
+            AddShapeFace(getBlock, getState, mesh, shapeCache, pos, shape, Vector3Int.right, GetFaceAtlasIndex(block, state, Vector3Int.right));
+            AddShapeFace(getBlock, getState, mesh, shapeCache, pos, shape, Vector3Int.left, GetFaceAtlasIndex(block, state, Vector3Int.left));
+            AddShapeFace(getBlock, getState, mesh, shapeCache, pos, shape, Vector3Int.forward, GetFaceAtlasIndex(block, state, Vector3Int.forward));
+            AddShapeFace(getBlock, getState, mesh, shapeCache, pos, shape, Vector3Int.back, GetFaceAtlasIndex(block, state, Vector3Int.back));
+
         }
     }
+    
+    private static int GetFaceAtlasIndex(Block block, BlockStateContainer state, Vector3Int dir)
+    {
+        if (block == null)
+            return -1;
+
+        if (dir == Vector3Int.up)
+            return block.topIndex;
+
+        if (dir == Vector3Int.down)
+            return block.bottomIndex;
+
+        if (block.frontIndex >= 0 && IsFrontFaceDirection(dir, state, block))
+            return block.frontIndex;
+
+        return block.sideIndex;
+    }
+
+    private static bool IsFrontFaceDirection(Vector3Int dir, BlockStateContainer state, Block block)
+    {
+        string facing = state?.GetState("facing");
+        if (string.IsNullOrEmpty(facing))
+            facing = GetStateValueOrDefault(block, state, BlockStateKeys.DirectionalFacing);
+
+        if (string.IsNullOrEmpty(facing))
+            facing = "north";
+
+        Vector3Int frontDir = facing switch
+        {
+            "north" => Vector3Int.forward,
+            "south" => Vector3Int.back,
+            "east" => Vector3Int.right,
+            "west" => Vector3Int.left,
+            _ => Vector3Int.forward,
+        };
+
+        return dir == frontDir;
+    }
+
 
     private static void AddShapeFace(Func<int,int,int,byte> getBlock,
         Func<int, int, int, BlockStateContainer> getState,
