@@ -44,7 +44,7 @@ public static class ChunkMeshGeneratorThreaded
         Func<int, int, int, BlockStateContainer> getState, int lodScale, NeighborLODInfo neighbors)
     {
         var mesh = new MeshData();
-        ShapeCacheCell[,,] shapeCache = BuildShapeCache(getBlock, getState);
+        ShapeCacheCell[,,] shapeCache = BuildShapeCache(getBlock, getState, lodScale);
         bool[] borderGreedyOccluderCache = BuildBorderGreedyOccluderCache();
 
         // Local re-usable structures for mask and loops
@@ -129,7 +129,7 @@ public static class ChunkMeshGeneratorThreaded
                         // Border neighbor fast path:
                         // only known always-full-cube blocks are allowed to occlude greedy faces.
                         // Blocks with dynamic shape state (slabs/scaffolding/etc.) are treated as non-occluding 
-                        byte neighbor = SampleBlock(getBlock, nx, ny, nz, lodScale);
+                        byte neighbor = getBlock(nx, ny, nz);
                         neighborBlocksFace = IsFastBorderGreedyOccluder(neighbor, borderGreedyOccluder);
                     }
 
@@ -222,7 +222,7 @@ public static class ChunkMeshGeneratorThreaded
 
     private static ShapeCacheCell[,,] BuildShapeCache(
         Func<int, int, int, byte> getBlock,
-        Func<int, int, int, BlockStateContainer> getState)
+        Func<int, int, int, BlockStateContainer> getState, int lodScale)
     {
         ShapeCacheCell[,,] cache = new ShapeCacheCell[CHUNK_SIZE, CHUNK_SIZE, CHUNK_SIZE];
 
@@ -240,6 +240,13 @@ public static class ChunkMeshGeneratorThreaded
 
             bool isDirectional = state?.GetState("facing") != null;
             bool fullCube = IsFullShape(shape) && !isDirectional;
+
+            if (lodScale > 1)
+            {
+                // Higher LODs intentionally collapse custom shapes (slabs, directional variants, etc.)
+                // into regular cube voxels so they still participate in coarse greedy meshing.
+                fullCube = true;
+            }
             
             cache[x, y, z].hasShape = true;
             cache[x, y, z].shape = shape;
