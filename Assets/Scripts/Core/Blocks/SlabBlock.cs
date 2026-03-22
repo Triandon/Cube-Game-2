@@ -12,6 +12,7 @@ public class SlabBlock : Block
     public SlabBlock(byte id, string name, int top, int side, int bottom, int front = -1) : base(id, name, top, side, bottom, front)
     {
         slabHeight = 0.5f;
+        isTransparent = true;
         AddState(HeightState, slabHeight.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture));
         AddState(OrientationState, "up");
     }

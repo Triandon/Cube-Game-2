@@ -18,6 +18,7 @@ namespace Core.Block
 
         public float hardness = 1f;
         public bool isTransparent = false;
+        public bool isStrechy = false;
         public virtual bool HasBlockEntity => false;
 
         public virtual bool HasInstantTick => false;

@@ -8,6 +8,8 @@ public class ScaffoldingBlock : Block
     
     public ScaffoldingBlock(byte id, string name, int top, int side, int bottom, int front = -1) : base(id, name, top, side, bottom, front)
     {
+        isTransparent = true;
+        isStrechy = true;
     }
 
     public static void SetPlacementHeight(float height)

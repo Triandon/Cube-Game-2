@@ -23,6 +23,7 @@ public static class ChunkMeshGeneratorThreaded
 {
     private const int CHUNK_SIZE = Chunk.CHUNK_SIZE;
     private const int ATLAS_TILES = 16;
+    private const float FullBlockEpsilon = 0.0001f;
     
     private struct MaskCell
     {
@@ -55,6 +56,11 @@ public static class ChunkMeshGeneratorThreaded
         foreach (var dir in dirs)
         {
             GreedyDirection(getBlock, getState, dir, mesh,mask, lodScale, neighbors);
+        }
+
+        if (lodScale == 1)
+        {
+            AppendStateDrivenMeshes(getBlock, getState, mesh);
         }
         return mesh;
     }
@@ -130,64 +136,22 @@ public static class ChunkMeshGeneratorThreaded
                     );
 
                     bool forceFace = isBorderSlice && neighborScale < lodScale;
+                    BlockStateContainer currentState = getState?.Invoke(x, y, z);
+                    BlockStateContainer neighborState = getState?.Invoke(
+                        x + dir.x * lodScale,
+                        y + dir.y * lodScale,
+                        z + dir.z * lodScale);
 
-                    if (current != 0 && (neighbor == 0 || forceFace))
+                    if (!ShouldGreedyMeshBlock(current, currentState, lodScale))
+                        continue;
+
+                    if (!ShouldRenderGreedyFace(neighbor, neighborState, forceFace, lodScale))
+                        continue;
+
+                    if (current != 0)
                     {
                         // Use the thread-safe BlockInfo table if available, fallback safe handling
-                        int atlasIdx = -1;
-                        var tbi = BlockRegistry.ThreadBlockInfo;
-                        if (tbi != null && current >= 0 && current < tbi.Length)
-                        {
-                            var block = tbi[current];
-                            BlockStateContainer state = getState?.Invoke(x, y, z);
-
-                            if (block != null)
-                            {
-                                if (dir == Vector3Int.up) atlasIdx = block.topIndex;
-                                else if (dir == Vector3Int.down) atlasIdx = block.bottomIndex;
-                                else
-                                {
-                                    // Default to sides
-                                    atlasIdx = block.sideIndex;
-                                    
-                                    //Check if the block has facing state
-                                    string facing = state?.GetState("facing");
-                                    bool isFront = false;
-                                    if (facing != null)
-                                    {
-                                        if ((dir == Vector3Int.forward && facing == "north") ||
-                                            (dir == Vector3Int.back && facing == "south") ||
-                                            (dir == Vector3Int.right && facing == "east") ||
-                                            (dir == Vector3Int.left && facing == "west"))
-                                        {
-                                            isFront = true;
-                                        }
-
-                                        atlasIdx = isFront ? block.frontIndex : block.sideIndex;
-                                    }
-                                }
-                            }
-
-
-                            // Legacy code;
-                            //var info = tbi[current];
-                            //atlasIdx = info.sideIndex;
-                            //if (dir == Vector3Int.up) atlasIdx = info.topIndex;
-                            //if (dir == Vector3Int.down) atlasIdx = info.bottomIndex;
-                        }
-                        else
-                        {
-                            // As a fallback (if ThreadBlockInfo not set), try to use main-thread BlockRegistry safely.
-                            // WARNING: calling BlockRegistry.GetBlock on a worker thread is unsafe.
-                            // On main thread it will work but in worker threads you must ensure ThreadBlockInfo is built.
-                            var block = BlockRegistry.GetBlock((int)current);
-                            if (block != null)
-                            {
-                                atlasIdx = block.sideIndex;
-                                if (dir == Vector3Int.up) atlasIdx = block.topIndex;
-                                if (dir == Vector3Int.down) atlasIdx = block.bottomIndex;
-                            }
-                        }
+                        int atlasIdx = GetAtlasIndex(current, currentState, dir);
 
                         if (atlasIdx >= 0)
                         {
@@ -199,6 +163,7 @@ public static class ChunkMeshGeneratorThreaded
                             mask[mu, mv].occluded = false;
                         }
                     }
+
                 }
             }
 
@@ -253,6 +218,391 @@ public static class ChunkMeshGeneratorThreaded
 
         } // end w loop
     }
+    
+    private static bool ShouldGreedyMeshBlock(byte blockId, BlockStateContainer state, int lodScale)
+    {
+        if (blockId == 0)
+            return false;
+
+        if (IsTransparent(blockId))
+            return false;
+
+        if (lodScale == 1 && HasCustomShape(state))
+            return false;
+
+        return true;
+    }
+
+    private static bool ShouldRenderGreedyFace(byte neighborId, BlockStateContainer neighborState, bool forceFace, int lodScale)
+    {
+        if (forceFace)
+            return true;
+
+        if (neighborId == 0)
+            return true;
+
+        if (IsTransparent(neighborId))
+            return true;
+
+        if (lodScale == 1 && HasCustomShape(neighborState))
+            return true;
+
+        return false;
+    }
+
+    private static bool HasCustomShape(BlockStateContainer state)
+    {
+        if (state == null || state.StateCount <= 0)
+            return false;
+
+        return TryGetCustomBounds(state, out _, out _);
+    }
+
+    private static bool ShouldUseStateDrivenMesh(byte blockId, BlockStateContainer state)
+    {
+        if (blockId == 0)
+            return false;
+
+        return IsTransparent(blockId) || HasCustomShape(state);
+    }
+
+    private static bool TryGetCustomBounds(BlockStateContainer state, out Vector3 min, out Vector3 max)
+    {
+        min = Vector3.zero;
+        max = Vector3.one;
+
+        if (state == null || state.StateCount <= 0)
+            return false;
+
+        if (!TryGetHeight(state, out float height))
+            return false;
+
+        if (height >= 1f - FullBlockEpsilon)
+            return false;
+
+        string facing = GetFacing(state);
+        switch (facing)
+        {
+            case "down":
+                min.y = 1f - height;
+                break;
+            case "east":
+                min.x = 1f - height;
+                break;
+            case "west":
+                max.x = height;
+                break;
+            case "north":
+                min.z = 1f - height;
+                break;
+            case "south":
+                max.z = height;
+                break;
+            default:
+                max.y = height;
+                break;
+        }
+
+        return true;
+    }
+
+    private static bool TryGetHeight(BlockStateContainer state, out float height)
+    {
+        height = 1f;
+        string rawHeight = state?.GetState(BlockStateKeys.HeightState);
+        if (string.IsNullOrWhiteSpace(rawHeight))
+            return false;
+
+        if (!float.TryParse(rawHeight, System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out height))
+        {
+            height = 1f;
+            return false;
+        }
+
+        height = Mathf.Clamp01(height);
+        return true;
+    }
+
+    private static string GetFacing(BlockStateContainer state)
+    {
+        string facing = state?.GetState(BlockStateKeys.DirectionalFacing);
+        if (!string.IsNullOrWhiteSpace(facing))
+            return facing;
+
+        facing = state?.GetState("facing");
+        return string.IsNullOrWhiteSpace(facing) ? "up" : facing;
+    }
+
+    private static bool IsTransparent(byte blockId)
+    {
+        Block block = GetBlockInfo(blockId);
+        return block != null && block.isTransparent;
+    }
+
+    private static Block GetBlockInfo(byte blockId)
+    {
+        var tbi = BlockRegistry.ThreadBlockInfo;
+        if (tbi != null && blockId >= 0 && blockId < tbi.Length)
+            return tbi[blockId];
+
+        return BlockRegistry.GetBlock((int)blockId);
+    }
+
+    private static int GetAtlasIndex(byte blockId, BlockStateContainer state, Vector3Int dir)
+    {
+        Block block = GetBlockInfo(blockId);
+        if (block == null)
+            return -1;
+
+        if (dir == Vector3Int.up)
+            return block.topIndex;
+
+        if (dir == Vector3Int.down)
+            return block.bottomIndex;
+
+        int atlasIndex = block.sideIndex;
+        string facing = GetFacing(state);
+        bool isFront =
+            (dir == Vector3Int.forward && facing == "north") ||
+            (dir == Vector3Int.back && facing == "south") ||
+            (dir == Vector3Int.right && facing == "east") ||
+            (dir == Vector3Int.left && facing == "west");
+
+        if (isFront && block.frontIndex >= 0)
+            atlasIndex = block.frontIndex;
+
+        return atlasIndex;
+    }
+
+    private static void AppendStateDrivenMeshes(
+        Func<int, int, int, byte> getBlock,
+        Func<int, int, int, BlockStateContainer> getState,
+        MeshData mesh)
+    {
+        Vector3Int[] dirs =
+        {
+            Vector3Int.right, Vector3Int.left,
+            Vector3Int.up, Vector3Int.down,
+            Vector3Int.forward, Vector3Int.back
+        };
+
+        for (int x = 0; x < CHUNK_SIZE; x++)
+        for (int y = 0; y < CHUNK_SIZE; y++)
+        for (int z = 0; z < CHUNK_SIZE; z++)
+        {
+            byte blockId = getBlock(x, y, z);
+            if (blockId == 0)
+                continue;
+
+            BlockStateContainer state = getState?.Invoke(x, y, z);
+            if (!ShouldUseStateDrivenMesh(blockId, state))
+                continue;
+
+            if (!TryGetStateDrivenBounds(blockId, state, out Vector3 min, out Vector3 max))
+                continue;
+
+            foreach (Vector3Int dir in dirs)
+            {
+                if (!ShouldRenderStateDrivenFace(getBlock, getState, x, y, z, dir, min, max))
+                    continue;
+
+                int atlasIndex = GetAtlasIndex(blockId, state, dir);
+                if (atlasIndex < 0)
+                    continue;
+
+                AddStateDrivenQuad(new Vector3(x, y, z), min, max, dir, atlasIndex, mesh);
+            }
+        }
+    }
+
+    private static bool TryGetStateDrivenBounds(byte blockId, BlockStateContainer state, out Vector3 min, out Vector3 max)
+    {
+        if (TryGetCustomBounds(state, out min, out max))
+            return true;
+
+        if (IsTransparent(blockId))
+        {
+            min = Vector3.zero;
+            max = Vector3.one;
+            return true;
+        }
+
+        min = Vector3.zero;
+        max = Vector3.one;
+        return false;
+    }
+
+    private static bool ShouldRenderStateDrivenFace(
+        Func<int, int, int, byte> getBlock,
+        Func<int, int, int, BlockStateContainer> getState,
+        int x, int y, int z,
+        Vector3Int dir,
+        Vector3 min,
+        Vector3 max)
+    {
+        bool touchesBoundary =
+            (dir == Vector3Int.left && Mathf.Approximately(min.x, 0f)) ||
+            (dir == Vector3Int.right && Mathf.Approximately(max.x, 1f)) ||
+            (dir == Vector3Int.down && Mathf.Approximately(min.y, 0f)) ||
+            (dir == Vector3Int.up && Mathf.Approximately(max.y, 1f)) ||
+            (dir == Vector3Int.back && Mathf.Approximately(min.z, 0f)) ||
+            (dir == Vector3Int.forward && Mathf.Approximately(max.z, 1f));
+
+        if (!touchesBoundary)
+            return true;
+
+        byte neighborId = getBlock(x + dir.x, y + dir.y, z + dir.z);
+        BlockStateContainer neighborState = getState?.Invoke(x + dir.x, y + dir.y, z + dir.z);
+        return ShouldRenderGreedyFace(neighborId, neighborState, false, 1);
+    }
+
+    private static void AddStateDrivenQuad(
+        Vector3 blockOffset,
+        Vector3 min,
+        Vector3 max,
+        Vector3Int dir,
+        int atlasIndex,
+        MeshData mesh)
+    {
+        Vector3[] quad =
+        {
+            Vector3.zero, Vector3.zero, Vector3.zero, Vector3.zero
+        };
+
+        if (dir == Vector3Int.right)
+        {
+            quad[0] = new Vector3(max.x, min.y, max.z);
+            quad[1] = new Vector3(max.x, min.y, min.z);
+            quad[2] = new Vector3(max.x, max.y, max.z);
+            quad[3] = new Vector3(max.x, max.y, min.z);
+        }
+        else if (dir == Vector3Int.left)
+        {
+            quad[0] = new Vector3(min.x, min.y, min.z);
+            quad[1] = new Vector3(min.x, min.y, max.z);
+            quad[2] = new Vector3(min.x, max.y, min.z);
+            quad[3] = new Vector3(min.x, max.y, max.z);
+        }
+        else if (dir == Vector3Int.up)
+        {
+            quad[0] = new Vector3(min.x, max.y, min.z);
+            quad[1] = new Vector3(min.x, max.y, max.z);
+            quad[2] = new Vector3(max.x, max.y, min.z);
+            quad[3] = new Vector3(max.x, max.y, max.z);
+        }
+        else if (dir == Vector3Int.down)
+        {
+            quad[0] = new Vector3(min.x, min.y, max.z);
+            quad[1] = new Vector3(min.x, min.y, min.z);
+            quad[2] = new Vector3(max.x, min.y, max.z);
+            quad[3] = new Vector3(max.x, min.y, min.z);
+        }
+        else if (dir == Vector3Int.forward)
+        {
+            quad[0] = new Vector3(min.x, min.y, max.z);
+            quad[1] = new Vector3(max.x, min.y, max.z);
+            quad[2] = new Vector3(min.x, max.y, max.z);
+            quad[3] = new Vector3(max.x, max.y, max.z);
+        }
+        else if (dir == Vector3Int.back)
+        {
+            quad[0] = new Vector3(max.x, min.y, min.z);
+            quad[1] = new Vector3(min.x, min.y, min.z);
+            quad[2] = new Vector3(max.x, max.y, min.z);
+            quad[3] = new Vector3(min.x, max.y, min.z);
+        }
+
+        int baseIndex = mesh.vertices.Count;
+        for (int i = 0; i < 4; i++)
+        {
+            mesh.vertices.Add(blockOffset + quad[i]);
+            mesh.normals.Add(dir);
+        }
+
+        int i0 = baseIndex + 0;
+        int i1 = baseIndex + 1;
+        int i2 = baseIndex + 2;
+        int i3 = baseIndex + 3;
+
+        int t0a = i0, t0b = i2, t0c = i1;
+        int t1a = i2, t1b = i3, t1c = i1;
+
+        Vector3 A = mesh.vertices[t0b] - mesh.vertices[t0a];
+        Vector3 B = mesh.vertices[t0c] - mesh.vertices[t0a];
+        if (Vector3.Dot(Vector3.Cross(A, B), (Vector3)dir) < 0f)
+        {
+            t0b = i1;
+            t0c = i2;
+            t1b = i1;
+            t1c = i3;
+        }
+
+        mesh.triangles.Add(t0a);
+        mesh.triangles.Add(t0b);
+        mesh.triangles.Add(t0c);
+        mesh.triangles.Add(t1a);
+        mesh.triangles.Add(t1b);
+        mesh.triangles.Add(t1c);
+
+        float width, height;
+        if (dir.x != 0)
+        {
+            width = max.z - min.z;
+            height = max.y - min.y;
+        }
+        else if (dir.y != 0)
+        {
+            width = max.z - min.z;
+            height = max.x - min.x;
+        }
+        else
+        {
+            width = max.x - min.x;
+            height = max.y - min.y;
+        }
+
+        AddStateDrivenFaceUV(atlasIndex, width, height, mesh);
+
+        int colBase = mesh.colliderVertices.Count;
+        for (int i = 0; i < 4; i++)
+        {
+            mesh.colliderVertices.Add(mesh.vertices[baseIndex + i]);
+        }
+
+        mesh.colliderTriangles.Add(colBase + 0);
+        mesh.colliderTriangles.Add(colBase + 1);
+        mesh.colliderTriangles.Add(colBase + 2);
+        mesh.colliderTriangles.Add(colBase + 2);
+        mesh.colliderTriangles.Add(colBase + 1);
+        mesh.colliderTriangles.Add(colBase + 3);
+    }
+
+    private static void AddStateDrivenFaceUV(int textureID, float width, float height, MeshData mesh)
+    {
+        int tiles = ATLAS_TILES;
+        float tileSize = 1f / tiles;
+
+        int col = textureID % tiles;
+        int row = textureID / tiles;
+
+        float uMin = col * tileSize;
+        float vMax = 1f - row * tileSize;
+        float vMin = vMax - tileSize;
+
+        mesh.uvs.Add(new Vector2(0f, 0f));
+        mesh.uvs.Add(new Vector2(width, 0f));
+        mesh.uvs.Add(new Vector2(0f, height));
+        mesh.uvs.Add(new Vector2(width, height));
+
+        Vector4 meta = new Vector4(uMin, vMin, tileSize, tileSize);
+        mesh.uvMeta.Add(meta);
+        mesh.uvMeta.Add(meta);
+        mesh.uvMeta.Add(meta);
+        mesh.uvMeta.Add(meta);
+    }
+
+
     
     private static byte SampleBlock(
         Func<int,int,int,byte> getBlock,
