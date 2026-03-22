@@ -41,7 +41,7 @@ namespace Core.Block
             BlockRegistry.RegisterBlock(StoneBlock);
         
             //Sigma Block 
-            Sigma = new Block(4, "Sigma_Block", top: 4, side: 4, bottom: 4);
+            Sigma = new Block(4, "Sigma_Block", top: 16, side: 16, bottom: 16);
             BlockRegistry.RegisterBlock(Sigma);
             
             //Chest Block 
@@ -62,7 +62,7 @@ namespace Core.Block
             BlockRegistry.RegisterBlock(SandStoneBlock);
             
             //DeadGrass Block
-            DeadGrassBlock = new Block(9, "DeadGrass_Block", top: 9, side: 9, bottom: 9);
+            DeadGrassBlock = new Block(9, "DeadGrass_Block", top: 9, side: 15, bottom: 0);
             BlockRegistry.RegisterBlock(DeadGrassBlock);
             
             //Crafting table block

@@ -339,6 +339,12 @@ public static class ChunkMeshGeneratorThreaded
         Block block = GetBlockInfo(blockId);
         return block != null && block.isTransparent;
     }
+    
+    private static bool IsStretchy(byte blockId)
+    {
+        Block block = GetBlockInfo(blockId);
+        return block != null && block.isStrechy;
+    }
 
     private static Block GetBlockInfo(byte blockId)
     {
@@ -411,7 +417,7 @@ public static class ChunkMeshGeneratorThreaded
                 if (atlasIndex < 0)
                     continue;
 
-                AddStateDrivenQuad(new Vector3(x, y, z), min, max, dir, atlasIndex, mesh);
+                AddStateDrivenQuad(new Vector3(x, y, z), min, max, dir, blockId, atlasIndex, mesh);
             }
         }
     }
@@ -462,6 +468,7 @@ public static class ChunkMeshGeneratorThreaded
         Vector3 min,
         Vector3 max,
         Vector3Int dir,
+        byte blockId,
         int atlasIndex,
         MeshData mesh)
     {
@@ -562,7 +569,8 @@ public static class ChunkMeshGeneratorThreaded
             height = max.y - min.y;
         }
 
-        AddStateDrivenFaceUV(atlasIndex, width, height, mesh);
+        bool stretchTexture = IsStretchy(blockId);
+        AddStateDrivenFaceUV(dir, atlasIndex, width, height, stretchTexture, mesh);
 
         int colBase = mesh.colliderVertices.Count;
         for (int i = 0; i < 4; i++)
@@ -578,7 +586,7 @@ public static class ChunkMeshGeneratorThreaded
         mesh.colliderTriangles.Add(colBase + 3);
     }
 
-    private static void AddStateDrivenFaceUV(int textureID, float width, float height, MeshData mesh)
+    private static void AddStateDrivenFaceUV(Vector3Int dir, int textureID, float width, float height, bool stretchTexture, MeshData mesh)
     {
         int tiles = ATLAS_TILES;
         float tileSize = 1f / tiles;
@@ -590,10 +598,21 @@ public static class ChunkMeshGeneratorThreaded
         float vMax = 1f - row * tileSize;
         float vMin = vMax - tileSize;
 
+        float uScale = stretchTexture ? 1f : width;
+        float vScale = stretchTexture ? 1f : height;
+
+        if (ISZFace(dir))
+        {
+            //float swappedU = vScale;
+            //float swappedV = uScale;
+            //uScale = swappedU;
+            //vScale = swappedV;
+        }
+
         mesh.uvs.Add(new Vector2(0f, 0f));
-        mesh.uvs.Add(new Vector2(width, 0f));
-        mesh.uvs.Add(new Vector2(0f, height));
-        mesh.uvs.Add(new Vector2(width, height));
+        mesh.uvs.Add(new Vector2(uScale, 0f));
+        mesh.uvs.Add(new Vector2(0f, vScale));
+        mesh.uvs.Add(new Vector2(uScale, vScale));
 
         Vector4 meta = new Vector4(uMin, vMin, tileSize, tileSize);
         mesh.uvMeta.Add(meta);
