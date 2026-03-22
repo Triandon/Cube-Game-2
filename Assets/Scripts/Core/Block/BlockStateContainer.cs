@@ -6,6 +6,8 @@ namespace Core.Block
     {
         private Dictionary<string, BlockState> states = new();
 
+        public int StateCount => states.Count;
+
         public void SetState(string name, string value)
         {
             states[name] = new BlockState(name, value);
