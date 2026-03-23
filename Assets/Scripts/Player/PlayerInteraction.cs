@@ -116,7 +116,7 @@ public class PlayerInteraction : MonoBehaviour
             {
                 if (!IsInsideOfPlayer(target))
                 {
-                    ModifyBlock(target,stack.Item.blockId);
+                    ModifyBlock(target,stack.Item.blockId, Vector3Int.RoundToInt(lastHit.normal));
 
                     inventory.RemoveItemFromSlot(hotBarUI.GetSelectedSlot(), 1);
                 }
@@ -124,7 +124,7 @@ public class PlayerInteraction : MonoBehaviour
         }
     }
     
-    private void ModifyBlock(Vector3Int worldPos, byte id)
+    private void ModifyBlock(Vector3Int worldPos, byte id, Vector3Int? placementFace = null)
     {
         if (id == BlockDataBase.ScaffoldingBlock.id)
         {
@@ -132,7 +132,7 @@ public class PlayerInteraction : MonoBehaviour
             ScaffoldingBlock.SetPlacementMode(blockPlacementMode);
         }
         
-        chunkManager.SetBlockAtWorldPos(worldPos, id);
+        chunkManager.SetBlockAtWorldPos(worldPos, id, placementFace);
     }
     
     private void CheckForHit()

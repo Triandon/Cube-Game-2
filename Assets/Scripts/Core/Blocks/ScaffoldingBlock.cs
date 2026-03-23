@@ -22,14 +22,14 @@ public class ScaffoldingBlock : Block
         PlaceVertical = placementMode;
     }
 
-    public override void OnPlaced(Vector3Int position, BlockStateContainer state, Transform player)
+    public override void OnPlaced(Vector3Int position, BlockStateContainer state, Transform player, Vector3Int? placementFace)
     {
-        base.OnPlaced(position, state, player);
+        base.OnPlaced(position, state, player, placementFace);
         
         if (state == null)
             return;
 
-        string directionalFacing = "up";
+        string directionalFacing = placementFace == Vector3Int.down ? "down" : "up";
 
         if (PlaceVertical && player != null)
         {

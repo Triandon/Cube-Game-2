@@ -22,12 +22,14 @@ public class SlabBlock : Block
         PlaceVertical = placementMode;
     }
     
-    public override void OnPlaced(Vector3Int position, BlockStateContainer state, Transform player)
+    public override void OnPlaced(Vector3Int position, BlockStateContainer state, Transform player, Vector3Int? placementFace)
     {
+        base.OnPlaced(position, state, player, placementFace);
+        
         if (state == null)
             return;
 
-        string directionalFacing = "up";
+        string directionalFacing = placementFace == Vector3Int.down ? "down" : "up";
 
         if (PlaceVertical && player != null)
         {
@@ -43,5 +45,10 @@ public class SlabBlock : Block
         state.SetState(HeightState, slabHeight.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture));
     }
 
-
+    public override bool OnActivated(Vector3Int position, BlockStateContainer state, Block block, Transform player)
+    {
+        Debug.Log("Clicked a slab with state: " + state.GetState(BlockStateKeys.DirectionalFacing));
+        
+        return false;
+    }
 }

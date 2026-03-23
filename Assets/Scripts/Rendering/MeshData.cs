@@ -420,7 +420,7 @@ public static class ChunkMeshGeneratorThreaded
                 if (atlasIndex < 0)
                     continue;
 
-                AddStateDrivenQuad(new Vector3(x, y, z), min, max, dir, atlasIndex, mesh, blockId);
+                AddStateDrivenQuad(new Vector3(x, y, z), min, max, dir, atlasIndex, mesh, blockId, state);
             }
         }
 
@@ -474,7 +474,7 @@ public static class ChunkMeshGeneratorThreaded
         Vector3 max,
         Vector3Int dir,
         int atlasIndex,
-        MeshData mesh, byte blockId)
+        MeshData mesh, byte blockId, BlockStateContainer state)
     {
         Vector3[] quad =
         {
@@ -556,25 +556,8 @@ public static class ChunkMeshGeneratorThreaded
         mesh.triangles.Add(t1b);
         mesh.triangles.Add(t1c);
 
-        float width, height;
-        if (dir.x != 0)
-        {
-            width = max.z - min.z;
-            height = max.y - min.y;
-        }
-        else if (dir.y != 0)
-        {
-            width = max.z - min.z;
-            height = max.x - min.x;
-        }
-        else
-        {
-            width = max.x - min.x;
-            height = max.y - min.y;
-        }
-
         bool stretchTexture = IsStretchy(blockId);
-        AddStateDrivenFaceUV(dir, atlasIndex, width, height, stretchTexture, mesh);
+        AddStateDrivenFaceUV(dir, quad, atlasIndex, stretchTexture, GetFacing(state), mesh);
 
         int colBase = mesh.colliderVertices.Count;
         for (int i = 0; i < 4; i++)
@@ -590,7 +573,13 @@ public static class ChunkMeshGeneratorThreaded
         mesh.colliderTriangles.Add(colBase + 3);
     }
 
-    private static void AddStateDrivenFaceUV(Vector3Int dir, int textureID, float width, float height, bool stretchTexture, MeshData mesh)
+    private static void AddStateDrivenFaceUV(
+        Vector3Int dir,
+        Vector3[] quad,
+        int textureID,
+        bool stretchTexture,
+        string facing,
+        MeshData mesh)
     {
         int tiles = ATLAS_TILES;
         float tileSize = 1f / tiles;
@@ -602,22 +591,87 @@ public static class ChunkMeshGeneratorThreaded
         float vMax = 1f - row * tileSize;
         float vMin = vMax - tileSize;
 
-        float uScale = stretchTexture ? 1f : width;
-        float vScale = stretchTexture ? 1f : height;
+        int turnsToEast = GetHorizontalTurnsToEastReference(facing);
+        Vector3Int localDir = RotateDirToEastReference(dir, turnsToEast);
+        Vector3[] localQuad = new Vector3[quad.Length];
+        
+        float minX = float.PositiveInfinity;
+        float minY = float.PositiveInfinity;
+        float minZ = float.PositiveInfinity;
+        float maxX = float.NegativeInfinity;
+        float maxY = float.NegativeInfinity;
+        float maxZ = float.NegativeInfinity;
 
-        if (ISZFace(dir))
+        for (int i = 0; i < quad.Length; i++)
         {
-            //float swappedU = vScale;
-            //float swappedV = uScale;
-            //uScale = swappedU;
-            //vScale = swappedV;
+            Vector3 rotated = RotatePointToEastReference(quad[i], turnsToEast);
+            localQuad[i] = rotated;
+
+            minX = Mathf.Min(minX, rotated.x);
+            minY = Mathf.Min(minY, rotated.y);
+            minZ = Mathf.Min(minZ, rotated.z);
+            maxX = Mathf.Max(maxX, rotated.x);
+            maxY = Mathf.Max(maxY, rotated.y);
+            maxZ = Mathf.Max(maxZ, rotated.z);
         }
+        
+        float uScale = 1f;
+        float vScale = 1f;
 
-        mesh.uvs.Add(new Vector2(0f, 0f));
-        mesh.uvs.Add(new Vector2(uScale, 0f));
-        mesh.uvs.Add(new Vector2(0f, vScale));
-        mesh.uvs.Add(new Vector2(uScale, vScale));
+        if (!stretchTexture)
+        {
+            if (localDir.x != 0)
+            {
+                uScale = maxZ - minZ;
+                vScale = maxY - minY;
+            }
+            else if (localDir.y != 0)
+            {
+                uScale = maxZ - minZ;
+                vScale = maxX - minX;
+            }
+            else
+            {
+                uScale = maxX - minX;
+                vScale = maxY - minY;
+            }
+        }
+        
+        for (int i = 0; i < localQuad.Length; i++)
+        {
+            Vector3 p = localQuad[i];
+            float u;
+            float v;
 
+            if (localDir.x > 0)
+            {
+                u = Mathf.InverseLerp(maxZ, minZ, p.z);
+                v = Mathf.InverseLerp(minY, maxY, p.y);
+            }
+            else if (localDir.x < 0)
+            {
+                u = Mathf.InverseLerp(minZ, maxZ, p.z);
+                v = Mathf.InverseLerp(minY, maxY, p.y);
+            }
+            else if (localDir.y > 0)
+            {
+                u = Mathf.InverseLerp(minZ, maxZ, p.z);
+                v = Mathf.InverseLerp(maxX, minX, p.x);
+            }
+            else if (localDir.y < 0)
+            {
+                u = Mathf.InverseLerp(maxZ, minZ, p.z);
+                v = Mathf.InverseLerp(maxX, minX, p.x);
+            }
+            else
+            {
+                u = Mathf.InverseLerp(maxX, minX, p.x);
+                v = Mathf.InverseLerp(minY, maxY, p.y);
+            }
+
+            mesh.uvs.Add(new Vector2(u * uScale, v * vScale));
+        }
+        
         Vector4 meta = new Vector4(uMin, vMin, tileSize, tileSize);
         mesh.uvMeta.Add(meta);
         mesh.uvMeta.Add(meta);
@@ -806,6 +860,54 @@ public static class ChunkMeshGeneratorThreaded
         mesh.uvMeta.Add(meta);
         mesh.uvMeta.Add(meta);
     }
+    
+    private static int GetHorizontalTurnsToEastReference(string facing)
+    {
+        switch (facing)
+        {
+            case "north":
+                return 1;
+            case "west":
+                return 2;
+            case "south":
+                return 3;
+            default:
+                return 0;
+        }
+    }
+
+    private static Vector3 RotatePointToEastReference(Vector3 point, int turns)
+    {
+        turns = ((turns % 4) + 4) % 4;
+        switch (turns)
+        {
+            case 1:
+                return new Vector3(point.z, point.y, 1f - point.x);
+            case 2:
+                return new Vector3(1f - point.x, point.y, 1f - point.z);
+            case 3:
+                return new Vector3(1f - point.z, point.y, point.x);
+            default:
+                return point;
+        }
+    }
+
+    private static Vector3Int RotateDirToEastReference(Vector3Int dir, int turns)
+    {
+        turns = ((turns % 4) + 4) % 4;
+        switch (turns)
+        {
+            case 1:
+                return new Vector3Int(dir.z, dir.y, -dir.x);
+            case 2:
+                return new Vector3Int(-dir.x, dir.y, -dir.z);
+            case 3:
+                return new Vector3Int(-dir.z, dir.y, dir.x);
+            default:
+                return dir;
+        }
+    }
+
 }
 
 public class ChunkMeshGenerator

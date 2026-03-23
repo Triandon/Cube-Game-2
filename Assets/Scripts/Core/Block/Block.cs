@@ -61,6 +61,12 @@ namespace Core.Block
         public virtual void OnPlaced(
             Vector3Int position, BlockStateContainer state, Transform player)
         {
+            OnPlaced(position, state, player, null);
+        }
+
+        public virtual void OnPlaced(
+            Vector3Int position, BlockStateContainer state, Transform player, Vector3Int? placementFace)
+        {
             // default: does nothing
         }
         

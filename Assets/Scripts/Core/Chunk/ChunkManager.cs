@@ -560,7 +560,7 @@ namespace Core
             return chunk;
         }
 
-        public void SetBlockAtWorldPos(Vector3Int worldPos, byte id)
+        public void SetBlockAtWorldPos(Vector3Int worldPos, byte id, Vector3Int? placementFace = null)
         {
             Chunk chunk = GetChunkFromWorldPos(worldPos);
             if (chunk == null) return;
@@ -587,7 +587,7 @@ namespace Core
             {
                 state = new BlockStateContainer();
                 block?.OnPlaced(
-                    position: worldPos, state: state, player: player);
+                    position: worldPos, state: state, player: player, placementFace: placementFace);
             }
 
             if (id != 0 && block != null && block.HasBlockEntity)
