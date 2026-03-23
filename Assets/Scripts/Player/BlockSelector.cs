@@ -66,17 +66,18 @@ public class BlockSelector : MonoBehaviour
     
     private Vector3Int GetTargetBlockPos(RaycastHit hit, bool place)
     {
+        const float hitEpsilon = 0.01f;
         Vector3 pos = hit.point;
 
         if (place)
         {
             // Move one block in the direction of the hit normal
-            pos += hit.normal * 0.5f;
+            pos += hit.normal * hitEpsilon;
         }
         else
         {
             // Move slightly inside the block to avoid rounding issues
-            pos -= hit.normal * 0.5f;
+            pos -= hit.normal * hitEpsilon;
         }
 
         return Vector3Int.FloorToInt(pos);

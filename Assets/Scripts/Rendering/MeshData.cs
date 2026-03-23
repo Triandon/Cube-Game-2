@@ -226,7 +226,7 @@ public static class ChunkMeshGeneratorThreaded
         if (blockId == 0)
             return false;
 
-        if (IsTransparent(blockId))
+        if (IsTransparent(blockId) && !ShouldTreatTransparentAsSolid(lodScale))
             return false;
 
         return true;
@@ -241,9 +241,14 @@ public static class ChunkMeshGeneratorThreaded
             return true;
 
         if (IsTransparent(neighborId))
-            return true;
+            return !ShouldTreatTransparentAsSolid(lodScale);
 
         return false;
+    }
+
+    private static bool ShouldTreatTransparentAsSolid(int lodScale)
+    {
+        return lodScale > 1;
     }
 
     private static bool HasCustomShape(BlockStateContainer state)
