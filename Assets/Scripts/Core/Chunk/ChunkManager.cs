@@ -174,6 +174,7 @@ namespace Core
             chunk.blocks = res.blocks ?? new byte[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
             chunk.states = res.states ?? new BlockStateContainer[Chunk.CHUNK_SIZE,
                 Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
+            chunk.RebuildSpecialMeshBlocks();
 
             //Rebuilds block entities  AFTER chunk is ready, the entity is a GO
             if (res.blockEntityLocals != null && res.blockEntityLocals.Count > 0)
@@ -395,22 +396,48 @@ namespace Core
             byte[,,] savedBlocks = null;
             BlockStateContainer[,,] savedStates = null;
             bool meshOnly = false;
+            HashSet<Vector3Int> savedSpecialMeshBlocks = null;
 
             if (WorldSaveSystem.ChunkSaveExist(coord))
             {
                 Chunk tempChunk = new Chunk(coord);
                 WorldSaveSystem.LoadChunk(coord, tempChunk);
+                tempChunk.RebuildSpecialMeshBlocks();
                 savedBlocks = tempChunk.blocks;
                 savedStates = tempChunk.states;
+                savedSpecialMeshBlocks = tempChunk.GetSpecialMeshBlocksSnapshot();
                 meshOnly = true;
             }
 
+            HashSet<Vector3Int> specialMeshBlocks =
+                existingChunk != null
+                    ? existingChunk.GetSpecialMeshBlocksSnapshot()
+                    : meshOnly && savedBlocks != null
+                        ? savedSpecialMeshBlocks ?? BuildSpecialMeshBlocksSnapshot(coord, savedBlocks, savedStates)
+                        : new HashSet<Vector3Int>();
+
+            
             var (neighbors, neighborStates) = CaptureNeighborSnapshots(coord);
-            var req = new ChunkGenRequest(coord, lodScale, neighborLODInfo, savedBlocks, savedStates, meshOnly, neighbors, neighborStates);
+            var req = new ChunkGenRequest(coord, lodScale, neighborLODInfo, savedBlocks, savedStates, meshOnly, neighbors, neighborStates, specialMeshBlocks);
 
             pendingRequests.Add(coord);
             threadedWorker.EnqueueRequest(req);
         }
+        
+        private static HashSet<Vector3Int> BuildSpecialMeshBlocksSnapshot(
+            Vector3Int coord,
+            byte[,,] blocks,
+            BlockStateContainer[,,] states)
+        {
+            Chunk tempChunk = new Chunk(coord)
+            {
+                blocks = blocks,
+                states = states
+            };
+            tempChunk.RebuildSpecialMeshBlocks();
+            return tempChunk.GetSpecialMeshBlocksSnapshot();
+        }
+
 
         private void RemoveChunk(Chunk chunk, Vector3Int coord)
         {
@@ -426,6 +453,7 @@ namespace Core
             // Reset chunk state before returning to pool
             chunk.blocks = new byte[C, C, C];
             chunk.states = new BlockStateContainer[C, C, C];
+            chunk.specialMeshBlocks.Clear();
             chunk.chunkNumber = -1;
             
             //Removes old BE

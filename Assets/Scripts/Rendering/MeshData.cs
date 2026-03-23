@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Core;
 using Core.Block;
+using NUnit.Framework;
 using UnityEngine;
 
 //Todo In the lods, there CAN be a height bias for long distance chunks!
@@ -39,7 +40,8 @@ public static class ChunkMeshGeneratorThreaded
     }
     
     public static MeshData GenerateMeshData(Func<int,int,int,byte> getBlock,
-        Func<int, int, int, BlockStateContainer> getState, int lodScale, NeighborLODInfo neighbors)
+        Func<int, int, int, BlockStateContainer> getState, int lodScale, NeighborLODInfo neighbors,
+        IReadOnlyCollection<Vector3Int> specialMeshBlocks = null)
     {
         var mesh = new MeshData();
 
@@ -58,9 +60,9 @@ public static class ChunkMeshGeneratorThreaded
             GreedyDirection(getBlock, getState, dir, mesh,mask, lodScale, neighbors);
         }
 
-        if (lodScale == 1)
+        if (lodScale == 1 && specialMeshBlocks != null && specialMeshBlocks.Count > 0)
         {
-            AppendStateDrivenMeshes(getBlock, getState, mesh);
+            AppendStateDrivenMeshes(getBlock, getState, mesh, specialMeshBlocks);
         }
         return mesh;
     }
@@ -142,7 +144,7 @@ public static class ChunkMeshGeneratorThreaded
                         y + dir.y * lodScale,
                         z + dir.z * lodScale);
 
-                    if (!ShouldGreedyMeshBlock(current, currentState, lodScale))
+                    if (!ShouldGreedyMeshBlock(current, lodScale))
                         continue;
 
                     if (!ShouldRenderGreedyFace(neighbor, neighborState, forceFace, lodScale))
@@ -219,15 +221,12 @@ public static class ChunkMeshGeneratorThreaded
         } // end w loop
     }
     
-    private static bool ShouldGreedyMeshBlock(byte blockId, BlockStateContainer state, int lodScale)
+    private static bool ShouldGreedyMeshBlock(byte blockId,int lodScale)
     {
         if (blockId == 0)
             return false;
 
         if (IsTransparent(blockId))
-            return false;
-
-        if (lodScale == 1 && HasCustomShape(state))
             return false;
 
         return true;
@@ -244,9 +243,6 @@ public static class ChunkMeshGeneratorThreaded
         if (IsTransparent(neighborId))
             return true;
 
-        if (lodScale == 1 && HasCustomShape(neighborState))
-            return true;
-
         return false;
     }
 
@@ -258,12 +254,12 @@ public static class ChunkMeshGeneratorThreaded
         return TryGetCustomBounds(state, out _, out _);
     }
 
-    private static bool ShouldUseStateDrivenMesh(byte blockId, BlockStateContainer state)
+    private static bool ShouldUseStateDrivenMesh(byte blockId)
     {
         if (blockId == 0)
             return false;
 
-        return IsTransparent(blockId) || HasCustomShape(state);
+        return IsTransparent(blockId);
     }
 
     private static bool TryGetCustomBounds(BlockStateContainer state, out Vector3 min, out Vector3 max)
@@ -384,7 +380,7 @@ public static class ChunkMeshGeneratorThreaded
     private static void AppendStateDrivenMeshes(
         Func<int, int, int, byte> getBlock,
         Func<int, int, int, BlockStateContainer> getState,
-        MeshData mesh)
+        MeshData mesh, IReadOnlyCollection<Vector3Int> specialMeshBlocks)
     {
         Vector3Int[] dirs =
         {
@@ -393,16 +389,18 @@ public static class ChunkMeshGeneratorThreaded
             Vector3Int.forward, Vector3Int.back
         };
 
-        for (int x = 0; x < CHUNK_SIZE; x++)
-        for (int y = 0; y < CHUNK_SIZE; y++)
-        for (int z = 0; z < CHUNK_SIZE; z++)
+        foreach (Vector3Int localPos in specialMeshBlocks)
         {
+            int x = localPos.x;
+            int y = localPos.y;
+            int z = localPos.z;
+
             byte blockId = getBlock(x, y, z);
             if (blockId == 0)
                 continue;
 
             BlockStateContainer state = getState?.Invoke(x, y, z);
-            if (!ShouldUseStateDrivenMesh(blockId, state))
+            if (!ShouldUseStateDrivenMesh(blockId))
                 continue;
 
             if (!TryGetStateDrivenBounds(blockId, state, out Vector3 min, out Vector3 max))
@@ -417,9 +415,11 @@ public static class ChunkMeshGeneratorThreaded
                 if (atlasIndex < 0)
                     continue;
 
-                AddStateDrivenQuad(new Vector3(x, y, z), min, max, dir, blockId, atlasIndex, mesh);
+                AddStateDrivenQuad(new Vector3(x, y, z), min, max, dir, atlasIndex, mesh, blockId);
             }
         }
+
+
     }
 
     private static bool TryGetStateDrivenBounds(byte blockId, BlockStateContainer state, out Vector3 min, out Vector3 max)
@@ -468,9 +468,8 @@ public static class ChunkMeshGeneratorThreaded
         Vector3 min,
         Vector3 max,
         Vector3Int dir,
-        byte blockId,
         int atlasIndex,
-        MeshData mesh)
+        MeshData mesh, byte blockId)
     {
         Vector3[] quad =
         {
@@ -845,7 +844,7 @@ public class ChunkMeshGenerator
         };
 
         // Use threaded mesher to produce plain MeshData (runs on main thread here)
-        MeshData meshData = ChunkMeshGeneratorThreaded.GenerateMeshData(getBlock,getState,lodScale, neighbors);
+        MeshData meshData = ChunkMeshGeneratorThreaded.GenerateMeshData(getBlock,getState,lodScale, neighbors, owner?.specialMeshBlocks);
 
         // Convert MeshData to Unity Mesh objects (this MUST be done on main thread)
         return ConvertToChunkMeshData(meshData);

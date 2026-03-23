@@ -14,6 +14,7 @@ namespace Core
         public byte[,,] blocks;
         public BlockStateContainer[,,] states;
         public Dictionary<Vector3Int, InventoryHolder> blockEntities = new Dictionary<Vector3Int, InventoryHolder>();
+        public HashSet<Vector3Int> specialMeshBlocks = new HashSet<Vector3Int>();
         
         public bool isDirty = false;
         public bool isColliderDirty = false;
@@ -209,6 +210,8 @@ namespace Core
                 states[x, y, z] = null;
             }
 
+            UpdateSpecialMeshBlock(localPos, id, states[x, y, z]);
+            
             isDirty = true;
             isColliderDirty = true;
 
@@ -220,6 +223,58 @@ namespace Core
                 //ask chunk manager to also add neighbto chunks if it was on the border change
                 chunkManager.EnqueueNeighborUpdates(coord,localPos);
             }
+        }
+
+        public void RebuildSpecialMeshBlocks()
+        {
+            specialMeshBlocks.Clear();
+
+            for (int x = 0; x < CHUNK_SIZE; x++)
+            for (int y = 0; y < CHUNK_SIZE; y++)
+            for (int z = 0; z < CHUNK_SIZE; z++)
+            {
+                byte id = blocks[x, y, z];
+                BlockStateContainer state = states?[x, y, z];
+                Vector3Int localPos = new Vector3Int(x, y, z);
+
+                if (NeedsSpecialMesh(id))
+                {
+                    specialMeshBlocks.Add(localPos);
+                }
+            }
+        }
+        
+        public HashSet<Vector3Int> GetSpecialMeshBlocksSnapshot()
+        {
+            return specialMeshBlocks != null
+                ? new HashSet<Vector3Int>(specialMeshBlocks)
+                : new HashSet<Vector3Int>();
+        }
+
+        private void UpdateSpecialMeshBlock(Vector3Int localPos, byte id, BlockStateContainer state)
+        {
+            if (specialMeshBlocks == null)
+            {
+                specialMeshBlocks = new HashSet<Vector3Int>();
+            }
+
+            specialMeshBlocks.Remove(localPos);
+
+            if (NeedsSpecialMesh(id))
+            {
+                specialMeshBlocks.Add(localPos);
+            }
+        }
+
+
+        
+        private static bool NeedsSpecialMesh(byte id)
+        {
+            if (id == 0)
+                return false;
+
+            Block.Block block = BlockRegistry.GetBlock(id);
+            return block != null && block.isTransparent;
         }
 
         public bool IsAir(byte id)

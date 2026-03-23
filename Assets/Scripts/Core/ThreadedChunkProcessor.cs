@@ -84,7 +84,7 @@ public static class ThreadedChunkProcessor
         MeshData meshData;
         try
         {
-            meshData = ChunkMeshGeneratorThreaded.GenerateMeshData(getBlock,getState,req.lodScale,req.neighborLods);
+            meshData = ChunkMeshGeneratorThreaded.GenerateMeshData(getBlock,getState,req.lodScale,req.neighborLods, req.specialMeshBlocks);
         }
         catch (Exception e)
         {

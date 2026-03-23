@@ -135,7 +135,8 @@ public class ChunkRendering : MonoBehaviour
             (x,y,z) => chunk.GetBlock(x,y,z),
             (x,y,z) => chunk.GetStateAt(x,y,z),
             chunk.GetLodScale(),
-            chunk.chunkManager.GetNeighborLODInfo(chunk.coord)
+            chunk.chunkManager.GetNeighborLODInfo(chunk.coord),
+            chunk.specialMeshBlocks
         );
 
         // Store it
