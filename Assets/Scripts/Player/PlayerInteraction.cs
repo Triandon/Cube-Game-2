@@ -1,6 +1,7 @@
 using Core;
 using Core.Block;
 using Core.Item;
+using Player;
 using UnityEngine;
 
 public class PlayerInteraction : MonoBehaviour
@@ -11,6 +12,7 @@ public class PlayerInteraction : MonoBehaviour
 
     private Inventory inventory;
     private HotBarUI hotBarUI;
+    private PlayerEntity playerEntity;
 
     private ChunkManager chunkManager;
     private Transform player;
@@ -29,6 +31,7 @@ public class PlayerInteraction : MonoBehaviour
         chunkManager = FindAnyObjectByType<ChunkManager>();
         inventory = GetComponent<InventoryHolder>().Inventory;
         hotBarUI = FindAnyObjectByType<HotBarUI>();
+        playerEntity = GetComponent<PlayerEntity>();
         player = transform;
         
         GetComponent<PlayerInventoryHolder>().OpenInventory();
@@ -95,7 +98,7 @@ public class PlayerInteraction : MonoBehaviour
         if (Input.GetMouseButtonDown(1))
         {
             Vector3Int target = GetTargetBlockPos(lastHit, true);
-            ItemStack stack = hotBarUI.GetSelectedStack();
+            ItemStack stack = playerEntity.GetHeldItemStack();
 
             Vector3Int hitTarget = GetTargetBlockPos(lastHit, false);
             byte hitBlockId = chunkManager.GetBlockAtWorldPos(hitTarget);

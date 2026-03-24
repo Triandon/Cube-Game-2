@@ -1,5 +1,6 @@
 using System;
 using Core.Item;
+using Player;
 using TMPro;
 using UnityEngine;
 
@@ -11,6 +12,21 @@ public class HotBarUI : InventoryViewManager
     [SerializeField] private GameObject itemEntityPref;
     [SerializeField] private Transform playerPos;
     [SerializeField] private GameObject emptyGoItemListThing;
+    [SerializeField] private PlayerEntity playerEntity;
+
+    private void Awake()
+    {
+        if (playerEntity == null)
+            playerEntity = FindAnyObjectByType<PlayerEntity>();
+
+        if (playerEntity != null)
+            playerEntity.BindHotBar(this);
+    }
+
+    private void Start()
+    {
+        SyncHeldItemToPlayerEntity();
+    }
 
     private void Update()
     {
@@ -22,6 +38,7 @@ public class HotBarUI : InventoryViewManager
                 selectedSlot -= (int)Mathf.Sign(scroll);
                 selectedSlot = Mathf.Clamp(selectedSlot, 0, slots.Count - 1);
                 UpdateSelection();
+                SyncHeldItemToPlayerEntity();
             }
         
             if(Input.GetKeyDown(KeyCode.Alpha1)) Select(0);
@@ -35,6 +52,7 @@ public class HotBarUI : InventoryViewManager
                 TryDropItem();
             }
         }
+        SyncHeldItemToPlayerEntity();
         
     }
 
@@ -44,6 +62,7 @@ public class HotBarUI : InventoryViewManager
         {
             selectedSlot = index;
             UpdateSelection();
+            SyncHeldItemToPlayerEntity();
         }
     }
 
@@ -68,6 +87,14 @@ public class HotBarUI : InventoryViewManager
     public int GetSelectedSlot()
     {
         return selectedSlot;
+    }
+    
+    private void SyncHeldItemToPlayerEntity()
+    {
+        if (playerEntity == null)
+            return;
+
+        playerEntity.SetHeldItemStack(GetSelectedStack());
     }
 
     private void TryDropItem()
@@ -96,6 +123,7 @@ public class HotBarUI : InventoryViewManager
             inventory.slots[selectedSlot] = ItemStack.Empty;
         
         inventory.InventoryChanged();
+        SyncHeldItemToPlayerEntity();
     }
 
     private void DropItem(ItemStack stack)
