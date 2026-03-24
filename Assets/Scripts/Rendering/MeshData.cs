@@ -617,6 +617,7 @@ public static class ChunkMeshGeneratorThreaded
         
         float uScale = 1f;
         float vScale = 1f;
+        bool flipForDownFacing = facing == DirectionalFacing.Down;
 
         if (!stretchTexture)
         {
@@ -668,6 +669,9 @@ public static class ChunkMeshGeneratorThreaded
                 u = Mathf.InverseLerp(maxX, minX, p.x);
                 v = Mathf.InverseLerp(minY, maxY, p.y);
             }
+
+            if (flipForDownFacing)
+                v = 1f - v;
 
             mesh.uvs.Add(new Vector2(u * uScale, v * vScale));
         }
