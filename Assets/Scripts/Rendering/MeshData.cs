@@ -275,10 +275,13 @@ public static class ChunkMeshGeneratorThreaded
         if (state == null || state.StateCount <= 0)
             return false;
 
-        if (!TryGetHeight(state, out float height))
-            return false;
+        TryGetHeight(state, out float height);
+        TryGetWidth(state, out float width);
 
-        if (height >= 1f - FullBlockEpsilon)
+        bool isFullHeight = height >= 1f - FullBlockEpsilon;
+        bool isFullWidth = width >= 1f - FullBlockEpsilon;
+
+        if (isFullHeight && isFullWidth)
             return false;
 
         string facing = GetFacing(state);
@@ -303,6 +306,9 @@ public static class ChunkMeshGeneratorThreaded
                 max.y = height;
                 break;
         }
+        
+        if (!isFullWidth)
+            ApplyCenteredWidth(facing, width, ref min, ref max);
 
         return true;
     }
@@ -323,6 +329,55 @@ public static class ChunkMeshGeneratorThreaded
 
         height = Mathf.Clamp01(height);
         return true;
+    }
+    
+    private static bool TryGetWidth(BlockStateContainer state, out float width)
+    {
+        width = 1f;
+        string rawWidth = state?.GetState(BlockStateKeys.WidthState);
+        if (string.IsNullOrWhiteSpace(rawWidth))
+            return false;
+
+        if (!float.TryParse(rawWidth, System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out width))
+        {
+            width = 1f;
+            return false;
+        }
+
+        width = Mathf.Clamp01(width);
+        return true;
+    }
+
+    private static void ApplyCenteredWidth(string facing, float width, ref Vector3 min, ref Vector3 max)
+    {
+        float inset = (1f - width) * 0.5f;
+        float centeredMin = inset;
+        float centeredMax = 1f - inset;
+
+        switch (facing)
+        {
+            case "east":
+            case "west":
+                min.y = Mathf.Max(min.y, centeredMin);
+                max.y = Mathf.Min(max.y, centeredMax);
+                min.z = Mathf.Max(min.z, centeredMin);
+                max.z = Mathf.Min(max.z, centeredMax);
+                break;
+            case "north":
+            case "south":
+                min.x = Mathf.Max(min.x, centeredMin);
+                max.x = Mathf.Min(max.x, centeredMax);
+                min.y = Mathf.Max(min.y, centeredMin);
+                max.y = Mathf.Min(max.y, centeredMax);
+                break;
+            default:
+                min.x = Mathf.Max(min.x, centeredMin);
+                max.x = Mathf.Min(max.x, centeredMax);
+                min.z = Mathf.Max(min.z, centeredMin);
+                max.z = Mathf.Min(max.z, centeredMax);
+                break;
+        }
     }
 
     private static string GetFacing(BlockStateContainer state)

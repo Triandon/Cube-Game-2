@@ -3753,6 +3753,37 @@ MonoBehaviour:
   ownerName: 
   inventorySize: 0
   debugSlots: []
+--- !u!114 &1170794384
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1170794334}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a428269763cbf344795423665753ac10, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Player.PlayerEntity
+  maxHealth: 100
+  health: 100
+  maxStamina: 100
+  stamina: 100
+  maxEndurance: 100
+  endurance: 100
+  maxWalkSpeed: 5
+  walkSpeed: 5
+  maxSprintSpeed: 8
+  sprintSpeed: 8
+  jumpStrength: 5
+  isGrounded: 0
+  worldPosition: {x: 0, y: 0, z: 0}
+  heldItemStack:
+    itemId: 0
+    count: 0
+    displayName: 
+    composition:
+      entries: []
 --- !u!1 &1199583606
 GameObject:
   m_ObjectHideFlags: 0
@@ -5523,6 +5554,7 @@ MonoBehaviour:
   itemEntityPref: {fileID: 716634852}
   playerPos: {fileID: 1077880575}
   emptyGoItemListThing: {fileID: 744640352}
+  playerEntity: {fileID: 0}
 --- !u!1 &1944420075
 GameObject:
   m_ObjectHideFlags: 0
@@ -5983,6 +6015,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 1773623360729482, guid: 11aaea5348574644a9eb4f4504fcce3f, type: 3}
       insertIndex: -1
       addedObject: {fileID: 1170794379}
+    - targetCorrespondingSourceObject: {fileID: 1773623360729482, guid: 11aaea5348574644a9eb4f4504fcce3f, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1170794384}
     - targetCorrespondingSourceObject: {fileID: 1593727746557118, guid: 11aaea5348574644a9eb4f4504fcce3f, type: 3}
       insertIndex: -1
       addedObject: {fileID: 487539660}

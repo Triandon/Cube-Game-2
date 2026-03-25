@@ -20,6 +20,8 @@ namespace Core.Block
         public static Block CrusherBlock;
         public static Block SlabBlock;
         public static Block ScaffoldingBlock;
+        public static Block PoleBlock;
+        public static Block HumanHeadBlock;
         
         static BlockDataBase()
         {
@@ -81,6 +83,15 @@ namespace Core.Block
             // ScaffoldingBlock
             ScaffoldingBlock = new ScaffoldingBlock(13, "ScaffoldingBlock", top: 14, side: 14, bottom: 14);
             BlockRegistry.RegisterBlock(ScaffoldingBlock);
+            
+            // Pole block
+            PoleBlock = new PoleBlock(14, "PoleBlock", top: 16, side: 16, bottom: 16);
+            BlockRegistry.RegisterBlock(PoleBlock);
+            
+            // Human Head block
+            HumanHeadBlock = new HumanHeadBlock(15, "HumanHeadBlock", top: 18, side: 19, bottom: 20);
+            HumanHeadBlock.frontIndex = 17;
+            BlockRegistry.RegisterBlock(HumanHeadBlock);
             
             Debug.Log("Blocks registered (static)");
         }

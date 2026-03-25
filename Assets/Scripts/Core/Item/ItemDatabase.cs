@@ -45,6 +45,12 @@ namespace Core.Item
             
             //ScaffoldingBlock
             ItemRegistry.RegisterItem(new Item(13, itemName:"ScaffoldingBlock", isBlock:true, blockId: 13, textureIndex: 14, maxStackSize: 64));
+            
+            //Pole block
+            ItemRegistry.RegisterItem(new Item(14, itemName:"PoleBlock", isBlock:true, blockId: 14, textureIndex: 16, maxStackSize: 64));
+            
+            //Human Head block
+            ItemRegistry.RegisterItem(new Item(15, itemName: "HumanHeadBlock", isBlock: true, blockId: 15, textureIndex: 17, maxStackSize: 64));
         }
     
         public static void Init(){}

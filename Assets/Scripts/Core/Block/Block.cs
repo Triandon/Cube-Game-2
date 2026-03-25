@@ -35,6 +35,7 @@ namespace Core.Block
             this.frontIndex = front;
             
             AddState(BlockStateKeys.HeightState, "1");
+            AddState(BlockStateKeys.WidthState, "1");
             AddState(BlockStateKeys.DirectionalFacing, "up");
         }
 
