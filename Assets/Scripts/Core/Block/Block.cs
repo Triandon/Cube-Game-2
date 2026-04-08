@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -36,7 +37,7 @@ namespace Core.Block
             
             AddState(BlockStateKeys.HeightState, "1");
             AddState(BlockStateKeys.WidthState, "1");
-            AddState(BlockStateKeys.DirectionalFacing, "up");
+            AddState(BlockStateKeys.DirectionalFacing, DirectionalFacing.North);
         }
 
         public void AddState(string stateName, string value)
@@ -55,6 +56,11 @@ namespace Core.Block
         }
 
         public bool HasStates => states.Count > 0;
+
+        public bool HasDefinedState(string stateName)
+        {
+            return states.Exists(s => s.stateName == stateName);
+        }
         
         //Events
         
@@ -68,8 +74,31 @@ namespace Core.Block
         public virtual void OnPlaced(
             Vector3Int position, BlockStateContainer state, Transform player, Vector3Int? placementFace)
         {
-            // default: does nothing
+            if (state == null)
+                return;
+             
+            if (frontIndex < 0)
+                return;
+            
+            if (!HasDefinedState(BlockStateKeys.DirectionalFacing))
+                return;
+            
+            state.SetState(BlockStateKeys.DirectionalFacing, GetHorizontalFacingTowardPlayer(player));
         }
+        
+        protected static string GetHorizontalFacingTowardPlayer(Transform player)
+        {
+            if (player == null)
+                return DirectionalFacing.North;
+
+            Vector3 forward = -player.transform.forward;
+
+            if (Mathf.Abs(forward.x) > Mathf.Abs(forward.z))
+                return forward.x > 0 ? DirectionalFacing.East : DirectionalFacing.West;
+
+            return forward.z > 0 ? DirectionalFacing.North : DirectionalFacing.South;
+        }
+
         
         // Called when a block is activated (right clicked)
         public virtual bool OnActivated(

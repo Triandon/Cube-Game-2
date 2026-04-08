@@ -11,26 +11,25 @@ namespace Core.Blocks
             isStrechy = true;
             AddState(BlockStateKeys.WidthState, "0.5");
             AddState(BlockStateKeys.HeightState, "0.5");
-            AddState(BlockStateKeys.DirectionalFacing, DirectionalFacing.Up);
+            //AddState(BlockStateKeys.DirectionalFacing, DirectionalFacing.Up);
         }
 
         public override void OnPlaced(Vector3Int position, BlockStateContainer state, Transform player, Vector3Int? placementFace)
         {
             base.OnPlaced(position, state, player, placementFace);
             
-            Vector3 forward = -player.transform.forward;
-
-            string facing;
-
-            if (Mathf.Abs(forward.x) > Mathf.Abs(forward.z))
-                facing = forward.x > 0 ? DirectionalFacing.East : DirectionalFacing.West;
-            else
-                facing = forward.z > 0 ? DirectionalFacing.North : DirectionalFacing.Sought;
-        
-            state.SetState("facing", facing);
+            if (state == null)
+                return;
+            
             state.SetState(BlockStateKeys.WidthState, "0.5");
             state.SetState(BlockStateKeys.HeightState, "0.5");
-            //state.SetState(BlockStateKeys.DirectionalFacing, DirectionalFacing.Up);
+        }
+
+        public override bool OnActivated(Vector3Int position, BlockStateContainer state, Block.Block block, Transform player)
+        {
+            Debug.Log("Clicked with state: " + state.GetState(BlockStateKeys.DirectionalFacing));
+            
+            return false;
         }
     }
 }

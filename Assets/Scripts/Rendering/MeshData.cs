@@ -386,8 +386,22 @@ public static class ChunkMeshGeneratorThreaded
         if (!string.IsNullOrWhiteSpace(facing))
             return facing;
 
-        facing = state?.GetState("facing");
-        return string.IsNullOrWhiteSpace(facing) ? "up" : facing;
+        return "up";
+    }
+
+    private static string GetFrontTextureFacing(BlockStateContainer state)
+    {
+        string facing = state?.GetState(BlockStateKeys.DirectionalFacing);
+        
+        if (facing == DirectionalFacing.North ||
+            facing == DirectionalFacing.South ||
+            facing == DirectionalFacing.East ||
+            facing == DirectionalFacing.West)
+        {
+            return facing;
+        }
+
+        return DirectionalFacing.North;
     }
 
     private static bool IsTransparent(byte blockId)
@@ -424,7 +438,7 @@ public static class ChunkMeshGeneratorThreaded
             return block.bottomIndex;
 
         int atlasIndex = block.sideIndex;
-        string facing = GetFacing(state);
+        string facing = GetFrontTextureFacing(state);
         bool isFront =
             (dir == Vector3Int.forward && facing == "north") ||
             (dir == Vector3Int.back && facing == "south") ||
