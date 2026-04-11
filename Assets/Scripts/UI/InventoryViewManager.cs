@@ -29,6 +29,7 @@ public class InventoryViewManager : MonoBehaviour
     protected virtual void OnEnable()
     {
         InventoryHolder.OnInventoryDisplayRequested += OnInventoryRequested;
+        tooltipUI = FindFirstObjectByType<TooltipUI>(FindObjectsInactive.Include);
     }
 
     protected virtual void OnDisable()
@@ -181,6 +182,8 @@ public class InventoryViewManager : MonoBehaviour
 
     public void ShowTooltip(ItemStack stack)
     {
+        AttachTheFUCKINGsTUPIDfRICIKNGtooltopUIscriptSOitWONTbeNULL();
+        
         if(!cursor.CursorStack.IsEmpty)
             return;
         
@@ -192,7 +195,12 @@ public class InventoryViewManager : MonoBehaviour
         tooltipUI?.Hide();
     }
 
-    private void Awake()
+    private void Start()
+    {
+        AttachTheFUCKINGsTUPIDfRICIKNGtooltopUIscriptSOitWONTbeNULL();
+    }
+    
+    private void AttachTheFUCKINGsTUPIDfRICIKNGtooltopUIscriptSOitWONTbeNULL()
     {
         if (tooltipUI == null)
             tooltipUI = FindFirstObjectByType<TooltipUI>(FindObjectsInactive.Include);
