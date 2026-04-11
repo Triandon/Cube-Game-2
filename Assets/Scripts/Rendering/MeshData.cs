@@ -251,12 +251,12 @@ public static class ChunkMeshGeneratorThreaded
         return lodScale > 1;
     }
 
-    private static bool HasCustomShape(BlockStateContainer state)
+    private static bool HasCustomShape(byte blockId ,BlockStateContainer state)
     {
         if (state == null || state.StateCount <= 0)
             return false;
 
-        return TryGetCustomBounds(state, out _, out _);
+        return TryGetCustomBounds(blockId ,state, out _, out _);
     }
 
     private static bool ShouldUseStateDrivenMesh(byte blockId)
@@ -267,7 +267,7 @@ public static class ChunkMeshGeneratorThreaded
         return IsTransparent(blockId);
     }
 
-    private static bool TryGetCustomBounds(BlockStateContainer state, out Vector3 min, out Vector3 max)
+    private static bool TryGetCustomBounds(byte blockId ,BlockStateContainer state, out Vector3 min, out Vector3 max)
     {
         min = Vector3.zero;
         max = Vector3.one;
@@ -280,10 +280,22 @@ public static class ChunkMeshGeneratorThreaded
 
         bool isFullHeight = height >= 1f - FullBlockEpsilon;
         bool isFullWidth = width >= 1f - FullBlockEpsilon;
+        Block block = GetBlockInfo(blockId);
+        bool isCenteredBlock = block != null && block.isCentered;
 
         if (isFullHeight && isFullWidth)
             return false;
 
+        if (isCenteredBlock)
+        {
+            float widthInset = (1f - width) * 0.5f;
+            
+            //Lies on the ground!
+            min = new Vector3(widthInset, 0f, widthInset);
+            max = new Vector3(1f - widthInset, height, 1f - widthInset);
+            return true;
+        }
+        
         string facing = GetFacing(state);
         switch (facing)
         {
@@ -498,7 +510,7 @@ public static class ChunkMeshGeneratorThreaded
 
     private static bool TryGetStateDrivenBounds(byte blockId, BlockStateContainer state, out Vector3 min, out Vector3 max)
     {
-        if (TryGetCustomBounds(state, out min, out max))
+        if (TryGetCustomBounds(blockId, state, out min, out max))
             return true;
 
         if (IsTransparent(blockId))

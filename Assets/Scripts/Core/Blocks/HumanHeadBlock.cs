@@ -9,9 +9,10 @@ namespace Core.Blocks
         {
             isTransparent = true;
             isStrechy = true;
+            isCentered = true;
             AddState(BlockStateKeys.WidthState, "0.5");
             AddState(BlockStateKeys.HeightState, "0.5");
-            //AddState(BlockStateKeys.DirectionalFacing, DirectionalFacing.Up);
+            AddState(BlockStateKeys.DirectionalFacing, DirectionalFacing.North);
         }
 
         public override void OnPlaced(Vector3Int position, BlockStateContainer state, Transform player, Vector3Int? placementFace)

@@ -20,8 +20,9 @@ namespace Core.Block
         public float hardness = 1f;
         public bool isTransparent = false;
         public bool isStrechy = false;
+        public bool isCentered = false;
+        
         public virtual bool HasBlockEntity => false;
-
         public virtual bool HasInstantTick => false;
         public virtual bool HasScheduledTick => false;
         public virtual bool HasRandomTick => false;
@@ -37,7 +38,6 @@ namespace Core.Block
             
             AddState(BlockStateKeys.HeightState, "1");
             AddState(BlockStateKeys.WidthState, "1");
-            AddState(BlockStateKeys.DirectionalFacing, DirectionalFacing.North);
         }
 
         public void AddState(string stateName, string value)
