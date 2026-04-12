@@ -51,6 +51,9 @@ namespace Core.Item
             
             //Human Head block
             ItemRegistry.RegisterItem(new Item(15, itemName: "HumanHeadBlock", isBlock: true, blockId: 15, textureIndex: 17, maxStackSize: 64));
+            
+            //Ramp block
+            ItemRegistry.RegisterItem(new Item(16, itemName: "RampBlock", isBlock: true, blockId: 16, textureIndex: 18, maxStackSize: 64));
         }
     
         public static void Init(){}

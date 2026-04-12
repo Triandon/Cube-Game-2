@@ -274,7 +274,10 @@ namespace Core
                 return false;
 
             Block.Block block = BlockRegistry.GetBlock(id);
-            return block != null && block.isTransparent;
+            if (block == null)
+                return false;
+
+            return block.isTransparent || block.shapeIndex != (int)BlockShapes.Cube;
         }
 
         public bool IsAir(byte id)

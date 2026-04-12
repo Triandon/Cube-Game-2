@@ -22,6 +22,7 @@ namespace Core.Block
         public static Block ScaffoldingBlock;
         public static Block PoleBlock;
         public static Block HumanHeadBlock;
+        public static Block RampBlock;
         
         static BlockDataBase()
         {
@@ -92,6 +93,10 @@ namespace Core.Block
             HumanHeadBlock = new HumanHeadBlock(15, "HumanHeadBlock", top: 18, side: 19, bottom: 20);
             HumanHeadBlock.frontIndex = 17;
             BlockRegistry.RegisterBlock(HumanHeadBlock);
+            
+            // Ramp block
+            RampBlock = new RampBlock(16, "RampBlock", top: 18, side: 19, bottom: 20);
+            BlockRegistry.RegisterBlock(RampBlock);
             
             Debug.Log("Blocks registered (static)");
         }

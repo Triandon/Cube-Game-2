@@ -21,6 +21,7 @@ namespace Core.Block
         public bool isTransparent = false;
         public bool isStrechy = false;
         public bool isCentered = false;
+        public int shapeIndex = (int)BlockShapes.Cube;
         
         public virtual bool HasBlockEntity => false;
         public virtual bool HasInstantTick => false;

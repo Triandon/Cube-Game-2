@@ -226,6 +226,9 @@ public static class ChunkMeshGeneratorThreaded
         if (blockId == 0)
             return false;
 
+        if (IsNonCubeShape(blockId))
+            return false;
+
         if (IsTransparent(blockId) && !ShouldTreatTransparentAsSolid(lodScale))
             return false;
 
@@ -238,6 +241,9 @@ public static class ChunkMeshGeneratorThreaded
             return true;
 
         if (neighborId == 0)
+            return true;
+
+        if (IsNonCubeShape(neighborId))
             return true;
 
         if (IsTransparent(neighborId))
@@ -264,7 +270,11 @@ public static class ChunkMeshGeneratorThreaded
         if (blockId == 0)
             return false;
 
-        return IsTransparent(blockId);
+        if (IsTransparent(blockId))
+            return true;
+
+        Block block = GetBlockInfo(blockId);
+        return block != null && block.shapeIndex != (int)BlockShapes.Cube;
     }
 
     private static bool TryGetCustomBounds(byte blockId ,BlockStateContainer state, out Vector3 min, out Vector3 max)
@@ -428,6 +438,12 @@ public static class ChunkMeshGeneratorThreaded
         return block != null && block.isStrechy;
     }
 
+    private static bool IsNonCubeShape(byte blockId)
+    {
+        Block block = GetBlockInfo(blockId);
+        return block != null && block.shapeIndex != (int)BlockShapes.Cube;
+    }
+
     private static Block GetBlockInfo(byte blockId)
     {
         var tbi = BlockRegistry.ThreadBlockInfo;
@@ -488,6 +504,7 @@ public static class ChunkMeshGeneratorThreaded
             BlockStateContainer state = getState?.Invoke(x, y, z);
             if (!ShouldUseStateDrivenMesh(blockId))
                 continue;
+            
 
             if (!TryGetStateDrivenBounds(blockId, state, out Vector3 min, out Vector3 max))
                 continue;
@@ -763,8 +780,6 @@ public static class ChunkMeshGeneratorThreaded
         mesh.uvMeta.Add(meta);
         mesh.uvMeta.Add(meta);
     }
-
-
     
     private static byte SampleBlock(
         Func<int,int,int,byte> getBlock,
