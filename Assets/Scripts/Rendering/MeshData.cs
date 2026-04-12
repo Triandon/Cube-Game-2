@@ -505,6 +505,17 @@ public static class ChunkMeshGeneratorThreaded
             if (!ShouldUseStateDrivenMesh(blockId))
                 continue;
             
+            Block block = GetBlockInfo(blockId);
+            if (block != null && block.shapeIndex == (int)BlockShapes.Triangle)
+            {
+                AddTrianglePrismMesh(getBlock, getState, x, y, z, blockId, state, mesh);
+                continue;
+            }
+            if (block != null && block.shapeIndex == (int)BlockShapes.Pyramid)
+            {
+                AddPyramidMesh(getBlock, getState, x, y, z, blockId, state, mesh);
+                continue;
+            }
 
             if (!TryGetStateDrivenBounds(blockId, state, out Vector3 min, out Vector3 max))
                 continue;
@@ -524,7 +535,289 @@ public static class ChunkMeshGeneratorThreaded
 
 
     }
+    
+    private static void AddPyramidMesh(
+        Func<int, int, int, byte> getBlock,
+        Func<int, int, int, BlockStateContainer> getState,
+        int x,
+        int y,
+        int z,
+        byte blockId,
+        BlockStateContainer state,
+        MeshData mesh)
+    {
+        Vector3 blockOffset = new Vector3(x, y, z);
+        Vector3[] pyramidVerts =
+        {
+            new Vector3(0f, 0f, 0f), // 0
+            new Vector3(1f, 0f, 0f), // 1
+            new Vector3(1f, 0f, 1f), // 2
+            new Vector3(0f, 0f, 1f), // 3
+            new Vector3(0.5f, 1f, 0.5f), // 4 apex
+        };
 
+        if (ShouldRenderTrianglePrismBoundaryFace(getBlock, getState, x, y, z, Vector3Int.down))
+        {
+            AddTrianglePrismFace(mesh, blockOffset, pyramidVerts, new[] { 0, 1, 3, 2 }, Vector3Int.down,
+                GetAtlasIndex(blockId, state, Vector3Int.down), blockId);
+        }
+
+        // Pyramid side faces are sloped and should always render, even with neighbors.
+        AddTrianglePrismFace(mesh, blockOffset, pyramidVerts, new[] { 0, 4, 1 }, Vector3Int.back,
+            GetAtlasIndex(blockId, state, Vector3Int.back), blockId);
+        AddTrianglePrismFace(mesh, blockOffset, pyramidVerts, new[] { 1, 4, 2 }, Vector3Int.right,
+            GetAtlasIndex(blockId, state, Vector3Int.right), blockId);
+        AddTrianglePrismFace(mesh, blockOffset, pyramidVerts, new[] { 2, 4, 3 }, Vector3Int.forward,
+            GetAtlasIndex(blockId, state, Vector3Int.forward), blockId);
+        AddTrianglePrismFace(mesh, blockOffset, pyramidVerts, new[] { 3, 4, 0 }, Vector3Int.left,
+            GetAtlasIndex(blockId, state, Vector3Int.left), blockId);
+    }
+
+    private static void AddTrianglePrismMesh(
+        Func<int, int, int, byte> getBlock,
+        Func<int, int, int, BlockStateContainer> getState,
+        int x,
+        int y,
+        int z,
+        byte blockId,
+        BlockStateContainer state,
+        MeshData mesh)
+    {
+        Vector3 blockOffset = new Vector3(x, y, z);
+        string facing = GetFacing(state);
+        int turns = GetTurnsFromNorth(facing);
+
+        Vector3[] baseVertices =
+        {
+            new Vector3(0f, 0f, 0f), // 0
+            new Vector3(1f, 0f, 0f), // 1
+            new Vector3(0f, 0f, 1f), // 2
+            new Vector3(1f, 0f, 1f), // 3
+            new Vector3(0f, 1f, 1f), // 4
+            new Vector3(1f, 1f, 1f), // 5
+        };
+
+        for (int i = 0; i < baseVertices.Length; i++)
+            baseVertices[i] = RotatePointClockwise(baseVertices[i], turns);
+
+        // bottom face
+        if (ShouldRenderTrianglePrismBoundaryFace(getBlock, getState, x, y, z, Vector3Int.down))
+        {
+            AddTrianglePrismFace(mesh, blockOffset, baseVertices, new[] { 0, 1, 2, 3 }, Vector3Int.down,
+                GetAtlasIndex(blockId, state, Vector3Int.down), blockId);
+        }
+
+        // vertical back face
+        Vector3Int backDir = RotateDirClockwise(Vector3Int.forward, turns);
+        if (ShouldRenderTrianglePrismBoundaryFace(getBlock, getState, x, y, z, backDir))
+        {
+            AddTrianglePrismFace(mesh, blockOffset, baseVertices, new[] { 2, 3, 4, 5 }, backDir,
+                GetAtlasIndex(blockId, state, backDir), blockId);
+        }
+
+        // side triangle faces
+        Vector3Int leftDir = RotateDirClockwise(Vector3Int.left, turns);
+        if (ShouldRenderTrianglePrismBoundaryFace(getBlock, getState, x, y, z, leftDir))
+        {
+            AddTrianglePrismFace(mesh, blockOffset, baseVertices, new[] { 0, 2, 4 }, leftDir,
+                GetAtlasIndex(blockId, state, leftDir), blockId);
+        }
+
+        Vector3Int rightDir = RotateDirClockwise(Vector3Int.right, turns);
+        if (ShouldRenderTrianglePrismBoundaryFace(getBlock, getState, x, y, z, rightDir))
+        {
+            AddTrianglePrismFace(mesh, blockOffset, baseVertices, new[] { 1, 5, 3 }, rightDir,
+                GetAtlasIndex(blockId, state, rightDir), blockId);
+        }
+
+        // sloped face is always rendered
+        AddTrianglePrismFace(mesh, blockOffset, baseVertices, new[] { 0, 4, 1, 5 }, Vector3Int.up,
+            GetAtlasIndex(blockId, state, Vector3Int.up), blockId);
+    }
+
+    private static bool ShouldRenderTrianglePrismBoundaryFace(
+        Func<int, int, int, byte> getBlock,
+        Func<int, int, int, BlockStateContainer> getState,
+        int x,
+        int y,
+        int z,
+        Vector3Int dir)
+    {
+        byte neighborId = getBlock(x + dir.x, y + dir.y, z + dir.z);
+        BlockStateContainer neighborState = getState?.Invoke(x + dir.x, y + dir.y, z + dir.z);
+        return ShouldRenderGreedyFace(neighborId, neighborState, false, 1);
+    }
+
+    private static void AddTrianglePrismFace(
+        MeshData mesh,
+        Vector3 blockOffset,
+        Vector3[] prismVerts,
+        int[] indices,
+        Vector3Int fallbackNormal,
+        int atlasIndex,
+        byte blockId)
+    {
+        if (atlasIndex < 0)
+            return;
+
+        int baseIndex = mesh.vertices.Count;
+        for (int i = 0; i < indices.Length; i++)
+            mesh.vertices.Add(blockOffset + prismVerts[indices[i]]);
+
+        Vector3 faceNormal = ComputeFaceNormal(mesh.vertices, baseIndex, indices.Length, fallbackNormal);
+        for (int i = 0; i < indices.Length; i++)
+            mesh.normals.Add(faceNormal);
+
+        if (indices.Length == 4)
+        {
+            AddFaceTriangles(mesh.triangles, baseIndex, 0, 1, 2, 3, faceNormal, false, mesh, baseIndex);
+            AddFaceTriangles(mesh.colliderTriangles, mesh.colliderVertices.Count, 0, 1, 2, 3, faceNormal, true, mesh, baseIndex);
+        }
+        else if (indices.Length == 3)
+        {
+            AddTriangle(mesh.triangles, baseIndex, 0, 1, 2, faceNormal, false, mesh, baseIndex);
+            AddTriangle(mesh.colliderTriangles, mesh.colliderVertices.Count, 0, 1, 2, faceNormal, true, mesh, baseIndex);
+        }
+
+        for (int i = 0; i < indices.Length; i++)
+            mesh.colliderVertices.Add(mesh.vertices[baseIndex + i]);
+
+        AddPrismFaceUV(indices.Length, atlasIndex, mesh);
+    }
+
+    private static void AddPrismFaceUV(int vertexCount, int textureID, MeshData mesh)
+    {
+        if (vertexCount == 3)
+        {
+            mesh.uvs.Add(new Vector2(0f, 0f));
+            mesh.uvs.Add(new Vector2(1f, 0f));
+            mesh.uvs.Add(new Vector2(0f, 1f));
+        }
+        else
+        {
+            mesh.uvs.Add(new Vector2(0f, 0f));
+            mesh.uvs.Add(new Vector2(1f, 0f));
+            mesh.uvs.Add(new Vector2(0f, 1f));
+            mesh.uvs.Add(new Vector2(1f, 1f));
+        }
+
+        int tiles = ATLAS_TILES;
+        float tileSize = 1f / tiles;
+        int col = textureID % tiles;
+        int row = textureID / tiles;
+        float uMin = col * tileSize;
+        float vMax = 1f - row * tileSize;
+        float vMin = vMax - tileSize;
+        Vector4 meta = new Vector4(uMin, vMin, tileSize, tileSize);
+
+        for (int i = 0; i < vertexCount; i++)
+            mesh.uvMeta.Add(meta);
+    }
+
+    private static Vector3 ComputeFaceNormal(List<Vector3> vertices, int baseIndex, int count, Vector3Int fallbackNormal)
+    {
+        if (count < 3)
+            return fallbackNormal;
+
+        Vector3 a = vertices[baseIndex + 1] - vertices[baseIndex];
+        Vector3 b = vertices[baseIndex + 2] - vertices[baseIndex];
+        Vector3 normal = Vector3.Cross(a, b).normalized;
+        if (normal.sqrMagnitude <= 0f)
+            return fallbackNormal;
+
+        return normal;
+    }
+
+    private static void AddFaceTriangles(List<int> destination, int baseIndex, int i0, int i1, int i2, int i3, Vector3 normal, bool useAreaCheck = false, MeshData mesh = null, int vertexBase = 0)
+    {
+        if (Vector3.Dot(Vector3.Cross(
+                mesh != null ? mesh.vertices[vertexBase + i1] - mesh.vertices[vertexBase + i0] : Vector3.zero,
+                mesh != null ? mesh.vertices[vertexBase + i2] - mesh.vertices[vertexBase + i0] : Vector3.zero), normal) < 0f)
+        {
+            int t = i1;
+            i1 = i2;
+            i2 = t;
+        }
+
+        if (!useAreaCheck || IsTriangleValid(mesh, vertexBase, i0, i1, i2))
+        {
+            destination.Add(baseIndex + i0);
+            destination.Add(baseIndex + i1);
+            destination.Add(baseIndex + i2);
+        }
+
+        if (!useAreaCheck || IsTriangleValid(mesh, vertexBase, i2, i1, i3))
+        {
+            destination.Add(baseIndex + i2);
+            destination.Add(baseIndex + i1);
+            destination.Add(baseIndex + i3);
+        }
+    }
+
+    private static void AddTriangle(List<int> destination, int baseIndex, int i0, int i1, int i2, Vector3 normal, bool useAreaCheck = false, MeshData mesh = null, int vertexBase = 0)
+    {
+        if (Vector3.Dot(Vector3.Cross(
+                mesh != null ? mesh.vertices[vertexBase + i1] - mesh.vertices[vertexBase + i0] : Vector3.zero,
+                mesh != null ? mesh.vertices[vertexBase + i2] - mesh.vertices[vertexBase + i0] : Vector3.zero), normal) < 0f)
+        {
+            int t = i1;
+            i1 = i2;
+            i2 = t;
+        }
+
+        if (!useAreaCheck || IsTriangleValid(mesh, vertexBase, i0, i1, i2))
+        {
+            destination.Add(baseIndex + i0);
+            destination.Add(baseIndex + i1);
+            destination.Add(baseIndex + i2);
+        }
+    }
+
+    private static bool IsTriangleValid(MeshData mesh, int vertexBase, int i0, int i1, int i2)
+    {
+        const float areaEpsilon = 1e-6f;
+        if (mesh == null)
+            return true;
+
+        Vector3 a = mesh.vertices[vertexBase + i1] - mesh.vertices[vertexBase + i0];
+        Vector3 b = mesh.vertices[vertexBase + i2] - mesh.vertices[vertexBase + i0];
+        return Vector3.Cross(a, b).sqrMagnitude * 0.25f > areaEpsilon;
+    }
+
+    private static int GetTurnsFromNorth(string facing)
+    {
+        switch (facing)
+        {
+            case "east":
+                return 1;
+            case "south":
+                return 2;
+            case "west":
+                return 3;
+            default:
+                return 0;
+        }
+    }
+
+    private static Vector3 RotatePointClockwise(Vector3 point, int turns)
+    {
+        turns = ((turns % 4) + 4) % 4;
+        Vector3 rotated = point;
+        for (int i = 0; i < turns; i++)
+            rotated = new Vector3(rotated.z, rotated.y, 1f - rotated.x);
+
+        return rotated;
+    }
+
+    private static Vector3Int RotateDirClockwise(Vector3Int dir, int turns)
+    {
+        turns = ((turns % 4) + 4) % 4;
+        Vector3Int rotated = dir;
+        for (int i = 0; i < turns; i++)
+            rotated = new Vector3Int(rotated.z, rotated.y, -rotated.x);
+
+        return rotated;
+    }
     private static bool TryGetStateDrivenBounds(byte blockId, BlockStateContainer state, out Vector3 min, out Vector3 max)
     {
         if (TryGetCustomBounds(blockId, state, out min, out max))

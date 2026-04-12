@@ -54,6 +54,9 @@ namespace Core.Item
             
             //Ramp block
             ItemRegistry.RegisterItem(new Item(16, itemName: "RampBlock", isBlock: true, blockId: 16, textureIndex: 18, maxStackSize: 64));
+            
+            //Pyramid block
+            ItemRegistry.RegisterItem(new Item(17, itemName: "PyramidBlock", isBlock: true, blockId: 17, textureIndex: 19, maxStackSize: 64));
         }
     
         public static void Init(){}
