@@ -23,6 +23,7 @@ namespace Core.Block
         public static Block PoleBlock;
         public static Block HumanHeadBlock;
         public static Block RampBlock;
+        public static Block CornerRampBlock;
         public static Block PyramidBlock;
         
         static BlockDataBase()
@@ -99,8 +100,12 @@ namespace Core.Block
             RampBlock = new RampBlock(16, "RampBlock", top: 18, side: 19, bottom: 20);
             BlockRegistry.RegisterBlock(RampBlock);
             
+            // Corner Ramp block
+            CornerRampBlock = new CornerRampBlock(17, "CornerRampBlock", top: 18, side: 19, bottom: 20);
+            BlockRegistry.RegisterBlock(CornerRampBlock);
+            
             // Pyramid block
-            PyramidBlock = new Block(17, "PyramidBlock", top: 18, side: 19, bottom: 20);
+            PyramidBlock = new Block(18, "PyramidBlock", top: 18, side: 19, bottom: 20);
             PyramidBlock.shapeIndex = (int)BlockShapes.Pyramid;
             BlockRegistry.RegisterBlock(PyramidBlock);
             
