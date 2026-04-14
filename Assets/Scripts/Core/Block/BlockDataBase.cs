@@ -25,6 +25,7 @@ namespace Core.Block
         public static Block RampBlock;
         public static Block CornerRampBlock;
         public static Block PyramidBlock;
+        public static Block InvertedCornerTriangle;
         
         static BlockDataBase()
         {
@@ -97,17 +98,21 @@ namespace Core.Block
             BlockRegistry.RegisterBlock(HumanHeadBlock);
             
             // Ramp block
-            RampBlock = new RampBlock(16, "RampBlock", top: 18, side: 19, bottom: 20);
+            RampBlock = new RampBlock(16, "RampBlock", top: 6, side: 6, bottom: 6);
             BlockRegistry.RegisterBlock(RampBlock);
             
             // Corner Ramp block
-            CornerRampBlock = new CornerRampBlock(17, "CornerRampBlock", top: 18, side: 19, bottom: 20);
+            CornerRampBlock = new CornerRampBlock(17, "CornerRampBlock", top: 6, side: 6, bottom: 6);
             BlockRegistry.RegisterBlock(CornerRampBlock);
             
             // Pyramid block
-            PyramidBlock = new Block(18, "PyramidBlock", top: 18, side: 19, bottom: 20);
+            PyramidBlock = new Block(18, "PyramidBlock", top: 6, side: 6, bottom: 6);
             PyramidBlock.shapeIndex = (int)BlockShapes.Pyramid;
             BlockRegistry.RegisterBlock(PyramidBlock);
+            
+            // Inverted Corner Ramp block
+            InvertedCornerTriangle = new InvertedCornerTriangle(19, "InvertedCornerTriangle", top: 6, side: 6, bottom: 6);
+            BlockRegistry.RegisterBlock(InvertedCornerTriangle);
             
             Debug.Log("Blocks registered (static)");
         }

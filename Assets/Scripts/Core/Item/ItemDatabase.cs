@@ -53,10 +53,16 @@ namespace Core.Item
             ItemRegistry.RegisterItem(new Item(15, itemName: "HumanHeadBlock", isBlock: true, blockId: 15, textureIndex: 17, maxStackSize: 64));
             
             //Ramp block
-            ItemRegistry.RegisterItem(new Item(16, itemName: "RampBlock", isBlock: true, blockId: 16, textureIndex: 18, maxStackSize: 64));
+            ItemRegistry.RegisterItem(new Item(16, itemName: "RampBlock", isBlock: true, blockId: 16, textureIndex: 21, maxStackSize: 64));
+            
+            // Corner Ramp block
+            ItemRegistry.RegisterItem(new Item(17, itemName: "CornerRampBlock", isBlock: true, blockId: 17, textureIndex: 22, maxStackSize: 64));
             
             //Pyramid block
-            ItemRegistry.RegisterItem(new Item(17, itemName: "PyramidBlock", isBlock: true, blockId: 17, textureIndex: 19, maxStackSize: 64));
+            ItemRegistry.RegisterItem(new Item(18, itemName: "PyramidBlock", isBlock: true, blockId: 18, textureIndex: 23, maxStackSize: 64));
+            
+            // Inverted Corner Ramp block
+            ItemRegistry.RegisterItem(new Item(19, itemName: "InvertedCornerRampBlock", isBlock: true, blockId: 19, textureIndex: 24, maxStackSize: 64));
         }
     
         public static void Init(){}

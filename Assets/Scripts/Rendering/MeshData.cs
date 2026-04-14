@@ -517,6 +517,18 @@ public static class ChunkMeshGeneratorThreaded
                 continue;
             }
 
+            if (block != null && block.shapeIndex == (int)BlockShapes.CornerTriangle)
+            {
+                AddCornerRampMesh(getBlock, getState, x, y, z, blockId, state, mesh);
+                continue;
+            }
+            if (block != null && block.shapeIndex == (int)BlockShapes.InvertedCornerTriangle)
+            {
+                AddInvertedCornerRampMesh(getBlock, getState, x, y, z, blockId, state, mesh);
+                continue;
+            }
+
+
             if (!TryGetStateDrivenBounds(blockId, state, out Vector3 min, out Vector3 max))
                 continue;
 
@@ -536,6 +548,103 @@ public static class ChunkMeshGeneratorThreaded
 
     }
     
+    private static void AddCornerRampMesh(
+        Func<int, int, int, byte> getBlock,
+        Func<int, int, int, BlockStateContainer> getState,
+        int x,
+        int y,
+        int z,
+        byte blockId,
+        BlockStateContainer state,
+        MeshData mesh)
+    {
+        Vector3 blockOffset = new Vector3(x, y, z);
+        string facing = GetFacing(state);
+        int turns = GetTurnsFromNorth(facing);
+
+        Vector3[] baseVertices =
+        {
+            new Vector3(0f, 0f, 0f), // 0
+            new Vector3(1f, 0f, 0f), // 1
+            new Vector3(0f, 0f, 1f), // 2
+            new Vector3(1f, 0f, 1f), // 3 (new 4th bottom corner)
+            new Vector3(1f, 1f, 1f), // 4 top corner
+        };
+
+        for (int i = 0; i < baseVertices.Length; i++)
+            baseVertices[i] = RotatePointClockwise(baseVertices[i], turns);
+
+        if (ShouldRenderTrianglePrismBoundaryFace(getBlock, getState, x, y, z, Vector3Int.down))
+        {
+            AddTrianglePrismFace(mesh, blockOffset, baseVertices, new[] { 0, 1, 3, 2 }, Vector3Int.down,
+                GetAtlasIndex(blockId, state, Vector3Int.down), blockId);
+        }
+
+        // Same layout as the working 3-corner variant, with one extra bottom corner.
+        AddTrianglePrismFace(mesh, blockOffset, baseVertices, new[] { 0, 2, 4 }, Vector3Int.left,
+            GetAtlasIndex(blockId, state, Vector3Int.left), blockId);
+        AddTrianglePrismFace(mesh, blockOffset, baseVertices, new[] { 0, 4, 1 }, Vector3Int.up,
+            GetAtlasIndex(blockId, state, Vector3Int.up), blockId);
+        AddTrianglePrismFace(mesh, blockOffset, baseVertices, new[] { 1, 4, 3 }, Vector3Int.right,
+            GetAtlasIndex(blockId, state, Vector3Int.right), blockId);
+        AddTrianglePrismFace(mesh, blockOffset, baseVertices, new[] { 2, 3, 4 }, Vector3Int.forward,
+            GetAtlasIndex(blockId, state, Vector3Int.forward), blockId);
+    }
+    
+    private static void AddInvertedCornerRampMesh(
+        Func<int, int, int, byte> getBlock,
+        Func<int, int, int, BlockStateContainer> getState,
+        int x,
+        int y,
+        int z,
+        byte blockId,
+        BlockStateContainer state,
+        MeshData mesh)
+    {
+        Vector3 blockOffset = new Vector3(x, y, z);
+        string facing = GetFacing(state);
+        int turns = GetTurnsFromNorth(facing);
+
+        Vector3[] verts =
+        {
+            new Vector3(0f, 0f, 0f), // 0 bottom-front-left
+            new Vector3(1f, 0f, 0f), // 1 bottom-front-right
+            new Vector3(1f, 0f, 1f), // 2 bottom-back-right
+            new Vector3(0f, 0f, 1f), // 3 bottom-back-left
+            new Vector3(0f, 1f, 1f), // 4 top-back-left
+            new Vector3(1f, 1f, 0f), // 5 top-front-right
+            new Vector3(1f, 1f, 1f), // 6 top-back-right
+        };
+
+        for (int i = 0; i < verts.Length; i++)
+            verts[i] = RotatePointClockwise(verts[i], turns);
+
+        // Flat bottom
+        if (ShouldRenderTrianglePrismBoundaryFace(getBlock, getState, x, y, z, Vector3Int.down))
+        {
+            AddTrianglePrismFace(mesh, blockOffset, verts, new[] { 0, 1, 3, 2 }, Vector3Int.down,
+                GetAtlasIndex(blockId, state, Vector3Int.down), blockId);
+        }
+
+        // Top with 3 corners
+        AddTrianglePrismFace(mesh, blockOffset, verts, new[] { 5, 4, 6 }, Vector3Int.up,
+            GetAtlasIndex(blockId, state, Vector3Int.up), blockId);
+
+        // Two flat sides
+        AddTrianglePrismFace(mesh, blockOffset, verts, new[] { 1, 5, 2, 6 }, Vector3Int.right,
+            GetAtlasIndex(blockId, state, Vector3Int.right), blockId);
+        AddTrianglePrismFace(mesh, blockOffset, verts, new[] { 3, 2, 4, 6 }, Vector3Int.forward,
+            GetAtlasIndex(blockId, state, Vector3Int.forward), blockId);
+
+        // Remaining ramped faces
+        AddTrianglePrismFace(mesh, blockOffset, verts, new[] { 0, 5, 1 }, Vector3Int.back,
+            GetAtlasIndex(blockId, state, Vector3Int.back), blockId);
+        AddTrianglePrismFace(mesh, blockOffset, verts, new[] { 0, 3, 4 }, Vector3Int.left,
+            GetAtlasIndex(blockId, state, Vector3Int.left), blockId);
+        AddTrianglePrismFace(mesh, blockOffset, verts, new[] { 0, 4, 5 }, Vector3Int.up,
+            GetAtlasIndex(blockId, state, Vector3Int.up), blockId);
+    }
+
     private static void AddPyramidMesh(
         Func<int, int, int, byte> getBlock,
         Func<int, int, int, BlockStateContainer> getState,

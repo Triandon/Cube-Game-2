@@ -3,11 +3,11 @@ using UnityEngine;
 
 namespace Core.Blocks
 {
-    public class CornerRampBlock : Block.Block
+    public class InvertedCornerTriangle : Block.Block
     {
-        public CornerRampBlock(byte id, string name, int top, int side, int bottom, int front = -1) : base(id, name, top, side, bottom, front)
+        public InvertedCornerTriangle(byte id, string name, int top, int side, int bottom, int front = -1) : base(id, name, top, side, bottom, front)
         {
-            shapeIndex = (int)BlockShapes.CornerTriangle;
+            shapeIndex = (int)BlockShapes.InvertedCornerTriangle;
             AddState(BlockStateKeys.DirectionalFacing, DirectionalFacing.North);
         }
         
