@@ -46,7 +46,7 @@ namespace Core.Blocks
             float currentGrowTime = GetGrowTime(position, chunkManager);
             currentGrowTime += Mathf.Max(0f, deltaTime);
 
-            Debug.Log("Growing the POLE");
+            //Debug.Log("Growing the POLE");
             
             if (currentGrowTime >= 5f)
             {
@@ -57,7 +57,7 @@ namespace Core.Blocks
 
                 width += 0.1f;
                 
-                Debug.Log("The Pole grown to: " + width + " and had before: " + (width - 0.1f));
+                //Debug.Log("The Pole grown to: " + width + " and had before: " + (width - 0.1f));
                 
                 blockStateContainer.SetState(BlockStateKeys.WidthState,width.ToString(CultureInfo.InvariantCulture));
                 return;
