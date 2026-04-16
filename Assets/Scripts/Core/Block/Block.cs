@@ -36,9 +36,6 @@ namespace Core.Block
             this.sideIndex = side;
             this.bottomIndex = bottom;
             this.frontIndex = front;
-            
-            AddState(BlockStateKeys.HeightState, "1");
-            AddState(BlockStateKeys.WidthState, "1");
         }
 
         public void AddState(string stateName, string value)
