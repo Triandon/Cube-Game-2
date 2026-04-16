@@ -44,6 +44,8 @@ public static class ChunkMeshGeneratorThreaded
         IReadOnlyCollection<Vector3Int> specialMeshBlocks = null)
     {
         var mesh = new MeshData();
+        bool hasSpecialMeshBlocks = lodScale == 1 && specialMeshBlocks != null && specialMeshBlocks.Count > 0;
+        bool assumeOpaqueCubeOnly = lodScale == 1 && !hasSpecialMeshBlocks;
 
         // Local re-usable structures for mask and loops
         MaskCell[,] mask = new MaskCell[CHUNK_SIZE, CHUNK_SIZE];
@@ -57,10 +59,10 @@ public static class ChunkMeshGeneratorThreaded
 
         foreach (var dir in dirs)
         {
-            GreedyDirection(getBlock, getState, dir, mesh,mask, lodScale, neighbors);
+            GreedyDirection(getBlock, getState, dir, mesh,mask, lodScale, neighbors, assumeOpaqueCubeOnly);
         }
 
-        if (lodScale == 1 && specialMeshBlocks != null && specialMeshBlocks.Count > 0)
+        if (hasSpecialMeshBlocks)
         {
             AppendStateDrivenMeshes(getBlock, getState, mesh, specialMeshBlocks);
         }
@@ -69,7 +71,7 @@ public static class ChunkMeshGeneratorThreaded
     
     // Greedy direction implementation adapted to be fully data-only and match original behavior
     private static void GreedyDirection(Func<int,int,int,byte> getBlock, Func<int, int, int, BlockStateContainer> getState, 
-        Vector3Int dir, MeshData mesh,MaskCell[,] mask, int lodScale, NeighborLODInfo neighbors)
+        Vector3Int dir, MeshData mesh,MaskCell[,] mask, int lodScale, NeighborLODInfo neighbors, bool assumeOpaqueCubeOnly)
     {
         int neighborScale =
             dir == Vector3Int.right   ? neighbors.posX :
@@ -138,22 +140,39 @@ public static class ChunkMeshGeneratorThreaded
                     );
 
                     bool forceFace = isBorderSlice && neighborScale < lodScale;
-                    BlockStateContainer currentState = getState?.Invoke(x, y, z);
-                    BlockStateContainer neighborState = getState?.Invoke(
-                        x + dir.x * lodScale,
-                        y + dir.y * lodScale,
-                        z + dir.z * lodScale);
+                    Block currentBlock = null;
+                    bool renderFace;
+                    if (assumeOpaqueCubeOnly)
+                    {
+                        if (current == 0)
+                            continue;
 
-                    if (!ShouldGreedyMeshBlock(current, lodScale))
-                        continue;
+                        renderFace = forceFace || neighbor == 0;
+                    }
+                    else
+                    {
+                        if (!ShouldGreedyMeshBlock(current, lodScale, out currentBlock))
+                            continue;
 
-                    if (!ShouldRenderGreedyFace(neighbor, neighborState, forceFace, lodScale))
+                        renderFace = ShouldRenderGreedyFace(neighbor, forceFace, lodScale);
+                    }
+
+                    if (!renderFace)
                         continue;
 
                     if (current != 0)
                     {
-                        // Use the thread-safe BlockInfo table if available, fallback safe handling
-                        int atlasIdx = GetAtlasIndex(current, currentState, dir);
+                        currentBlock ??= GetBlockInfo(current);
+                        if (currentBlock == null)
+                            continue;
+
+                        BlockStateContainer currentState = null;
+                        if (ShouldReadFacingState(currentBlock, dir))
+                        {
+                            currentState = getState?.Invoke(x, y, z);
+                        }
+
+                        int atlasIdx = GetAtlasIndex(currentBlock, currentState, dir);
 
                         if (atlasIdx >= 0)
                         {
@@ -221,21 +240,26 @@ public static class ChunkMeshGeneratorThreaded
         } // end w loop
     }
     
-    private static bool ShouldGreedyMeshBlock(byte blockId,int lodScale)
+    private static bool ShouldGreedyMeshBlock(byte blockId,int lodScale, out Block block)
     {
+        block = null;
         if (blockId == 0)
             return false;
 
-        if (IsNonCubeShape(blockId))
+        block = GetBlockInfo(blockId);
+        if (block == null)
             return false;
 
-        if (IsTransparent(blockId) && !ShouldTreatTransparentAsSolid(lodScale))
+        if (block.shapeIndex != (int)BlockShapes.Cube)
+            return false;
+
+        if (block.isTransparent && !ShouldTreatTransparentAsSolid(lodScale))
             return false;
 
         return true;
     }
 
-    private static bool ShouldRenderGreedyFace(byte neighborId, BlockStateContainer neighborState, bool forceFace, int lodScale)
+    private static bool ShouldRenderGreedyFace(byte neighborId, bool forceFace, int lodScale)
     {
         if (forceFace)
             return true;
@@ -243,10 +267,14 @@ public static class ChunkMeshGeneratorThreaded
         if (neighborId == 0)
             return true;
 
-        if (IsNonCubeShape(neighborId))
+        Block neighbor = GetBlockInfo(neighborId);
+        if (neighbor == null)
+            return false;
+
+        if (neighbor.shapeIndex != (int)BlockShapes.Cube)
             return true;
 
-        if (IsTransparent(neighborId))
+        if (neighbor.isTransparent)
             return !ShouldTreatTransparentAsSolid(lodScale);
 
         return false;
@@ -452,10 +480,26 @@ public static class ChunkMeshGeneratorThreaded
 
         return BlockRegistry.GetBlock((int)blockId);
     }
+    
+    private static bool ShouldReadFacingState(Block block, Vector3Int dir)
+    {
+        if (block == null)
+            return false;
 
+        if (dir == Vector3Int.up || dir == Vector3Int.down)
+            return false;
+
+        return block.frontIndex >= 0;
+    }
+    
     private static int GetAtlasIndex(byte blockId, BlockStateContainer state, Vector3Int dir)
     {
         Block block = GetBlockInfo(blockId);
+        return GetAtlasIndex(block, state, dir);
+    }
+
+    private static int GetAtlasIndex(Block block, BlockStateContainer state, Vector3Int dir)
+    {
         if (block == null)
             return -1;
 
@@ -753,8 +797,7 @@ public static class ChunkMeshGeneratorThreaded
         Vector3Int dir)
     {
         byte neighborId = getBlock(x + dir.x, y + dir.y, z + dir.z);
-        BlockStateContainer neighborState = getState?.Invoke(x + dir.x, y + dir.y, z + dir.z);
-        return ShouldRenderGreedyFace(neighborId, neighborState, false, 1);
+        return ShouldRenderGreedyFace(neighborId, false, 1);
     }
 
     private static void AddTrianglePrismFace(
@@ -964,8 +1007,7 @@ public static class ChunkMeshGeneratorThreaded
             return true;
 
         byte neighborId = getBlock(x + dir.x, y + dir.y, z + dir.z);
-        BlockStateContainer neighborState = getState?.Invoke(x + dir.x, y + dir.y, z + dir.z);
-        return ShouldRenderGreedyFace(neighborId, neighborState, false, 1);
+        return ShouldRenderGreedyFace(neighborId, false, 1);
     }
 
     private static void AddStateDrivenQuad(
