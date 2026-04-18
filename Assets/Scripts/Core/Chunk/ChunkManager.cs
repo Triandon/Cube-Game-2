@@ -560,9 +560,63 @@ namespace Core
             return chunk;
         }
 
+        private Chunk GetOrCreateChunkForWorld(Vector3Int worldPos, byte idToWrite)
+        {
+            Vector3Int chunkCord = new Vector3Int(
+                Mathf.FloorToInt((float)worldPos.x / Chunk.CHUNK_SIZE),
+                Mathf.FloorToInt((float)worldPos.y / Chunk.CHUNK_SIZE),
+                Mathf.FloorToInt((float)worldPos.z / Chunk.CHUNK_SIZE));
+
+            if (chunks.TryGetValue(chunkCord, out Chunk existingChunk))
+            {
+                return existingChunk;
+            }
+
+            if (idToWrite == 0)
+            {
+                return null;
+            }
+
+            if (World.Instance == null || !World.Instance.IsChunkInsideOfWorld(chunkCord))
+            {
+                return null;
+            }
+
+            if (!knownAllAirChunks.Contains(chunkCord) && !WorldSaveSystem.ChunkSaveExist(chunkCord))
+            {
+                if (!pendingRequests.Contains(chunkCord) && !generationQue.Contains(chunkCord))
+                {
+                    generationQue.Add(chunkCord);
+                }
+
+                return null;
+            }
+
+            knownAllAirChunks.Remove(chunkCord);
+            generationQue.Remove(chunkCord);
+            pendingRequests.Remove(chunkCord);
+
+            chunkCount++;
+            Chunk chunk = GenerateChunkShell(chunkCord, chunkCount);
+            chunk.blocks = new byte[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
+            chunk.states = new BlockStateContainer[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
+
+            if (WorldSaveSystem.ChunkSaveExist(chunkCord))
+            {
+                WorldSaveSystem.LoadChunk(chunkCord, chunk);
+                chunk.RebuildSpecialMeshBlocks();
+                RebuildBlockEntities(chunk);
+            }
+
+            meshQue.Add(chunk);
+            EnqueueNeighborRebuilds(chunkCord);
+
+            return chunk;
+        }
+
         public void SetBlockAtWorldPos(Vector3Int worldPos, byte id, Vector3Int? placementFace = null)
         {
-            Chunk chunk = GetChunkFromWorldPos(worldPos);
+            Chunk chunk = GetOrCreateChunkForWorld(worldPos, id);
             if (chunk == null) return;
 
             Vector3Int local = chunk.WorldToLocal(worldPos);
