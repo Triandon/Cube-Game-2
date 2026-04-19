@@ -764,6 +764,52 @@ namespace Core
 
             return chunk.states[local.x, local.y, local.z];
         }
+
+        public bool CheckForVoxel(float _x, float _y, float _z)
+        {
+            int xCheck = Mathf.FloorToInt(_x);
+            int yCheck = Mathf.FloorToInt(_y);
+            int zCheck = Mathf.FloorToInt(_z);
+
+            return CheckForVoxel(new Vector3Int(xCheck, yCheck, zCheck));
+        }
+
+        public bool CheckForVoxel(Vector3 worldPos)
+        {
+            return CheckForVoxel(Vector3Int.FloorToInt(worldPos));
+        }
+
+        public bool CheckForVoxel(Vector3Int worldBlockPos)
+        {
+            Chunk chunk = GetChunkFromWorldPos(worldBlockPos);
+            if (chunk == null)
+            {
+                return false;
+            }
+
+            Vector3Int local = chunk.WorldToLocal(worldBlockPos);
+
+            if (local.x < 0 || local.x >= Chunk.CHUNK_SIZE ||
+                local.y < 0 || local.y >= Chunk.CHUNK_SIZE ||
+                local.z < 0 || local.z >= Chunk.CHUNK_SIZE)
+            {
+                return false;
+            }
+
+            byte blockId = chunk.blocks[local.x, local.y, local.z];
+            if (blockId == 0)
+            {
+                return false;
+            }
+
+            Block.Block block = BlockRegistry.GetBlock(blockId);
+            if (block == null)
+            {
+                return false;
+            }
+
+            return !block.isTransparent;
+        }
         
 
         private void UpdateChunkCollidersForPlayerMove()
