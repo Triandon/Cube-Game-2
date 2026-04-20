@@ -1,7 +1,6 @@
 using System;
 using Core;
 using UnityEngine;
-using UnityEngine.InputSystem;
 
 public class PlayerControllerClass : MonoBehaviour
 {
@@ -15,8 +14,11 @@ public class PlayerControllerClass : MonoBehaviour
     public float sprintSpeed = 6f;
     public float jumpForce = 5f;
     public float gravity = -9.81f;
+    public float mouseSensitivity = 180f;
+    public float maxLookAngle = 89f;
 
     public float playerWidth = 0.15f; //Radius
+    public float playerHeight = 2f;
     
     private float horizontal;
     private float vertical;
@@ -25,57 +27,68 @@ public class PlayerControllerClass : MonoBehaviour
     private Vector3 velocity;
     private float verticalMomentum = 0;
     private bool jumpRequest;
+    private float cameraPitch;
 
     private void Start()
     {
         camera = GameObject.Find("Camera").transform;
         chunkManager = GameObject.Find("ChunkGen").GetComponent<ChunkManager>();
+        Cursor.lockState = CursorLockMode.Locked;
+        Cursor.visible = false;
     }
 
     private void Update()
     {
         GetPlayerInputs();
+        
+        transform.Rotate(Vector3.up * mouseHorizontal);
+        cameraPitch = Mathf.Clamp(cameraPitch - mouseVertical, -maxLookAngle, maxLookAngle);
+        camera.localEulerAngles = new Vector3(cameraPitch, 0f, 0f);
     }
 
     private void FixedUpdate()
     {
-        CalculateVelocity();
         if (jumpRequest)
             Jump();
         
-        transform.Rotate(Vector3.up * mouseHorizontal);
-        camera.Rotate(Vector3.right * -mouseVertical);
-        transform.Translate(velocity, Space.World);
+        CalculateVelocity();
     }
 
     private void CalculateVelocity()
     {
-        // Affect vertical momentium with g
-        if (verticalMomentum > gravity)
+        // Affect vertical momentum with gravity
+        if (!isGrounded || verticalMomentum > 0f)
             verticalMomentum += Time.fixedDeltaTime * gravity;
         
-        // if were spriting, use spritn
-        if (isSprinting)
-            velocity = ((transform.forward * vertical) + (transform.right * horizontal)) * Time.fixedDeltaTime *
-                       sprintSpeed;
+        float moveSpeed = isSprinting ? sprintSpeed : walkSpeed;
+        Vector3 moveDirection = (transform.forward * vertical + transform.right * horizontal).normalized;
+        Vector3 horizontalMove = moveDirection * (moveSpeed * Time.fixedDeltaTime);
+        
+        // Move horizontally in axis-separated steps so we never "step up" through walls.
+        Vector3 xTarget = transform.position + new Vector3(horizontalMove.x, 0f, 0f);
+        if (!IsSolidAtPlayerPosition(xTarget))
+            transform.position = xTarget;
+
+        Vector3 zTarget = transform.position + new Vector3(0f, 0f, horizontalMove.z);
+        if (!IsSolidAtPlayerPosition(zTarget))
+            transform.position = zTarget;
+        
+        // Vertical movment
+        float verticalMove = verticalMomentum * Time.fixedDeltaTime;
+        if (verticalMove > 0f)
+        {
+            float resolvedUp = checkUpSpeed(verticalMove);
+            transform.position += Vector3.up * resolvedUp;
+            if (resolvedUp == 0f)
+                verticalMomentum = 0f;
+            isGrounded = false;
+        }
         else
-            velocity = ((transform.forward * vertical) + (transform.right * horizontal)) * Time.fixedDeltaTime *
-                       walkSpeed;
-        
-        // Aply vertical momentum (fall / jump)
+        {
+            float reslovedDown = checkDownSpeed(verticalMove);
+            transform.position += Vector3.up * reslovedDown;
+        }
 
-        velocity += Vector3.up * verticalMomentum * Time.fixedDeltaTime;
-
-        if ((velocity.z > 0 && front) || (velocity.z < 0 && back))
-            velocity.z = 0;
-        
-        if ((velocity.x > 0 && right) || (velocity.x < 0 && left))
-            velocity.x = 0;
-
-        if (velocity.y < 0)
-            velocity.y = checkDownSpeed(velocity.y);
-        else if (velocity.y > 0)
-            velocity.y = checkUpSpeed(velocity.y);
     }
 
     private void Jump()
@@ -89,16 +102,17 @@ public class PlayerControllerClass : MonoBehaviour
     {
         horizontal = Input.GetAxis("Horizontal");
         vertical = Input.GetAxis("Vertical");
-        mouseHorizontal = Input.GetAxis("Mouse X");
-        mouseVertical = Input.GetAxis("Mouse Y");
+        
+        mouseHorizontal = Input.GetAxis("Mouse X") * mouseSensitivity * Time.fixedDeltaTime;
+        mouseVertical = Input.GetAxis("Mouse Y") * mouseSensitivity * Time.fixedDeltaTime;
 
         if (Input.GetButtonDown("Sprint"))
             isSprinting = true;
 
-        if (Input.GetButtonDown("Sprint"))
+        if (Input.GetButtonUp("Sprint"))
             isSprinting = false;
 
-        if (isGrounded && Input.GetButtonUp("Jump"))
+        if (isGrounded && Input.GetButtonDown("Jump"))
             jumpRequest = true;
         
         
@@ -106,12 +120,11 @@ public class PlayerControllerClass : MonoBehaviour
 
     private float checkDownSpeed(float downSpeed)
     {
-        if (chunkManager.CheckForVoxel(transform.position.x - playerWidth, transform.position.y + downSpeed, transform.position.z - playerWidth) ||
-            chunkManager.CheckForVoxel(transform.position.x + playerWidth, transform.position.y + downSpeed, transform.position.z - playerWidth) ||
-            chunkManager.CheckForVoxel(transform.position.x + playerWidth, transform.position.y + downSpeed, transform.position.z + playerWidth) ||
-            chunkManager.CheckForVoxel(transform.position.x - playerWidth, transform.position.y + downSpeed, transform.position.z + playerWidth))
+        Vector3 nextPos = transform.position + Vector3.up * downSpeed;
+        if (IsSolidAtHeight(nextPos, 0f))
         {
             isGrounded = true;
+            verticalMomentum = 0f;
             return 0f;
         }
         else
@@ -123,10 +136,8 @@ public class PlayerControllerClass : MonoBehaviour
     
     private float checkUpSpeed(float upSpeed)
     {
-        if (chunkManager.CheckForVoxel(transform.position.x - playerWidth, transform.position.y + 2f + upSpeed, transform.position.z - playerWidth) ||
-            chunkManager.CheckForVoxel(transform.position.x + playerWidth, transform.position.y + 2f + upSpeed, transform.position.z - playerWidth) ||
-            chunkManager.CheckForVoxel(transform.position.x + playerWidth, transform.position.y + 2f + upSpeed, transform.position.z + playerWidth) ||
-            chunkManager.CheckForVoxel(transform.position.x - playerWidth, transform.position.y + 2f + upSpeed, transform.position.z + playerWidth))
+        Vector3 nextPos = transform.position + Vector3.up * upSpeed;
+        if (IsSolidAtHeight(nextPos, playerHeight))
         {
             return 0f;
         }
@@ -136,73 +147,17 @@ public class PlayerControllerClass : MonoBehaviour
         }
     }
 
-    public bool front
+    private bool IsSolidAtHeight(Vector3 pos, float heightOffset)
     {
-        get
-        {
-            if(
-                chunkManager.CheckForVoxel(transform.position.x, transform.position.y, transform.position.z + playerWidth) ||
-                    chunkManager.CheckForVoxel(transform.position.x, transform.position.y + 1f, transform.position.z + playerWidth)
-                )
-            {
-                return true;
-            }
-            else
-            {
-                return false;
-            }
-        }
+        float y = pos.y + heightOffset;
+        return chunkManager.CheckForVoxel(pos.x - playerWidth, y, pos.z - playerWidth) ||
+               chunkManager.CheckForVoxel(pos.x + playerWidth, y, pos.z - playerWidth) ||
+               chunkManager.CheckForVoxel(pos.x + playerWidth, y, pos.z + playerWidth) ||
+               chunkManager.CheckForVoxel(pos.x - playerWidth, y, pos.z + playerWidth);
     }
-    
-    public bool back
+
+    private bool IsSolidAtPlayerPosition(Vector3 pos)
     {
-        get
-        {
-            if(
-                chunkManager.CheckForVoxel(transform.position.x, transform.position.y, transform.position.z - playerWidth) ||
-                chunkManager.CheckForVoxel(transform.position.x, transform.position.y + 1f, transform.position.z - playerWidth)
-            )
-            {
-                return true;
-            }
-            else
-            {
-                return false;
-            }
-        }
-    }
-    public bool left
-    {
-        get
-        {
-            if(
-                chunkManager.CheckForVoxel(transform.position.x - playerWidth, transform.position.y, transform.position.z) ||
-                chunkManager.CheckForVoxel(transform.position.x - playerWidth, transform.position.y + 1f, transform.position.z)
-            )
-            {
-                return true;
-            }
-            else
-            {
-                return false;
-            }
-        }
-    }
-    public bool right
-    {
-        get
-        {
-            if(
-                chunkManager.CheckForVoxel(transform.position.x + playerWidth, transform.position.y, transform.position.z) ||
-                chunkManager.CheckForVoxel(transform.position.x + playerWidth, transform.position.y + 1f, transform.position.z)
-            )
-            {
-                return true;
-            }
-            else
-            {
-                return false;
-            }
-        }
+        return IsSolidAtHeight(pos, 0f) || IsSolidAtHeight(pos, 1f) || IsSolidAtHeight(pos, playerHeight - 0.05f);
     }
 }
