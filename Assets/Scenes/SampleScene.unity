@@ -1540,11 +1540,6 @@ MonoBehaviour:
     m_VarianceClampScale: 0.9
     m_ContrastAdaptiveSharpening: 0
   m_Version: 2
---- !u!20 &487539661 stripped
-Camera:
-  m_CorrespondingSourceObject: {fileID: 20437472682476688, guid: 11aaea5348574644a9eb4f4504fcce3f, type: 3}
-  m_PrefabInstance: {fileID: 1978288246}
-  m_PrefabAsset: {fileID: 0}
 --- !u!1 &487685941
 GameObject:
   m_ObjectHideFlags: 0
@@ -3434,11 +3429,6 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1074479152}
   m_CullTransparentMesh: 1
---- !u!4 &1077880575 stripped
-Transform:
-  m_CorrespondingSourceObject: {fileID: 4207293392497186, guid: 11aaea5348574644a9eb4f4504fcce3f, type: 3}
-  m_PrefabInstance: {fileID: 1978288246}
-  m_PrefabAsset: {fileID: 0}
 --- !u!1 &1085411080
 GameObject:
   m_ObjectHideFlags: 0
@@ -3646,22 +3636,6 @@ GameObject:
   m_CorrespondingSourceObject: {fileID: 1773623360729482, guid: 11aaea5348574644a9eb4f4504fcce3f, type: 3}
   m_PrefabInstance: {fileID: 1978288246}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &1170794341
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1170794334}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 01aeab99bfdaa82408b231c938404643, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::BlockSelector
-  playerCamera: {fileID: 487539661}
-  highlightedBlock: {x: 0, y: 0, z: 0}
-  maxDistance: 6
-  highlightCube: {fileID: 5562458439230004194, guid: e1c8a80c4ecad9a429a18ea0b87ae5ce, type: 3}
 --- !u!65 &1170794346
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -3690,7 +3664,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1170794334}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 084c01ab381b9da4082c1f84cf70751b, type: 3}
   m_Name: 
@@ -3723,67 +3697,6 @@ MonoBehaviour:
   - {fileID: 2077135885}
   - {fileID: 2122104256}
   - {fileID: 1070700383}
---- !u!114 &1170794374
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1170794334}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 48270b562a466ba488325ae8f540e438, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::PlayerInteraction
-  playerCamera: {fileID: 487539661}
-  pickupDistance: 3
-  maxDistance: 6
---- !u!114 &1170794379
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1170794334}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 211ab49654d0dd546aa2b108ad8851e5, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::PlayerInventoryHolder
-  ownerName: 
-  inventorySize: 0
-  debugSlots: []
---- !u!114 &1170794384
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1170794334}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: a428269763cbf344795423665753ac10, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::Player.PlayerEntity
-  maxHealth: 100
-  health: 100
-  maxStamina: 100
-  stamina: 100
-  maxEndurance: 100
-  endurance: 100
-  maxWalkSpeed: 5
-  walkSpeed: 5
-  maxSprintSpeed: 8
-  sprintSpeed: 8
-  jumpStrength: 5
-  isGrounded: 0
-  worldPosition: {x: 0, y: 0, z: 0}
-  heldItemStack:
-    itemId: 0
-    count: 0
-    displayName: 
-    composition:
-      entries: []
 --- !u!1 &1199583606
 GameObject:
   m_ObjectHideFlags: 0
@@ -4285,6 +4198,10 @@ GameObject:
   - component: {fileID: 1344646475}
   - component: {fileID: 1344646474}
   - component: {fileID: 1344646472}
+  - component: {fileID: 1344646480}
+  - component: {fileID: 1344646479}
+  - component: {fileID: 1344646478}
+  - component: {fileID: 1344646477}
   m_Layer: 0
   m_Name: Player
   m_TagString: Untagged
@@ -4310,7 +4227,11 @@ MonoBehaviour:
   sprintSpeed: 6
   jumpForce: 5
   gravity: -9.81
+  mouseSensitivity: 2
+  mouseSmoothing: 1.5
+  maxLookAngle: 89
   playerWidth: 0.2
+  playerHeight: 2
 --- !u!23 &1344646474
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -4384,6 +4305,83 @@ Transform:
   - {fileID: 1672112035}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1344646477
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1344646471}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a428269763cbf344795423665753ac10, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Player.PlayerEntity
+  maxHealth: 100
+  health: 100
+  maxStamina: 100
+  stamina: 100
+  maxEndurance: 100
+  endurance: 100
+  maxWalkSpeed: 5
+  walkSpeed: 5
+  maxSprintSpeed: 8
+  sprintSpeed: 8
+  jumpStrength: 5
+  isGrounded: 0
+  worldPosition: {x: 0, y: 0, z: 0}
+  heldItemStack:
+    itemId: 0
+    count: 0
+    displayName: 
+    composition:
+      entries: []
+--- !u!114 &1344646478
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1344646471}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 211ab49654d0dd546aa2b108ad8851e5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerInventoryHolder
+  ownerName: 
+  inventorySize: 0
+  debugSlots: []
+--- !u!114 &1344646479
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1344646471}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 48270b562a466ba488325ae8f540e438, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerInteraction
+  playerCamera: {fileID: 1672112038}
+  pickupDistance: 3
+  maxDistance: 6
+--- !u!114 &1344646480
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1344646471}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 01aeab99bfdaa82408b231c938404643, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BlockSelector
+  playerCamera: {fileID: 1672112038}
+  highlightedBlock: {x: 0, y: 0, z: 0}
+  maxDistance: 6
+  highlightCube: {fileID: 5562458439230004194, guid: e1c8a80c4ecad9a429a18ea0b87ae5ce, type: 3}
 --- !u!1 &1370392143
 GameObject:
   m_ObjectHideFlags: 0
@@ -4732,8 +4730,8 @@ MonoBehaviour:
   debugPanel: {fileID: 976109610}
   chatBoxGO: {fileID: 2040025157}
   cursorGO: {fileID: 575295368}
-  player: {fileID: 1077880575}
-  playerHolder: {fileID: 1170794379}
+  player: {fileID: 1344646476}
+  playerHolder: {fileID: 1344646478}
   chatBox: {fileID: 2023732281}
 --- !u!114 &1462214029
 MonoBehaviour:
@@ -5066,8 +5064,8 @@ MonoBehaviour:
     m_Bits: 1
   m_VolumeTrigger: {fileID: 0}
   m_VolumeFrameworkUpdateModeOption: 2
-  m_RenderPostProcessing: 0
-  m_Antialiasing: 0
+  m_RenderPostProcessing: 1
+  m_Antialiasing: 3
   m_AntialiasingQuality: 2
   m_StopNaN: 0
   m_Dithering: 0
@@ -5126,8 +5124,8 @@ Camera:
     y: 0
     width: 1
     height: 1
-  near clip plane: 0.3
-  far clip plane: 1000
+  near clip plane: 0.1
+  far clip plane: 1530
   field of view: 60
   orthographic: 0
   orthographic size: 5
@@ -5137,7 +5135,7 @@ Camera:
     m_Bits: 4294967295
   m_RenderingPath: -1
   m_TargetTexture: {fileID: 0}
-  m_TargetDisplay: 1
+  m_TargetDisplay: 0
   m_TargetEye: 3
   m_HDR: 1
   m_AllowMSAA: 1
@@ -5800,9 +5798,9 @@ MonoBehaviour:
   selectedSlot: 0
   chatBox: {fileID: 2023732281}
   itemEntityPref: {fileID: 716634852}
-  playerPos: {fileID: 1077880575}
+  playerPos: {fileID: 1344646476}
   emptyGoItemListThing: {fileID: 744640352}
-  playerEntity: {fileID: 0}
+  playerEntity: {fileID: 1344646477}
 --- !u!1 &1944420075
 GameObject:
   m_ObjectHideFlags: 0
@@ -6067,6 +6065,10 @@ PrefabInstance:
       propertyPath: m_Layer
       value: 3
       objectReference: {fileID: 0}
+    - target: {fileID: 1593727746557118, guid: 11aaea5348574644a9eb4f4504fcce3f, type: 3}
+      propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 1773623360729482, guid: 11aaea5348574644a9eb4f4504fcce3f, type: 3}
       propertyPath: m_Name
       value: First Person Controller
@@ -6163,6 +6165,10 @@ PrefabInstance:
       propertyPath: m_Mesh
       value: 
       objectReference: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+    - target: {fileID: 81448068208000304, guid: 11aaea5348574644a9eb4f4504fcce3f, type: 3}
+      propertyPath: m_Enabled
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 114103969153859672, guid: 11aaea5348574644a9eb4f4504fcce3f, type: 3}
       propertyPath: m_Enabled
       value: 0
@@ -6171,6 +6177,10 @@ PrefabInstance:
       propertyPath: chatBox
       value: 
       objectReference: {fileID: 2023732281}
+    - target: {fileID: 114497868231759342, guid: 11aaea5348574644a9eb4f4504fcce3f, type: 3}
+      propertyPath: m_Enabled
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 114497868231759342, guid: 11aaea5348574644a9eb4f4504fcce3f, type: 3}
       propertyPath: groundCheck
       value: 
@@ -6181,6 +6191,14 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 114503055206606986, guid: 11aaea5348574644a9eb4f4504fcce3f, type: 3}
       propertyPath: isGrounded
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 114657890492222300, guid: 11aaea5348574644a9eb4f4504fcce3f, type: 3}
+      propertyPath: m_Enabled
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 114762042097486276, guid: 11aaea5348574644a9eb4f4504fcce3f, type: 3}
+      propertyPath: m_Enabled
       value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 114762042097486276, guid: 11aaea5348574644a9eb4f4504fcce3f, type: 3}
@@ -6195,6 +6213,14 @@ PrefabInstance:
       propertyPath: chatBox
       value: 
       objectReference: {fileID: 2023732281}
+    - target: {fileID: 114963311885979670, guid: 11aaea5348574644a9eb4f4504fcce3f, type: 3}
+      propertyPath: m_Enabled
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 124991110451011126, guid: 11aaea5348574644a9eb4f4504fcce3f, type: 3}
+      propertyPath: m_Enabled
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 1963958859065967600, guid: 11aaea5348574644a9eb4f4504fcce3f, type: 3}
       propertyPath: m_Layer
       value: 3
@@ -6247,9 +6273,6 @@ PrefabInstance:
     m_AddedComponents:
     - targetCorrespondingSourceObject: {fileID: 1773623360729482, guid: 11aaea5348574644a9eb4f4504fcce3f, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 1170794341}
-    - targetCorrespondingSourceObject: {fileID: 1773623360729482, guid: 11aaea5348574644a9eb4f4504fcce3f, type: 3}
-      insertIndex: -1
       addedObject: {fileID: 1170794346}
     - targetCorrespondingSourceObject: {fileID: 1773623360729482, guid: 11aaea5348574644a9eb4f4504fcce3f, type: 3}
       insertIndex: -1
@@ -6257,15 +6280,6 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 1773623360729482, guid: 11aaea5348574644a9eb4f4504fcce3f, type: 3}
       insertIndex: -1
       addedObject: {fileID: 1170794368}
-    - targetCorrespondingSourceObject: {fileID: 1773623360729482, guid: 11aaea5348574644a9eb4f4504fcce3f, type: 3}
-      insertIndex: -1
-      addedObject: {fileID: 1170794374}
-    - targetCorrespondingSourceObject: {fileID: 1773623360729482, guid: 11aaea5348574644a9eb4f4504fcce3f, type: 3}
-      insertIndex: -1
-      addedObject: {fileID: 1170794379}
-    - targetCorrespondingSourceObject: {fileID: 1773623360729482, guid: 11aaea5348574644a9eb4f4504fcce3f, type: 3}
-      insertIndex: -1
-      addedObject: {fileID: 1170794384}
     - targetCorrespondingSourceObject: {fileID: 1593727746557118, guid: 11aaea5348574644a9eb4f4504fcce3f, type: 3}
       insertIndex: -1
       addedObject: {fileID: 487539660}
@@ -6540,7 +6554,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ChunkManager
   chunkPrefab: {fileID: 6105398898649497424, guid: 1f654b7fe82c83a489796eb872658c6f, type: 3}
-  player: {fileID: 1077880575}
+  player: {fileID: 1344646476}
   viewDistance: 6
   colliderDistance: 2
   chunkCount: 0
@@ -6877,7 +6891,7 @@ MonoBehaviour:
   playerMessage: {r: 0, g: 0, b: 0, a: 1}
   info: {r: 1, g: 1, b: 1, a: 1}
   messageList: []
-  playerHolder: {fileID: 1170794379}
+  playerHolder: {fileID: 1344646478}
 --- !u!1 &2054168097 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 1338473799391977889, guid: 2c760808c80036a4d837e4ed0f60d33f, type: 3}
