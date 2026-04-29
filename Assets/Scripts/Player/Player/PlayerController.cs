@@ -22,6 +22,10 @@ public class PlayerControllerClass : MonoBehaviour
     public float playerWidth = 0.15f; //Radius
     public float playerHeight = 2f;
     
+    [Header(("Ground settings"))]
+    public float groundProbeDistance = 0.05f;
+    public float groundedGraceTime = 0.08f;
+    
     [Header(("Creative mode settings"))] 
     public float flySpeed = 8f;
     public float runFlySpeed = 29;
@@ -35,6 +39,7 @@ public class PlayerControllerClass : MonoBehaviour
     private float verticalMomentum = 0;
     private bool jumpRequest;
     private CursorLockMode lastLockState;
+    private float lastGroundedTime;
     public TMP_InputField chatBox;
 
     private void Start()
@@ -95,6 +100,8 @@ public class PlayerControllerClass : MonoBehaviour
         // Affect vertical momentum with gravity
         if (!isGrounded || verticalMomentum > 0f)
             verticalMomentum += Time.fixedDeltaTime * gravity;
+        else if (verticalMomentum < 0f)
+            verticalMomentum = 0f;
         
         float moveSpeed = isSprinting ? sprintSpeed : walkSpeed;
         Vector3 moveDirection = (transform.forward * vertical + transform.right * horizontal).normalized;
@@ -145,7 +152,7 @@ public class PlayerControllerClass : MonoBehaviour
         if (Input.GetKey(KeyCode.LeftControl))
             flyVertical -= 1f;
         
-        if (Input.GetButtonDown("Sprint"))
+        if (Input.GetButtonDown("Sprint") && isGrounded)
             isSprinting = true;
 
         if (Input.GetButtonUp("Sprint"))
@@ -187,17 +194,34 @@ public class PlayerControllerClass : MonoBehaviour
     private float checkDownSpeed(float downSpeed)
     {
         Vector3 nextPos = transform.position + Vector3.up * downSpeed;
-        if (IsSolidAtHeight(nextPos, 0f))
+
+        bool touchingGround = IsSolidAtHeight(nextPos, 0f);
+        bool closeToGround = IsSolidAtHeight(nextPos + Vector3.down * groundProbeDistance, 0f);
+        
+        if (touchingGround)
         {
             isGrounded = true;
+            lastGroundedTime = Time.time;
             verticalMomentum = 0f;
             return 0f;
         }
-        else
+
+        if (downSpeed <= 0f && closeToGround)
         {
-            isGrounded = false;
+            isGrounded = true;
+            lastGroundedTime = Time.time;
+            verticalMomentum = 0;
+            return 0f;
+        }
+
+        if (Time.time - lastGroundedTime <= groundedGraceTime)
+        {
+            isGrounded = true;
             return downSpeed;
         }
+
+        isGrounded = false;
+        return downSpeed;
     }
     
     private float checkUpSpeed(float upSpeed)
