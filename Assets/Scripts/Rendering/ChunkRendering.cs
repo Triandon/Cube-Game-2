@@ -9,7 +9,6 @@ public class ChunkRendering : MonoBehaviour
     
     private MeshFilter meshFilter;
     private MeshRenderer meshRenderer;
-    private MeshCollider meshCollider;
     private Chunk chunk;
     private ChunkMeshGenerator meshGenerator;
 
@@ -19,7 +18,6 @@ public class ChunkRendering : MonoBehaviour
     public struct ChunkMeshData
     {
         public Mesh renderingMesh;
-        public Mesh colliderMesh;
     }
 
     private void Awake()
@@ -40,11 +38,6 @@ public class ChunkRendering : MonoBehaviour
         if (meshFilter != null)
         {
             meshFilter.sharedMesh = null;
-        }
-
-        if (meshCollider != null)
-        {
-            meshCollider.sharedMesh = null;
         }
 
         if (shearedRenderMesh != null)
@@ -83,7 +76,7 @@ public class ChunkRendering : MonoBehaviour
     }
 
     // modified chunk of your ChunkRendering class
-    public void ApplyMeshData(MeshData meshData, bool withCollider)
+    public void ApplyMeshData(MeshData meshData)
     {
         if (meshData == null)
             return;
@@ -112,12 +105,6 @@ public class ChunkRendering : MonoBehaviour
         
         meshFilter.sharedMesh = shearedRenderMesh;
 
-        // Collider (SAME MeshData)
-        if (withCollider)
-            UpdateCollider(meshData);
-        else
-            DestroyCollider();
-
         if (atlasMaterial != null)
         {
             meshRenderer.sharedMaterial = atlasMaterial;
@@ -125,7 +112,7 @@ public class ChunkRendering : MonoBehaviour
     }
 
     
-    public void Rebuild(bool withCollider)
+    public void Rebuild()
     {
         if (chunk == null || chunk.blocks == null)
             return;
@@ -143,79 +130,7 @@ public class ChunkRendering : MonoBehaviour
         chunk.meshData = md;
 
         // Apply render mesh
-        ApplyMeshData(md, withCollider);
+        ApplyMeshData(md);
     }
-
-
-    public void CreateCollider(MeshData meshData)
-    {
-        UpdateCollider(meshData);
-    }
-
-    public void UpdateCollider(MeshData meshData)
-    {
-        if (meshData == null)
-            return;
-        
-        bool hasColliderGeometry =
-            meshData.colliderVertices != null &&
-            meshData.colliderTriangles != null &&
-            meshData.colliderVertices.Count > 0 &&
-            meshData.colliderTriangles.Count >= 3;
-
-        if (!hasColliderGeometry)
-        {
-            if (meshCollider != null)
-            {
-                meshCollider.sharedMesh = null;
-            }
-
-            if (shearedColliderMesh != null)
-            {
-                shearedColliderMesh.Clear();
-            }
-            return;
-        }
-
-        if (meshCollider == null)
-        {
-            meshCollider = gameObject.AddComponent<MeshCollider>();
-        }
-
-        if (shearedColliderMesh == null)
-        {
-            shearedColliderMesh = new Mesh
-            {
-                name = $"ChunkColliderMesh_{GetInstanceID()}",
-                indexFormat = UnityEngine.Rendering.IndexFormat.UInt32
-            };
-        }
-
-        shearedColliderMesh.Clear();
-        shearedColliderMesh.SetVertices(meshData.colliderVertices);
-        shearedColliderMesh.SetTriangles(meshData.colliderTriangles, 0);
-        //shearedColliderMesh.RecalculateNormals();
-        //shearedColliderMesh.RecalculateTangents();
-        shearedColliderMesh.RecalculateBounds();
-        
-        meshCollider.sharedMesh = null;
-        meshCollider.sharedMesh = shearedColliderMesh;
-    }
-
-    public void DestroyCollider()
-    {
-        if (meshCollider == null)
-            return;
-
-        meshCollider.sharedMesh = null;
-        Destroy(meshCollider);
-        meshCollider = null;
-    }
-
-    public bool HasCollider()
-    {
-        return meshCollider != null;
-    }
-    
     
 }

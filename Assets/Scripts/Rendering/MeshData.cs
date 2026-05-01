@@ -1515,20 +1515,12 @@ public class ChunkMeshGenerator
         renderMesh.RecalculateNormals();
         renderMesh.RecalculateTangents();
         renderMesh.RecalculateBounds();
-
-        Mesh colliderMesh = new Mesh();
-        colliderMesh.Clear();
-        colliderMesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
-        colliderMesh.SetVertices(md.colliderVertices);
-        colliderMesh.SetTriangles(md.colliderTriangles, 0);
+        
         renderMesh.SetNormals(md.normals);
-        colliderMesh.RecalculateTangents();
-        colliderMesh.RecalculateBounds();
 
         return new ChunkRendering.ChunkMeshData
         {
             renderingMesh = renderMesh,
-            colliderMesh = colliderMesh
         };
     }
 }

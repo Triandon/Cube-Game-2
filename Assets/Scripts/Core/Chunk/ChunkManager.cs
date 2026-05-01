@@ -94,7 +94,6 @@ namespace Core
                 playerChunkCord = GetPlayerChunkCoord();
                 lastChunkUpdatePosition = player.position;
                 UpdateChunks();
-                UpdateChunkCollidersForPlayerMove();
                 UpdateChunkLODs();
             }
             
@@ -207,7 +206,7 @@ namespace Core
             if (chunkRender != null && res.meshData != null)
             {
                 chunk.meshData = res.meshData;
-                chunkRender.ApplyMeshData(res.meshData, NeedsColliders(chunk));
+                chunkRender.ApplyMeshData(res.meshData);
                 EnqueueNeighborRebuilds(chunk.coord);
             }
             else
@@ -811,29 +810,6 @@ namespace Core
             return !block.isTransparent;
         }
         
-
-        private void UpdateChunkCollidersForPlayerMove()
-        {
-            foreach (var chunk in chunks.Values)
-            {
-                bool needsCollider = NeedsColliders(chunk);
-
-                // Create collider if now needed but missing
-                if (needsCollider && !chunk.renderer.HasCollider())
-                {
-                    meshQue.Add(chunk); // <-- FORCE rebuild WITH collider
-                }
-
-                // Remove collider if no longer needed
-                if (!needsCollider && chunk.renderer.HasCollider())
-                {
-                    chunk.renderer.DestroyCollider();
-                }
-            }
-        }
-
-
-
         private void UpdateChunkLODs()
         {
             foreach (var chunk in chunks.Values)
@@ -953,29 +929,8 @@ namespace Core
             if (chunk == null || chunk.renderer == null)
                 return;
             
-            chunk.renderer.Rebuild(NeedsColliders(chunk));
+            chunk.renderer.Rebuild();
             chunk.isColliderDirty = false;
-        }
-        
-        private bool NeedsColliders(Chunk chunk)
-        {
-            if(chunk == null || chunk.blocks == null)
-                return false;
-
-            int dx = Mathf.Abs(chunk.coord.x - playerChunkCord.x);
-            int dy = Mathf.Abs(chunk.coord.y - playerChunkCord.y);
-            int dz = Mathf.Abs(chunk.coord.z - playerChunkCord.z);
-            bool needsCollider =
-                dx <= colliderDistance &&
-                dy <= colliderDistance &&
-                dz <= colliderDistance;
-
-            if (needsCollider)
-            {
-                return true;
-            }
-
-            return false;
         }
         
         
