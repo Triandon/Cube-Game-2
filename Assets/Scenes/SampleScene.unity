@@ -4231,7 +4231,13 @@ MonoBehaviour:
   mouseSmoothing: 1.5
   maxLookAngle: 89
   playerWidth: 0.2
-  playerHeight: 2
+  playerHeight: 1.8
+  groundProbeDistance: 0.05
+  groundedGraceTime: 0.08
+  flySpeed: 8
+  runFlySpeed: 29
+  creativeMode: 0
+  chatBox: {fileID: 0}
 --- !u!23 &1344646474
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -5124,7 +5130,7 @@ Camera:
     y: 0
     width: 1
     height: 1
-  near clip plane: 0.1
+  near clip plane: 0.01
   far clip plane: 1530
   field of view: 60
   orthographic: 0
