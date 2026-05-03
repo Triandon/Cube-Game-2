@@ -25,6 +25,7 @@ public class PlayerControllerClass : MonoBehaviour
     [Header(("Ground settings"))]
     public float groundProbeDistance = 0.05f;
     public float groundedGraceTime = 0.08f;
+    public float maxStepHeight = 0.3f;
     
     [Header(("Creative mode settings"))] 
     public float flySpeed = 8f;
@@ -108,13 +109,9 @@ public class PlayerControllerClass : MonoBehaviour
         Vector3 horizontalMove = moveDirection * (moveSpeed * Time.fixedDeltaTime);
         
         // Move horizontally in axis-separated steps so we never "step up" through walls.
-        Vector3 xTarget = transform.position + new Vector3(horizontalMove.x, 0f, 0f);
-        if (!IsSolidAtPlayerPosition(xTarget))
-            transform.position = xTarget;
+        TryMoveHorizontalWithStep(new Vector3(horizontalMove.x, 0f, 0f));
 
-        Vector3 zTarget = transform.position + new Vector3(0f, 0f, horizontalMove.z);
-        if (!IsSolidAtPlayerPosition(zTarget))
-            transform.position = zTarget;
+        TryMoveHorizontalWithStep(new Vector3(0f, 0f, horizontalMove.z));
         
         // Vertical movment
         float verticalMove = verticalMomentum * Time.fixedDeltaTime;
@@ -249,5 +246,35 @@ public class PlayerControllerClass : MonoBehaviour
     private bool IsSolidAtPlayerPosition(Vector3 pos)
     {
         return IsSolidAtHeight(pos, 0f) || IsSolidAtHeight(pos, 1f) || IsSolidAtHeight(pos, playerHeight - 0.05f);
+    }
+
+    private void TryMoveHorizontalWithStep(Vector3 horizontalDelta)
+    {
+        if (horizontalDelta.sqrMagnitude <= 0f)
+            return;
+
+        Vector3 directTarget = transform.position + horizontalDelta;
+        if (!IsSolidAtPlayerPosition(directTarget))
+        {
+            transform.position = directTarget;
+            return;
+        }
+
+        if (!isGrounded || maxStepHeight <= 0f)
+            return;
+
+        Vector3 stepUpOrigin = transform.position + Vector3.up * maxStepHeight;
+        if (IsSolidAtPlayerPosition(stepUpOrigin))
+            return;
+
+        Vector3 steppedTarget = stepUpOrigin + horizontalDelta;
+        if (IsSolidAtPlayerPosition(steppedTarget))
+            return;
+
+        transform.position = steppedTarget;
+        verticalMomentum = 0f;
+        isGrounded = true;
+        lastGroundedTime = Time.time;
+
     }
 }

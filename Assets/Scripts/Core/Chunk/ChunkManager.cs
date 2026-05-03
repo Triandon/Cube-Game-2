@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using Core.Block;
 using Core.Block.TileEntities;
@@ -766,48 +767,156 @@ namespace Core
 
         public bool CheckForVoxel(float _x, float _y, float _z)
         {
-            int xCheck = Mathf.FloorToInt(_x);
-            int yCheck = Mathf.FloorToInt(_y);
-            int zCheck = Mathf.FloorToInt(_z);
+            Vector3 samplePos = new Vector3(_x, _y, _z);
+            Vector3Int worldBlockPos = Vector3Int.FloorToInt(samplePos);
 
-            return CheckForVoxel(new Vector3Int(xCheck, yCheck, zCheck));
+            if (!TryGetCollisionBlock(worldBlockPos, out Chunk chunk, out Vector3Int local, out byte blockId))
+                return false;
+
+            if (!TryGetBlockCollisionBounds(chunk, local, out Vector3 min, out Vector3 max))
+                return false;
+
+            Vector3 localPoint = samplePos - worldBlockPos;
+            const float eps = 0.0001f;
+            
+            return localPoint.x >= min.x - eps && localPoint.x <= max.x + eps &&
+                   localPoint.y >= min.y - eps && localPoint.y <= max.y + eps &&
+                   localPoint.z >= min.z - eps && localPoint.z <= max.z + eps;
         }
 
         public bool CheckForVoxel(Vector3 worldPos)
         {
-            return CheckForVoxel(Vector3Int.FloorToInt(worldPos));
+            return CheckForVoxel(worldPos.x, worldPos.y, worldPos.z);
         }
 
         public bool CheckForVoxel(Vector3Int worldBlockPos)
         {
-            Chunk chunk = GetChunkFromWorldPos(worldBlockPos);
-            if (chunk == null)
-            {
-                return false;
-            }
+            return TryGetCollisionBlock(worldBlockPos, out _, out _, out _);
+        }
 
-            Vector3Int local = chunk.WorldToLocal(worldBlockPos);
+        private bool TryGetCollisionBlock(Vector3Int worldBlockPos, out Chunk chunk, out Vector3Int local,
+            out byte blockId)
+        {
+            chunk = GetChunkFromWorldPos(worldBlockPos);
+            local = default;
+            blockId = 0;
+
+            if (chunk == null)
+                return false;
+
+            local = chunk.WorldToLocal(worldBlockPos);
 
             if (local.x < 0 || local.x >= Chunk.CHUNK_SIZE ||
                 local.y < 0 || local.y >= Chunk.CHUNK_SIZE ||
                 local.z < 0 || local.z >= Chunk.CHUNK_SIZE)
-            {
                 return false;
-            }
 
-            byte blockId = chunk.blocks[local.x, local.y, local.z];
+            blockId = chunk.blocks[local.x, local.y, local.z];
             if (blockId == 0)
-            {
                 return false;
-            }
 
             Block.Block block = BlockRegistry.GetBlock(blockId);
-            if (block == null)
-            {
-                return false;
-            }
 
-            return !block.isTransparent;
+            if (!block.isTransparent)
+                return true;
+            
+            BlockStateContainer state = chunk.states[local.x, local.y, local.z];
+            bool hasCollisionState = state != null &&
+                                     (state.HasState(BlockStateKeys.HeightState) ||
+                                      state.HasState(BlockStateKeys.WidthState));
+            bool hasNonCubeShape = block.shapeIndex != (int)BlockShapes.Cube || block.isCentered;
+
+            return hasCollisionState || hasNonCubeShape;
+        }
+
+        private bool TryGetBlockCollisionBounds(Chunk chunk, Vector3Int local, out Vector3 min, out Vector3 max)
+        {
+            min = Vector3.zero;
+            max = Vector3.one;
+
+            BlockStateContainer state = chunk.states[local.x, local.y, local.z];
+            if (state == null || state.IsStateless())
+                return true;
+
+            float height = ParseState01(state, BlockStateKeys.HeightState, 1f);
+            float width = ParseState01(state, BlockStateKeys.WidthState, 1f);
+
+            if (height >= 0.999f && width >= 0.999f)
+                return true;
+
+            string facing = state.GetState(BlockStateKeys.DirectionalFacing);
+            if (string.IsNullOrWhiteSpace(facing))
+                facing = "up";
+
+            switch (facing)
+            {
+                case "down":
+                    min.y = 1f - height;
+                    break;
+                case "east":
+                    min.x = 1f - height;
+                    break;
+                case "west":
+                    max.x = height;
+                    break;
+                case "north":
+                    min.z = 1f - height;
+                    break;
+                case "south":
+                    max.z = height;
+                    break;
+                default:
+                    max.y = height;
+                    break;
+            }
+            
+            if (width < 0.999f)
+                ApplyCenteredWidth(facing, width, ref min, ref max);
+
+            return true;
+        }
+        
+        private static float ParseState01(BlockStateContainer state, string key, float fallback)
+        {
+            string raw = state.GetState(key);
+            if (string.IsNullOrWhiteSpace(raw))
+                return fallback;
+
+            if (!float.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out float parsed))
+                return fallback;
+
+            return Mathf.Clamp01(parsed);
+        }
+
+        private static void ApplyCenteredWidth(string facing, float width, ref Vector3 min, ref Vector3 max)
+        {
+            float inset = (1f - width) * 0.5f;
+            float centeredMin = inset;
+            float centeredMax = 1f - inset;
+
+            switch (facing)
+            {
+                case "east":
+                case "west":
+                    min.y = Mathf.Max(min.y, centeredMin);
+                    max.y = Mathf.Min(max.y, centeredMax);
+                    min.z = Mathf.Max(min.z, centeredMin);
+                    max.z = Mathf.Min(max.z, centeredMax);
+                    break;
+                case "north":
+                case "south":
+                    min.x = Mathf.Max(min.x, centeredMin);
+                    max.x = Mathf.Min(max.x, centeredMax);
+                    min.y = Mathf.Max(min.y, centeredMin);
+                    max.y = Mathf.Min(max.y, centeredMax);
+                    break;
+                default:
+                    min.x = Mathf.Max(min.x, centeredMin);
+                    max.x = Mathf.Min(max.x, centeredMax);
+                    min.z = Mathf.Max(min.z, centeredMin);
+                    max.z = Mathf.Min(max.z, centeredMax);
+                    break;
+            }
         }
         
         private void UpdateChunkLODs()
