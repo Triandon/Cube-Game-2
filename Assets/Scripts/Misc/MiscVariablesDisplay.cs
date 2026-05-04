@@ -112,6 +112,7 @@ public class MiscVariablesDisplay : MonoBehaviour
                 }
                 
                 Cursor.lockState = CursorLockMode.None;
+                Cursor.visible = true;
                 SceneManager.LoadScene("Scenes/Menu");
             }
 

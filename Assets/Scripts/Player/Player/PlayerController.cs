@@ -263,18 +263,41 @@ public class PlayerControllerClass : MonoBehaviour
         if (!isGrounded || maxStepHeight <= 0f)
             return;
 
-        Vector3 stepUpOrigin = transform.position + Vector3.up * maxStepHeight;
-        if (IsSolidAtPlayerPosition(stepUpOrigin))
+        float stepHeight = FindStepHeight(horizontalDelta);
+        if (stepHeight < 0f)
             return;
 
-        Vector3 steppedTarget = stepUpOrigin + horizontalDelta;
-        if (IsSolidAtPlayerPosition(steppedTarget))
-            return;
-
-        transform.position = steppedTarget;
+        transform.position += new Vector3(horizontalDelta.x, stepHeight, horizontalDelta.z);
         verticalMomentum = 0f;
         isGrounded = true;
         lastGroundedTime = Time.time;
 
     }
+    
+    private float FindStepHeight(Vector3 horizontalDelta)
+    {
+        // Use a small increment so we can match low deltas (e.g. 0.1 / 0.2) instead of always snapping by maxStepHeight.
+        const float stepSearchIncrement = 0.025f;
+        Vector3 currentPos = transform.position;
+
+        for (float stepHeight = stepSearchIncrement; stepHeight <= maxStepHeight + 0.0001f; stepHeight += stepSearchIncrement)
+        {
+            Vector3 liftedPos = currentPos + Vector3.up * stepHeight;
+            if (IsSolidAtPlayerPosition(liftedPos))
+                continue;
+
+            Vector3 candidatePos = liftedPos + horizontalDelta;
+            if (IsSolidAtPlayerPosition(candidatePos))
+                continue;
+
+            bool hasGroundSupport = IsSolidAtHeight(candidatePos + Vector3.down * groundProbeDistance, 0f);
+            if (!hasGroundSupport)
+                continue;
+
+            return stepHeight;
+        }
+
+        return -1f;
+    }
+
 }
