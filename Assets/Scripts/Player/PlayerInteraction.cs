@@ -9,6 +9,7 @@ public class PlayerInteraction : MonoBehaviour
     [Header("Interaction")] 
     public Camera playerCamera;
     public float pickupDistance = 3f;
+    public float pickupRadius = 1.5f;
 
     private Inventory inventory;
     private HotBarUI hotBarUI;
@@ -229,26 +230,34 @@ public class PlayerInteraction : MonoBehaviour
 
     private void PickupItem()
     {
-        if(!Physics.Raycast(playerCamera.transform.position,
-               playerCamera.transform.forward,
-               out RaycastHit hit, pickupDistance))
+        if (!ShouldPickupInput())
             return;
 
-        ItemEntity itemEntity = hit.collider.GetComponent<ItemEntity>();
-        if(itemEntity == null) return;
-        
-        //Case one: Holds shift
-        if (Input.GetKey(KeyCode.LeftControl))
+        Vector3 center = playerCamera.transform.position + playerCamera.transform.forward * pickupDistance;
+        Collider[] nearby = Physics.OverlapSphere(center, pickupRadius);
+
+        ItemEntity closest = null;
+        float closestSqrDistance = float.MaxValue;
+
+        foreach (Collider collider in nearby)
         {
-            TryPickup(itemEntity);
+            ItemEntity itemEntity = collider.GetComponent<ItemEntity>();
+            if (itemEntity == null)
+                continue;
+
+            float sqrDistance = (itemEntity.transform.position - playerCamera.transform.position).sqrMagnitude;
+            if (sqrDistance > pickupDistance * pickupDistance)
+                continue;
+
+            if (sqrDistance < closestSqrDistance)
+            {
+                closestSqrDistance = sqrDistance;
+                closest = itemEntity;
+            }
         }
         
-        //Case two: Right clicke with empty hand
-        if (Input.GetMouseButton(1) && IsHandEmpty())
-        {
-            TryPickup(itemEntity);
-        }
-        
+        if (closest != null)
+            TryPickup(closest);
     }
 
     private void TryPickup(ItemEntity itemEntity)
@@ -274,10 +283,20 @@ public class PlayerInteraction : MonoBehaviour
 
     private bool IsTryingToInteract()
     {
-        return Input.GetKey(KeyCode.LeftControl)
+        return IsCrouching()
                || (Input.GetMouseButtonDown(1) && IsHandEmpty());
     }
 
+    private bool ShouldPickupInput()
+    {
+        return IsCrouching() || (Input.GetMouseButtonDown(1) && IsHandEmpty());
+    }
+    
+    private bool IsCrouching()
+    {
+        return Input.GetKey(KeyCode.LeftControl);
+    }
+    
     private void HandleScaffoldingHeightHotKeysAndBlockPlacementMode()
     {
         ItemStack stack = hotBarUI != null ? hotBarUI.GetSelectedStack() : null;

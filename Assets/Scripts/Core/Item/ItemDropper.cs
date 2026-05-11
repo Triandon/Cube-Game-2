@@ -27,10 +27,8 @@ public class ItemDropper : MonoBehaviour
 
         for (int i = 0; i < stack.count; i++)
         {
-            Vector3 spawnPos =
-                basePos +
-                Random.insideUnitSphere * 0.3f +
-                Vector3.up * 0.5f;
+            Vector2 horizontalOffset = Random.insideUnitCircle * 0.25f;
+            Vector3 spawnPos = basePos + new Vector3(horizontalOffset.x, 0.7f, horizontalOffset.y);
 
             GameObject go = Instantiate(
                 itemEntityPrefab,

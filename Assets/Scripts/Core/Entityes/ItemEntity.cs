@@ -13,26 +13,23 @@ public class ItemEntity : MonoBehaviour
     public ItemStack stack { get; private set; }
     
     [Header("Custom Item Physics")]
-    [SerializeField] private float itemRadius = 0.14f;
-    [SerializeField] private float itemHeight = 0.28f;
+    [SerializeField] private float itemRadius = 0.5f;
+    [SerializeField] private float itemHeight = 0.5f;
     [SerializeField] private float gravity = -20f;
     [SerializeField] private float bounceFactor = 0.35f;
     [SerializeField] private float wallBounceFactor = 0.2f;
     [SerializeField] private float groundFriction = 10f;
     [SerializeField] private float airDrag = 0.5f;
     [SerializeField] private float sleepThreshold = 0.03f;
-    [SerializeField] private float randomSpin = 120f;
 
     private Vector3 velocity;
-    private float spinSpeed;
-
 
     private void Awake()
     {
         meshRenderer = GetComponent<MeshRenderer>();
         meshFilter = GetComponent<MeshFilter>();
         chunkManager = FindAnyObjectByType<ChunkManager>();
-        spinSpeed = UnityEngine.Random.Range(-randomSpin, randomSpin);
+        transform.rotation = Quaternion.identity;
     }
 
     public void Init(ItemStack stack)
@@ -71,8 +68,8 @@ public class ItemEntity : MonoBehaviour
     
             if (velocity.sqrMagnitude < sleepThreshold * sleepThreshold && IsGrounded())
                 velocity = Vector3.zero;
-    
-            transform.Rotate(Vector3.up, spinSpeed * dt, Space.World);
+
+            transform.rotation = Quaternion.identity;
         }
     
         private void MoveAxis(float delta, int axis)

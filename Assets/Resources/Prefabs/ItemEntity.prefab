@@ -12,6 +12,7 @@ GameObject:
   - component: {fileID: 8123411159803162776}
   - component: {fileID: 8847641905198624102}
   - component: {fileID: 627161343906926310}
+  - component: {fileID: 2772395323660858122}
   m_Layer: 0
   m_Name: ItemEntity
   m_TagString: Untagged
@@ -103,12 +104,32 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ed344606099be4e439abcd6611df4557, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ItemEntity
-  itemRadius: 0.28
-  itemHeight: 0.28
-  gravity: -20
+  itemRadius: 0.5
+  itemHeight: 0.5
+  gravity: -9.81
   bounceFactor: 0.35
   wallBounceFactor: 0.2
   groundFriction: 10
   airDrag: 0.5
   sleepThreshold: 0.03
-  randomSpin: 120
+--- !u!65 &2772395323660858122
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3833078300351471473}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 1, y: 1, z: 1}
+  m_Center: {x: 0, y: 0, z: 0}
