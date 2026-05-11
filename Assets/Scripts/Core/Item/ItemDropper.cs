@@ -39,9 +39,11 @@ public class ItemDropper : MonoBehaviour
                 itemEntityObjectListGO.transform
             );
 
-            go.GetComponent<ItemEntity>().Init(
-                new ItemStack(stack.itemId, 1, stack.displayName, stack.composition)
-            );
+            ItemEntity itemEntity = go.GetComponent<ItemEntity>();
+            itemEntity.Init(
+                new ItemStack(stack.itemId, 1, stack.displayName, stack.composition));
+            Vector3 popImpulse = Random.insideUnitSphere * 1.75f + Vector3.up * 2.2f;
+            itemEntity.AddInitialImpulse(popImpulse);
         }
     }
 }
