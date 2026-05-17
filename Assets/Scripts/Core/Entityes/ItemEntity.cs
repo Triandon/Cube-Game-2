@@ -13,7 +13,7 @@ public class ItemEntity : MonoBehaviour
     public ItemStack stack { get; private set; }
     
     [Header("Custom Item Physics")]
-    [SerializeField] private float itemRadius = 0.5f;
+    [SerializeField] private float itemRadius = 0.25f;
     [SerializeField] private float itemHeight = 0.5f;
     [SerializeField] private float gravity = -20f;
     [SerializeField] private float bounceFactor = 0.35f;
@@ -93,22 +93,23 @@ public class ItemEntity : MonoBehaviour
                 velocity.z = -velocity.z * wallBounceFactor;
         }
     
-        private bool IsGrounded()
-        {
-            return IsSolidAtHeight(transform.position + Vector3.down * 0.02f, 0f);
-        }
+    private bool IsGrounded()
+    {
+        return IsSolidAtHeight(transform.position + Vector3.down * 0.02f, -itemHeight * 0.5f);
+    }
     
-        private bool IsSolidAtItemPosition(Vector3 pos)
-        {
-            return IsSolidAtHeight(pos, 0f) || IsSolidAtHeight(pos, itemHeight);
-        }
+    private bool IsSolidAtItemPosition(Vector3 pos)
+    {
+        float halfHeight = itemHeight * 0.5f;
+        return IsSolidAtHeight(pos, -halfHeight) || IsSolidAtHeight(pos, halfHeight);
+    }
 
-        private bool IsSolidAtHeight(Vector3 pos, float heightOffset)
-        {
-            float y = pos.y + heightOffset;
-            return chunkManager.CheckForVoxel(pos.x - itemRadius, y, pos.z - itemRadius) ||
-                   chunkManager.CheckForVoxel(pos.x + itemRadius, y, pos.z - itemRadius) ||
-                   chunkManager.CheckForVoxel(pos.x + itemRadius, y, pos.z + itemRadius) ||
-                   chunkManager.CheckForVoxel(pos.x - itemRadius, y, pos.z + itemRadius);
-        }
+    private bool IsSolidAtHeight(Vector3 pos, float heightOffset)
+    {
+        float y = pos.y + heightOffset;
+        return chunkManager.CheckForVoxel(pos.x - itemRadius, y, pos.z - itemRadius) ||
+               chunkManager.CheckForVoxel(pos.x + itemRadius, y, pos.z - itemRadius) ||
+               chunkManager.CheckForVoxel(pos.x + itemRadius, y, pos.z + itemRadius) ||
+               chunkManager.CheckForVoxel(pos.x - itemRadius, y, pos.z + itemRadius);
+    }
 }

@@ -220,12 +220,31 @@ public class PlayerInteraction : MonoBehaviour
 
     private bool IsInsideOfPlayer(Vector3Int blockWorldPos)
     {
-        Vector3 blockCenter = blockWorldPos + Vector3.one * 0.5f;
-        Vector3 blockExtents = Vector3.one * 0.45f;
+        Vector3 blockMin = blockWorldPos;
+        Vector3 blockMax = blockWorldPos + Vector3.one;
 
-        int playerLayer = LayerMask.GetMask("Player");
+        Collider[] playerColliders = player != null ? player.GetComponentsInChildren<Collider>() : null;
+        if (playerColliders == null || playerColliders.Length == 0)
+            return false;
 
-        return Physics.CheckBox(blockCenter, blockExtents, Quaternion.identity, playerLayer);
+        for (int i = 0; i < playerColliders.Length; i++)
+        {
+            Collider playerCollider = playerColliders[i];
+            if (playerCollider == null || !playerCollider.enabled)
+                continue;
+
+            Bounds playerBounds = playerCollider.bounds;
+            
+            bool intersects =
+                playerBounds.max.x > blockMin.x && playerBounds.min.x < blockMax.x &&
+                playerBounds.max.y > blockMin.y && playerBounds.min.y < blockMax.y &&
+                playerBounds.max.z > blockMin.z && playerBounds.min.z < blockMax.z;
+
+            if (intersects)
+                return true;
+        }
+
+        return false;
     }
 
     private void PickupItem()

@@ -104,7 +104,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ed344606099be4e439abcd6611df4557, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ItemEntity
-  itemRadius: 0.5
+  itemRadius: 0.25
   itemHeight: 0.5
   gravity: -9.81
   bounceFactor: 0.35
