@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -8,6 +9,7 @@ namespace Core
 {
     public static class WorldSaveSystem
     {
+        private const int ChunkSaveVersion = 1;
     
         public static string GetChunkPath(Vector3Int coord)
         {
@@ -16,19 +18,46 @@ namespace Core
 
         public static bool ChunkSaveExist(Vector3Int coord)
         {
-            return File.Exists(GetChunkPath(coord));
+            string path = GetChunkPath(coord);
+            if (!File.Exists(path)) return false;
+
+            try
+            {
+                using FileStream stream = File.OpenRead(path);
+                using BinaryReader reader = new BinaryReader(stream);
+
+                return reader.ReadInt32() == ChunkSaveVersion &&
+                       reader.ReadInt32() == Chunk.CHUNK_SIZE;
+
+            }
+            catch (IOException)
+            {
+                return false;
+            }
         }
 
         public static void SaveChunk(Vector3Int coord, Chunk chunk)
         {
             Directory.CreateDirectory(Application.persistentDataPath + "/chunks/");
-            ChunkSaveDataNEW data = new ChunkSaveDataNEW()
+
+            using FileStream stream = File.Create(GetChunkPath(coord));
+            using BinaryWriter writer = new BinaryWriter(stream);
+            
+            writer.Write(ChunkSaveVersion);
+            writer.Write(Chunk.CHUNK_SIZE);
+
+            List<RLEBlockRun> baseBlocks = EncodeRLE(chunk.blocks);
+            writer.Write(baseBlocks.Count);
+            foreach (RLEBlockRun run in baseBlocks)
             {
-                baseBlocks = EncodeRLE(chunk.blocks)
-            };
+                writer.Write(run.id);
+                writer.Write(run.count);
+            }
 
             int S = Chunk.CHUNK_SIZE;
-
+            
+            List<SerializableBlockStateEntry> blockStates = new List<SerializableBlockStateEntry>();
+            
             for (int x = 0; x < S; x++)
             for (int y = 0; y < S; y++)
             for (int z = 0; z < S; z++)
@@ -49,53 +78,109 @@ namespace Core
                     });
                 }
 
-                data.blockStates.Add(new SerializableBlockStateEntry
+                blockStates.Add(new SerializableBlockStateEntry
                 {
                     index = index,
                     states = list
                 });
             }
 
-            string json = JsonUtility.ToJson(data);
-            File.WriteAllText(GetChunkPath(coord), json);
+            writer.Write(blockStates.Count);
+            foreach (SerializableBlockStateEntry entry in blockStates)
+            {
+                writer.Write(entry.index);
+                writer.Write(entry.states.Count);
+
+                foreach (SerializableBlockState state in entry.states)
+                {
+                    writer.Write(state.name ?? string.Empty);
+                    writer.Write(state.value ?? string.Empty);
+                }
+            }
+            
             Debug.Log("World saved successfully!");
         }
 
-        public static void LoadChunk(Vector3Int coord, Chunk chunk)
+        public static bool LoadChunk(Vector3Int coord, Chunk chunk)
         {
             string path = GetChunkPath(coord);
-            if (!File.Exists(path)) return;
-            
-            string json = File.ReadAllText(path);
-            
-            ChunkSaveDataNEW data = JsonUtility.FromJson<ChunkSaveDataNEW>(json);
+            if (!File.Exists(path)) return false;
 
-            if (data.baseBlocks != null && data.baseBlocks.Count > 0)
+            using FileStream stream = File.OpenRead(path);
+            using BinaryReader reader = new BinaryReader(stream);
+
+            int version = reader.ReadInt32();
+            int chunkSize = reader.ReadInt32();
+
+            if (version != ChunkSaveVersion)
             {
-                int S = Chunk.CHUNK_SIZE;
-                
-                chunk.blocks = DecodeRLE(data.baseBlocks, coord);
-                chunk.states = new BlockStateContainer[S, S, S];
-
-                if (data.baseBlocks != null)
-                {
-                    foreach (var entry in data.blockStates)
-                    {
-                        Vector3Int pos = ChunkManager.IndexToPos(entry.index);
-                        var container = new BlockStateContainer();
-
-                        foreach (var s in entry.states)
-                            container.SetState(s.name, s.value);
-
-                        chunk.states[pos.x, pos.y, pos.z] = container;
-                    }
-                }
-
-                chunk.isDirty = false;
-                return;
+                Debug.LogError($"Unsupported chunk save version {version} in chunk {coord} | File: {path}");
+                return false;
             }
 
-            SaveChunk(coord, chunk);
+            if (chunkSize != Chunk.CHUNK_SIZE)
+            {
+                Debug.LogError(
+                    $"Chunk save size mismatch in chunk {coord} | File: {path} | " +
+                    $"save={chunkSize}, game={Chunk.CHUNK_SIZE}");
+                return false;
+            }
+
+            int runCount = reader.ReadInt32();
+            List<RLEBlockRun> baseBlocks = new List<RLEBlockRun>(runCount);
+
+            for (int i = 0; i < runCount; i++)
+            {
+                baseBlocks.Add(new RLEBlockRun
+                {
+                    id = reader.ReadByte(),
+                    count = reader.ReadInt32()
+                });
+            }
+
+            int S = Chunk.CHUNK_SIZE;
+            chunk.blocks = DecodeRLE(baseBlocks, coord);
+            chunk.states = new BlockStateContainer[S, S, S];
+
+            int blockStateCount = reader.ReadInt32();
+            if (blockStateCount < 0)
+            {
+                Debug.LogError($"Invalid block state entry count {blockStateCount} in chunk {coord} | File: {path}");
+                return false;
+            }
+            
+            for (int i = 0; i < blockStateCount; i++)
+            {
+                int index = reader.ReadInt32();
+                int stateCount = reader.ReadInt32();
+                
+                if (index < 0 || index >= S * S * S)
+                {
+                    Debug.LogError($"Invalid block state index {index} in chunk {coord} | File: {path}");
+                    return false;
+                }
+
+                if (stateCount < 0)
+                {
+                    Debug.LogError($"Invalid state count {stateCount} in chunk {coord} | File: {path}");
+                    return false;
+                }
+                
+                Vector3Int pos = ChunkManager.IndexToPos(index);
+                BlockStateContainer container = new BlockStateContainer();
+
+                for (int s = 0; s < stateCount; s++)
+                {
+                    string name = reader.ReadString();
+                    string value = reader.ReadString();
+                    container.SetState(name, value);
+                }
+
+                chunk.states[pos.x, pos.y, pos.z] = container;
+            }
+
+            chunk.isDirty = false;
+            return true;
         }
 
         public static string GetInventoryPath(string ownerName)

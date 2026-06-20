@@ -401,12 +401,14 @@ namespace Core
             if (WorldSaveSystem.ChunkSaveExist(coord))
             {
                 Chunk tempChunk = new Chunk(coord);
-                WorldSaveSystem.LoadChunk(coord, tempChunk);
-                tempChunk.RebuildSpecialMeshBlocks();
-                savedBlocks = tempChunk.blocks;
-                savedStates = tempChunk.states;
-                savedSpecialMeshBlocks = tempChunk.GetSpecialMeshBlocksSnapshot();
-                meshOnly = true;
+                if (WorldSaveSystem.LoadChunk(coord, tempChunk))
+                {
+                    tempChunk.RebuildSpecialMeshBlocks();
+                    savedBlocks = tempChunk.blocks;
+                    savedStates = tempChunk.states;
+                    savedSpecialMeshBlocks = tempChunk.GetSpecialMeshBlocksSnapshot();
+                    meshOnly = true;
+                }
             }
 
             HashSet<Vector3Int> specialMeshBlocks =
@@ -603,9 +605,11 @@ namespace Core
 
             if (WorldSaveSystem.ChunkSaveExist(chunkCord))
             {
-                WorldSaveSystem.LoadChunk(chunkCord, chunk);
-                chunk.RebuildSpecialMeshBlocks();
-                RebuildBlockEntities(chunk);
+                if (WorldSaveSystem.LoadChunk(chunkCord, chunk))
+                {
+                    chunk.RebuildSpecialMeshBlocks();
+                    RebuildBlockEntities(chunk);
+                }
             }
 
             meshQue.Add(chunk);
