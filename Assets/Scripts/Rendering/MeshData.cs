@@ -59,7 +59,14 @@ public static class ChunkMeshGeneratorThreaded
 
         foreach (var dir in dirs)
         {
-            GreedyDirection(getBlock, getState, dir, mesh,mask, lodScale, neighbors, assumeOpaqueCubeOnly);
+            if (lodScale == 1)
+            {
+                Direction(getBlock, getState, dir, mesh, assumeOpaqueCubeOnly);
+            }
+            else
+            {
+                GreedyDirection(getBlock, getState, dir, mesh,mask, lodScale, neighbors, assumeOpaqueCubeOnly);
+            }
         }
 
         if (hasSpecialMeshBlocks)
@@ -68,6 +75,81 @@ public static class ChunkMeshGeneratorThreaded
         }
         return mesh;
     }
+    
+    // LOD0 keeps full block-face detail: visible cube faces are emitted one block at a time
+    // instead of being combined by the greedy merger used for higher LODs.
+    private static void Direction(Func<int,int,int,byte> getBlock, Func<int, int, int, BlockStateContainer> getState,
+        Vector3Int dir, MeshData mesh, bool assumeOpaqueCubeOnly)
+    {
+        for (int w = 0; w < CHUNK_SIZE; w++)
+        {
+            for (int u = 0; u < CHUNK_SIZE; u++)
+            {
+                for (int v = 0; v < CHUNK_SIZE; v++)
+                {
+                    int x = 0, y = 0, z = 0;
+                    if (dir.x != 0)
+                    {
+                        x = w;
+                        y = u;
+                        z = v;
+                    }
+                    else if (dir.y != 0)
+                    {
+                        x = u;
+                        y = w;
+                        z = v;
+                    }
+                    else
+                    {
+                        x = u;
+                        y = v;
+                        z = w;
+                    }
+
+                    byte current = getBlock(x, y, z);
+                    byte neighbor = getBlock(x + dir.x, y + dir.y, z + dir.z);
+                    Block currentBlock = null;
+                    bool renderFace;
+
+                    if (assumeOpaqueCubeOnly)
+                    {
+                        if (current == 0)
+                            continue;
+
+                        renderFace = neighbor == 0;
+                    }
+                    else
+                    {
+                        if (!ShouldGreedyMeshBlock(current, 1, out currentBlock))
+                            continue;
+
+                        renderFace = ShouldRenderGreedyFace(neighbor, false, 1);
+                    }
+
+                    if (!renderFace)
+                        continue;
+
+                    currentBlock ??= GetBlockInfo(current);
+                    if (currentBlock == null)
+                        continue;
+
+                    BlockStateContainer currentState = null;
+                    if (ShouldReadFacingState(currentBlock, dir))
+                    {
+                        currentState = getState?.Invoke(x, y, z);
+                    }
+
+                    int atlasIdx = GetAtlasIndex(currentBlock, currentState, dir);
+                    if (atlasIdx >= 0)
+                    {
+                        AddQuadFromMask(u, v, 1, 1, w, dir, atlasIdx, mesh, 1);
+                    }
+                }
+            }
+        }
+    }
+
     
     // Greedy direction implementation adapted to be fully data-only and match original behavior
     private static void GreedyDirection(Func<int,int,int,byte> getBlock, Func<int, int, int, BlockStateContainer> getState, 
