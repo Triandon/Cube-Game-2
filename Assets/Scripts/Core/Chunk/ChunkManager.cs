@@ -54,7 +54,8 @@ namespace Core
         private void Awake()
         {
             fpsCounter = FindAnyObjectByType<FPSCounter>();
-            Debug.Log("Save path: " + Application.persistentDataPath + "/chunks/");
+            WorldSaveSystem.Initialize(Application.persistentDataPath);
+            Debug.Log("Save path: " + WorldSaveSystem.GetChunkDirectory() + "/");
 
             // Pre-create chunk pool
             for (int i = 0; i < initialPoolSize; i++)
@@ -393,35 +394,25 @@ namespace Core
                     negZ = GetNeighborLod(coord + Vector3Int.back, lodScale),
                 };
 
-            byte[,,] savedBlocks = null;
-            BlockStateContainer[,,] savedStates = null;
-            bool meshOnly = false;
-            HashSet<Vector3Int> savedSpecialMeshBlocks = null;
-
-            if (WorldSaveSystem.ChunkSaveExist(coord))
-            {
-                Chunk tempChunk = new Chunk(coord);
-                if (WorldSaveSystem.LoadChunk(coord, tempChunk))
-                {
-                    tempChunk.RebuildSpecialMeshBlocks();
-                    savedBlocks = tempChunk.blocks;
-                    savedStates = tempChunk.states;
-                    savedSpecialMeshBlocks = tempChunk.GetSpecialMeshBlocksSnapshot();
-                    meshOnly = true;
-                }
-            }
-
             HashSet<Vector3Int> specialMeshBlocks =
                 existingChunk != null
                     ? existingChunk.GetSpecialMeshBlocksSnapshot()
-                    : meshOnly && savedBlocks != null
-                        ? savedSpecialMeshBlocks ?? BuildSpecialMeshBlocksSnapshot(coord, savedBlocks, savedStates)
-                        : new HashSet<Vector3Int>();
-
+                    : new HashSet<Vector3Int>();
             
             var (neighbors, neighborStates) = CaptureNeighborSnapshots(coord);
-            var req = new ChunkGenRequest(coord, lodScale, neighborLODInfo, savedBlocks, savedStates, meshOnly, neighbors, neighborStates, specialMeshBlocks);
-
+            var req = new ChunkGenRequest(
+                coord,
+                lodScale,
+                neighborLODInfo,
+                existingChunk?.blocks,
+                existingChunk?.states,
+                existingChunk != null,
+                neighbors,
+                neighborStates,
+                specialMeshBlocks,
+                allowDiskLoad: existingChunk == null,
+                chunkSavePath: existingChunk == null ? WorldSaveSystem.GetChunkPath(coord) : null);
+            
             pendingRequests.Add(coord);
             threadedWorker.EnqueueRequest(req);
         }

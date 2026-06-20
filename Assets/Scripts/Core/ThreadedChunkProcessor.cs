@@ -14,6 +14,20 @@ public static class ThreadedChunkProcessor
     {
         const int S = CHUNK_SIZE;
         Vector3Int coord = req.coord;
+
+        if (req.allowDiskLoad && req.blocks == null && !string.IsNullOrEmpty(req.chunkSavePath))
+        {
+            Chunk savedChunk = new Chunk(coord);
+            if (WorldSaveSystem.LoadChunk(req.chunkSavePath, coord, savedChunk))
+            {
+                savedChunk.RebuildSpecialMeshBlocks();
+                req.blocks = savedChunk.blocks;
+                req.states = savedChunk.states;
+                req.specialMeshBlocks = savedChunk.GetSpecialMeshBlocksSnapshot();
+
+                req.meshOnly = true;
+            }
+        }
         
         byte[,,] center;
         byte[,,] padded;

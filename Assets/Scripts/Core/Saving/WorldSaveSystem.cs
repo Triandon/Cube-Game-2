@@ -11,9 +11,30 @@ namespace Core
     {
         private const int ChunkSaveVersion = 1;
     
+        private static string persistentDataPath;
+
+        public static void Initialize(string applicationPersistentDataPath)
+        {
+            persistentDataPath = applicationPersistentDataPath;
+        }
+
+        private static string GetPersistentDataPath()
+        {
+            if (!string.IsNullOrEmpty(persistentDataPath))
+                return persistentDataPath;
+
+            persistentDataPath = Application.persistentDataPath;
+            return persistentDataPath;
+        }
+
         public static string GetChunkPath(Vector3Int coord)
         {
-            return Application.persistentDataPath + $"/chunks/{coord.x}_{coord.y}_{coord.z}.chunk";
+            return GetChunkDirectory() + $"/{coord.x}_{coord.y}_{coord.z}.chunk";
+        }
+
+        public static string GetChunkDirectory()
+        {
+            return GetPersistentDataPath() + "/chunks_2_system_test";
         }
 
         public static bool ChunkSaveExist(Vector3Int coord)
@@ -38,7 +59,7 @@ namespace Core
 
         public static void SaveChunk(Vector3Int coord, Chunk chunk)
         {
-            Directory.CreateDirectory(Application.persistentDataPath + "/chunks/");
+            Directory.CreateDirectory(GetChunkDirectory());
 
             using FileStream stream = File.Create(GetChunkPath(coord));
             using BinaryWriter writer = new BinaryWriter(stream);
@@ -103,7 +124,11 @@ namespace Core
 
         public static bool LoadChunk(Vector3Int coord, Chunk chunk)
         {
-            string path = GetChunkPath(coord);
+            return LoadChunk(GetChunkPath(coord), coord, chunk);
+        }
+
+        public static bool LoadChunk(string path ,Vector3Int coord, Chunk chunk)
+        {
             if (!File.Exists(path)) return false;
 
             using FileStream stream = File.OpenRead(path);
@@ -139,7 +164,7 @@ namespace Core
             }
 
             int S = Chunk.CHUNK_SIZE;
-            chunk.blocks = DecodeRLE(baseBlocks, coord);
+            chunk.blocks = DecodeRLE(baseBlocks, coord, path);
             chunk.states = new BlockStateContainer[S, S, S];
 
             int blockStateCount = reader.ReadInt32();
@@ -185,7 +210,7 @@ namespace Core
 
         public static string GetInventoryPath(string ownerName)
         {
-            return Application.persistentDataPath + $"/inventories/{ownerName}.inventory";
+            return GetPersistentDataPath() + $"/inventories/{ownerName}.inventory";
         }
         
         public static void SaveInventory(string ownerName, Inventory inventory)
@@ -199,7 +224,7 @@ namespace Core
                 );
             }
             
-            Directory.CreateDirectory(Application.persistentDataPath + "/inventories/");
+            Directory.CreateDirectory(GetPersistentDataPath() + "/inventories/");
 
             InventorySaveData data = new InventorySaveData();
             foreach (var stack in inventory.slots)
@@ -268,15 +293,18 @@ namespace Core
             runs.Add(new RLEBlockRun { id = current, count = count });
             return runs;
         }
-        
+
         public static byte[,,] DecodeRLE(List<RLEBlockRun> runs, Vector3Int coord)
+        {
+            return DecodeRLE(runs, coord, GetChunkPath(coord));
+        }
+        
+        public static byte[,,] DecodeRLE(List<RLEBlockRun> runs, Vector3Int coord, string path)
         {
             int S = Chunk.CHUNK_SIZE;
             var blocks = new byte[S,S,S];
             int max = S * S * S;
             int index = 0;
-
-            string path = GetChunkPath(coord);
 
             foreach (var run in runs)
             {
