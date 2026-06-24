@@ -9,7 +9,7 @@ public class MiscVariablesDisplay : MonoBehaviour
     public TextMeshProUGUI RenderDistanceText;
     public TextMeshProUGUI chunkBuilding;
     public TextMeshProUGUI playerCordsText, usernameDisplayText, currentLodDistanceText;
-    public TextMeshProUGUI chunkClimateText, genQue, transQue, meshQue;
+    public TextMeshProUGUI chunkClimateText, genQue, transQue, meshQue, loadQue;
 
     [SerializeField] private GameObject keyInfo, debugPanel, chatBoxGO, cursorGO;
     
@@ -59,6 +59,7 @@ public class MiscVariablesDisplay : MonoBehaviour
         genQue.text = "Gen Que " + chunkManager.generationQue.Count;
         transQue.text = "Trans Que " + chunkManager.transformQueue.Count;
         meshQue.text = "Mesh Que " + chunkManager.meshQue.Count;
+        //loadQue.text = "Load que " + chunkManager.loadingQue.Count;
 
         Vector3Int playerChunk = GetPlayerChunkCoord();
         ChunkClimate climate = BiomeManager.GetChunkClimate(playerChunk);

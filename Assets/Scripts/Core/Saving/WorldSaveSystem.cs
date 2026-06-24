@@ -40,8 +40,14 @@ namespace Core
         public static bool ChunkSaveExist(Vector3Int coord)
         {
             string path = GetChunkPath(coord);
-            if (!File.Exists(path)) return false;
+            if (File.Exists(path))
+            {
+                return true;
+            }
 
+            return false;
+
+            // Old code, mabye usable later
             try
             {
                 using FileStream stream = File.OpenRead(path);
