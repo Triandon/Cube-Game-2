@@ -1243,7 +1243,7 @@ namespace Core
         {
             // Generation QUE and sorting!
             
-            int generatingChunksThisFrame = Mathf.Min(chunksPerFrame, generationQue.Count);
+            int generatingChunksThisFrame = Mathf.Min(chunksPerFrame, generationQue.Count) * 2 + 2;
 
             List<Vector3Int> orderedGeneration = TakeClosestGenerationCoords(generatingChunksThisFrame);
 
