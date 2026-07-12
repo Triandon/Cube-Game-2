@@ -30,14 +30,14 @@ public static class ThreadedChunkProcessor
         }
         
         byte[,,] center;
-        byte[,,] padded;
+        byte[] padded;
         BlockStateContainer[,,] paddedStates;
 
         //1 Builds block data
         if (req.meshOnly)
         {
             center = req.blocks;
-            padded = BuildPaddedFromCenter(center);
+            padded = BuildPaddedFromCenter(center, coord, req.neighborBlocks);
             paddedStates = BuildPaddedStatesFromCenter(coord, req.states, req.neighborStates);
         }
         else
@@ -71,7 +71,7 @@ public static class ThreadedChunkProcessor
             if ((uint)px >= (uint)(S + 2) || (uint)py >= (uint)(S + 2) || (uint)pz >= (uint)(S + 2))
                 return 0;
 
-            return padded[px, py, pz];
+            return padded[PaddedIndex(px, py, pz)];
         };
         
         // 3.1 Get states. Similar
@@ -113,17 +113,20 @@ public static class ThreadedChunkProcessor
             false,instantTickLocals, scheduledTickLocals, randomTickLocals);
     }
 
-    private static byte[,,] BuildPaddedFromCenter(byte[,,] center)
+    private static byte[] BuildPaddedFromCenter(byte[,,] center, Vector3Int coord,
+        Dictionary<Vector3Int, byte[,,]> neighbors)
     {
         int S = Chunk.CHUNK_SIZE;
-        
-        byte[,,] padded = new byte[S + 2, S + 2, S + 2];
+        int P = S + 2;
+        byte[] padded = new byte[P * P * P];
 
         for (int x = 0; x < S; x++)
         for (int y = 0; y < S; y++)
         for (int z = 0; z < S; z++)
-            padded[x + 1, y + 1, z + 1] = center[x, y, z];
+            padded[PaddedIndex(x + 1, y + 1, z + 1)] = center[x, y, z];
 
+        CopyNeighborFaces(coord, neighbors, padded);
+        
         return padded;
     }
     
@@ -176,7 +179,7 @@ public static class ThreadedChunkProcessor
 
 
 
-    private static byte[,,] ExtractCenter(byte[,,] padded)
+    private static byte[,,] ExtractCenter(byte[] padded)
     {
         int S = Chunk.CHUNK_SIZE;
         // ------------------------------------
@@ -186,23 +189,21 @@ public static class ThreadedChunkProcessor
         for (int x = 0; x < S; x++)
         for (int y = 0; y < S; y++)
         for (int z = 0; z < S; z++)
-            center[x, y, z] = padded[x + 1, y + 1, z + 1];
+            center[x, y, z] = padded[PaddedIndex(x + 1, y + 1, z + 1)];
 
         return center;
     }
-    
-    private static byte[,,] GenerateTerrainPadded(Vector3Int coord, Dictionary<Vector3Int, byte[,,]> neighbors)
+
+    private static byte[] GenerateTerrainPadded(Vector3Int coord, Dictionary<Vector3Int, byte[,,]> neighbors)
     {
         int S = Chunk.CHUNK_SIZE;
-        
+        int S2 = S + 2;
         // ------------------------------------
         // 1. PREPARE PADDED BLOCKS
         // ------------------------------------
         // padded expected size = (S+2)^3, center located at [1..S] on each axis
-        byte[,,] padded = new byte[S+2, S+2, S+2];
+        byte[] padded = new byte[S2 * S2 * S2];
 
-        int S2 = S + 2;
-        
         // column caches
         int[,] heightCache = new int[S2, S2];
         //ChunkClimate[,] climateCache = new ChunkClimate[S2, S2];
@@ -237,61 +238,95 @@ public static class ThreadedChunkProcessor
             int height = heightCache[x + 1, z + 1];
             byte surface = surfaceBlockCache[x + 1, z + 1];
 
-            padded[x + 1, y + 1, z + 1] =
+            padded[PaddedIndex(x + 1, y + 1, z + 1)] =
                 TerrainGeneration.SampleBlock(
                     wx, wy, wz, height, surface);
         }
-        
+
         //2 Override borders ONLY if neighbor exists
         // ----------------------------
-        if (neighbors != null)
-        {
-            foreach (var kv in neighbors)
-            {
-                Vector3Int delta = kv.Key - coord;
-                byte[,,] n = kv.Value;
-
-                if (delta == Vector3Int.right)
-                    CopyFace(n, padded, srcX: 0, dstX: S + 1);
-                else if (delta == Vector3Int.left)
-                    CopyFace(n, padded, srcX: S - 1, dstX: 0);
-                else if (delta == Vector3Int.forward)
-                    CopyFace(n, padded, srcZ: 0, dstZ: S + 1);
-                else if (delta == Vector3Int.back)
-                    CopyFace(n, padded, srcZ: S - 1, dstZ: 0);
-                else if (delta == Vector3Int.up)
-                    CopyFace(n, padded, srcY: 0, dstY: S + 1);
-                else if (delta == Vector3Int.down)
-                    CopyFace(n, padded, srcY: S - 1, dstY: 0);
-            }
-        }
+        CopyNeighborFaces(coord, neighbors, padded);
 
         return padded;
     }
+
+    private static int PaddedIndex(int x, int y, int z)
+    {
+        int P = Chunk.CHUNK_SIZE + 2;
+        return x + P * (y + P * z);
+    }
+
+    private static void CopyNeighborFaces(Vector3Int coord, Dictionary<Vector3Int, byte[,,]> neighbors, byte[] padded)
+    {
+        if (neighbors == null)
+            return;
+
+        int S = Chunk.CHUNK_SIZE;
+        
+        foreach (var kv in neighbors)
+        {
+            Vector3Int delta = kv.Key - coord;
+            byte[,,] n = kv.Value;
+            
+            if (n == null)
+                continue;
+
+            if (delta == Vector3Int.right)
+                CopyBlockFace(n, padded, srcX: 0, dstX: S + 1);
+            else if (delta == Vector3Int.left)
+                CopyBlockFace(n, padded, srcX: S - 1, dstX: 0);
+            else if (delta == Vector3Int.forward)
+                CopyBlockFace(n, padded, srcZ: 0, dstZ: S + 1);
+            else if (delta == Vector3Int.back)
+                CopyBlockFace(n, padded, srcZ: S - 1, dstZ: 0);
+            else if (delta == Vector3Int.up)
+                CopyBlockFace(n, padded, srcY: 0, dstY: S + 1);
+            else if (delta == Vector3Int.down)
+                CopyBlockFace(n, padded, srcY: S - 1, dstY: 0);
+        }
+    }
     
-    private static void CopyFace(
+    
+    private static void CopyBlockFace(
         byte[,,] src,
-        byte[,,] dst,
+        byte[] dst,
         int srcX = -1, int dstX = -1,
         int srcY = -1, int dstY = -1,
         int srcZ = -1, int dstZ = -1)
     {
         int S = Chunk.CHUNK_SIZE;
-
-        for (int x = 0; x < S; x++)
-        for (int y = 0; y < S; y++)
-        for (int z = 0; z < S; z++)
+        
+        if (srcX >= 0 || dstX >= 0)
         {
-            int sx = srcX >= 0 ? srcX : x;
-            int sy = srcY >= 0 ? srcY : y;
-            int sz = srcZ >= 0 ? srcZ : z;
-
-            int dx = dstX >= 0 ? dstX : x;
-            int dy = dstY >= 0 ? dstY : y;
-            int dz = dstZ >= 0 ? dstZ : z;
-
-            dst[dx, dy, dz] = src[sx, sy, sz];
+            for (int y = 0; y < S; y++)
+            for (int z = 0; z < S; z++)
+            {
+                dst[PaddedIndex(dstX, y + 1, z + 1)] =
+                    src[srcX, y, z];
+            }
+            return;
         }
+        
+        if (srcY >= 0 || dstY >= 0)
+        {
+            for (int x = 0; x < S; x++)
+            for (int z = 0; z < S; z++)
+            {
+                dst[PaddedIndex(x + 1, dstY, z + 1)] = src[x, srcY, z];
+            }
+            return;
+        }
+        
+        if (srcZ >= 0 || dstZ >= 0)
+        {
+            for (int x = 0; x < S; x++)
+            for (int y = 0; y < S; y++)
+            {
+                dst[PaddedIndex(x + 1, y + 1, dstZ)] = src[x, y, srcZ];
+            }
+        }
+
+
     }
     
     private static void CopyFace<T>(
@@ -303,23 +338,35 @@ public static class ThreadedChunkProcessor
     {
         int S = Chunk.CHUNK_SIZE;
 
-        for (int x = 0; x < S; x++)
-        for (int y = 0; y < S; y++)
-        for (int z = 0; z < S; z++)
+        if (srcX >= 0 || dstX >= 0)
         {
-            int sx = srcX >= 0 ? srcX : x;
-            int sy = srcY >= 0 ? srcY : y;
-            int sz = srcZ >= 0 ? srcZ : z;
+            for (int y = 0; y < S; y++)
+            for (int z = 0; z < S; z++)
+            {
+                dst[dstX, y + 1, z + 1] = src[srcX, y, z];
+            }
+            return;
+        }
+        
+        if (srcY >= 0 || dstY >= 0)
+        {
+            for (int x = 0; x < S; x++)
+            for (int z = 0; z < S; z++)
+            {
+                dst[x + 1, dstY, z + 1] = src[x, srcY, z];
+            }
+            return;
+        }
 
-            int dx = dstX >= 0 ? dstX : x;
-            int dy = dstY >= 0 ? dstY : y;
-            int dz = dstZ >= 0 ? dstZ : z;
-
-            dst[dx, dy, dz] = src[sx, sy, sz];
+        if (srcZ >= 0 || dstZ >= 0)
+        {
+            for (int x = 0; x < S; x++)
+            for (int y = 0; y < S; y++)
+            {
+                dst[x + 1, y + 1, dstZ] = src[x, y, srcZ];
+            }
         }
     }
-
-
     
     private static List<Vector3Int> DetectBlockEntities(byte[,,] center)
     {
