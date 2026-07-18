@@ -1584,21 +1584,11 @@ public class ChunkMeshGenerator
     }
 
     // Converts the plain MeshData -> ChunkRendering.ChunkMeshData with Unity Mesh objects.
-    // This mirrors exactly your previous mesh creation steps (SetVertices, SetTriangles, SetUVs, UV1, Recalculate normals/tangents/bounds)
+    // Uploads only the chunk vertex attributes the shader needs (position, normal, color, UV0 and atlas metadata).
     private ChunkRendering.ChunkMeshData ConvertToChunkMeshData(MeshData md)
     {
         Mesh renderMesh = new Mesh();
-        renderMesh.Clear();
-        renderMesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
-        renderMesh.SetVertices(md.vertices);
-        renderMesh.SetTriangles(md.triangles, 0);
-        renderMesh.SetUVs(0, md.uvs);
-        renderMesh.SetUVs(1, md.uvMeta);
-        renderMesh.RecalculateNormals();
-        renderMesh.RecalculateTangents();
-        renderMesh.RecalculateBounds();
-        
-        renderMesh.SetNormals(md.normals);
+        MeshUtilityCustom.ApplyChunkMesh(renderMesh, md);
 
         return new ChunkRendering.ChunkMeshData
         {

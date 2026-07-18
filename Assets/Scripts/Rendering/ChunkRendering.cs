@@ -13,7 +13,7 @@ public class ChunkRendering : MonoBehaviour
     private ChunkMeshGenerator meshGenerator;
 
     private Mesh shearedRenderMesh;
-    private Mesh shearedColliderMesh;
+    //private Mesh shearedColliderMesh;
 
     public struct ChunkMeshData
     {
@@ -44,12 +44,6 @@ public class ChunkRendering : MonoBehaviour
         {
             Destroy(shearedRenderMesh);
             shearedRenderMesh = null;
-        }
-
-        if (shearedColliderMesh != null)
-        {
-            Destroy(shearedColliderMesh);
-            shearedColliderMesh = null;
         }
     }
 
@@ -91,17 +85,7 @@ public class ChunkRendering : MonoBehaviour
             };
         }
 
-        shearedRenderMesh.Clear();
-        shearedRenderMesh.SetVertices(meshData.vertices);
-        shearedRenderMesh.SetTriangles(meshData.triangles, 0);
-        shearedRenderMesh.SetUVs(0, meshData.uvs);
-        shearedRenderMesh.SetUVs(1, meshData.uvMeta);
-        //shearedRenderMesh.RecalculateNormals(); // Later calc them on a sepperate thread, and apply them. Saves a lot of main thread performance!
-        
-        shearedRenderMesh.SetNormals(meshData.normals);
-        
-        //shearedRenderMesh.RecalculateTangents();
-        shearedRenderMesh.RecalculateBounds();
+        MeshUtilityCustom.ApplyChunkMesh(shearedRenderMesh, meshData);
         
         meshFilter.sharedMesh = shearedRenderMesh;
 
