@@ -129,9 +129,14 @@ namespace Core
         {
             if (threadedWorker == null) return;
 
-            while (threadedWorker.TryDequeueResult(out var result))
+            //This limits the amount of chunks that gets applyed to the main thread from the sepperate thread.
+            int applyedResults = 0;
+            int applyLimit = Mathf.Max(0, 64);
+
+            while (applyedResults < applyLimit && threadedWorker.TryDequeueResult(out var result))
             {
                 ApplyChunkResult(result);
+                applyedResults++;
             }
         }
 
