@@ -131,7 +131,8 @@ namespace Core
 
             //This limits the amount of chunks that gets applyed to the main thread from the sepperate thread.
             int applyedResults = 0;
-            int applyLimit = Mathf.Max(0, 64);
+            int a = chunksPerFrame * 5 + 1;
+            int applyLimit = Mathf.Max(0, a);
 
             while (applyedResults < applyLimit && threadedWorker.TryDequeueResult(out var result))
             {
@@ -1248,7 +1249,7 @@ namespace Core
         {
             // Generation QUE and sorting!
             
-            int generatingChunksThisFrame = Mathf.Min(chunksPerFrame, generationQue.Count) * 2 + 2;
+            int generatingChunksThisFrame = Mathf.Min(chunksPerFrame, generationQue.Count) * 3 + 2;
 
             List<Vector3Int> orderedGeneration = TakeClosestGenerationCoords(generatingChunksThisFrame);
 
