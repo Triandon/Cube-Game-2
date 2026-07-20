@@ -87,6 +87,7 @@ public class ThreadedChunkWorker
             }
 
             // ---- Process job OUTSIDE the lock ----
+            req.workerStartTicks = System.Diagnostics.Stopwatch.GetTimestamp();
             ChunkGenResult res = ThreadedChunkProcessor.ProcessRequest(req);
 
             // ---- Store result ----

@@ -14,18 +14,34 @@ public static class ThreadedChunkProcessor
     {
         const int S = CHUNK_SIZE;
         Vector3Int coord = req.coord;
+        ChunkTiming timing = new ChunkTiming
+        {
+            generationQueuedTicks = req.generationQueuedTicks,
+            enqueueTicks = req.enqueueTicks,
+            workerStartTicks = req.workerStartTicks
+        };
+        long stageStartTicks;
 
         if (req.allowDiskLoad && req.blocks == null && !string.IsNullOrEmpty(req.chunkSavePath))
         {
             Chunk savedChunk = new Chunk(coord);
+            stageStartTicks = System.Diagnostics.Stopwatch.GetTimestamp();
             if (WorldSaveSystem.LoadChunk(req.chunkSavePath, coord, savedChunk))
             {
+                timing.diskLoadTicks = System.Diagnostics.Stopwatch.GetTimestamp() - stageStartTicks;
+                stageStartTicks = System.Diagnostics.Stopwatch.GetTimestamp();
                 savedChunk.RebuildSpecialMeshBlocks();
+                timing.specialMeshTicks = System.Diagnostics.Stopwatch.GetTimestamp() - stageStartTicks;
                 req.blocks = savedChunk.blocks;
                 req.states = savedChunk.states;
                 req.specialMeshBlocks = savedChunk.GetSpecialMeshBlocksSnapshot();
 
                 req.meshOnly = true;
+                timing.loadedFromDisk = true;
+            }
+            else
+            {
+                timing.diskLoadTicks = System.Diagnostics.Stopwatch.GetTimestamp() - stageStartTicks;
             }
         }
         
@@ -34,6 +50,7 @@ public static class ThreadedChunkProcessor
         BlockStateContainer[,,] paddedStates;
 
         //1 Builds block data
+        stageStartTicks = System.Diagnostics.Stopwatch.GetTimestamp();
         if (req.meshOnly)
         {
             center = req.blocks;
@@ -46,16 +63,19 @@ public static class ThreadedChunkProcessor
             center = ExtractCenter(padded);
             paddedStates = null;
         }
+        timing.paddedTicks = System.Diagnostics.Stopwatch.GetTimestamp() - stageStartTicks;
         
         // 1.1
         // Skip mesh generation for all air chunks!
         //2 Detect block entities
+        stageStartTicks = System.Diagnostics.Stopwatch.GetTimestamp();
         bool isAllAir = AnalyzeBlocks(center, out List<Vector3Int> blockEntities,
             out List<Vector3Int> instantTickLocals, out List<Vector3Int> scheduledTickLocals,
             out List<Vector3Int> randomTickLocals);
+        timing.analyzeTicks = System.Diagnostics.Stopwatch.GetTimestamp() - stageStartTicks;
         if (isAllAir)
-            return new ChunkGenResult(coord, center, req.states, new MeshData(), null,
-                true, instantTickLocals, scheduledTickLocals, randomTickLocals);
+            return WithTiming(new ChunkGenResult(coord, center, req.states, new MeshData(), null,
+                true, instantTickLocals, scheduledTickLocals, randomTickLocals), timing);
 
         // ------------------------------------
         // 3. THREAD-SAFE BLOCK QUERY
@@ -96,6 +116,7 @@ public static class ThreadedChunkProcessor
         // 4. MESH GENERATION
         // ------------------------------------
         MeshData meshData;
+        stageStartTicks = System.Diagnostics.Stopwatch.GetTimestamp();
         try
         {
             meshData = ChunkMeshGeneratorThreaded.GenerateMeshData(getBlock,getState,req.lodScale,req.neighborLods, req.specialMeshBlocks);
@@ -105,12 +126,20 @@ public static class ThreadedChunkProcessor
             Debug.LogError($"ThreadedChunkProcessor: mesher exception at {coord}: {e}");
             meshData = new MeshData(); // return empty mesh to avoid main-thread crash
         }
+        timing.meshTicks = System.Diagnostics.Stopwatch.GetTimestamp() - stageStartTicks;
 
         // ------------------------------------
         // 5. RETURN RESULT
         // ------------------------------------
-        return new ChunkGenResult(coord, center, req.states ,meshData,blockEntities,
-            false,instantTickLocals, scheduledTickLocals, randomTickLocals);
+        return WithTiming(new ChunkGenResult(coord, center, req.states ,meshData,blockEntities,
+            false,instantTickLocals, scheduledTickLocals, randomTickLocals), timing);
+    }
+
+    private static ChunkGenResult WithTiming(ChunkGenResult result, ChunkTiming timing)
+    {
+        timing.workerEndTicks = System.Diagnostics.Stopwatch.GetTimestamp();
+        result.timing = timing;
+        return result;
     }
 
     private static byte[] BuildPaddedFromCenter(byte[,,] center, Vector3Int coord,

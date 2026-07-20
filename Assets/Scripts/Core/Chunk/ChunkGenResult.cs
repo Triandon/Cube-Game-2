@@ -15,6 +15,7 @@ public class ChunkGenResult
     public List<Vector3Int> instantTickLocals;
     public List<Vector3Int> scheduledTickLocals;
     public List<Vector3Int> randomTickLocals;
+    public ChunkTiming timing;
 
     public ChunkGenResult(Vector3Int coord, byte[,,] blocks, BlockStateContainer[,,] states,MeshData meshData,
         List<Vector3Int> blockEntityLocals, bool isAllAir,List<Vector3Int> instantTickLocals = null,
@@ -30,4 +31,18 @@ public class ChunkGenResult
         this.scheduledTickLocals = scheduledTickLocals;
         this.randomTickLocals = randomTickLocals;
     }
+}
+
+public class ChunkTiming
+{
+    public bool loadedFromDisk;
+    public long generationQueuedTicks;
+    public long enqueueTicks;
+    public long workerStartTicks;
+    public long workerEndTicks;
+    public long diskLoadTicks;
+    public long specialMeshTicks;
+    public long paddedTicks;
+    public long analyzeTicks;
+    public long meshTicks;
 }

@@ -34,6 +34,9 @@ namespace Core
         private FPSCounter fpsCounter;
         private int fps;
         public bool dynamicChunkRendering = true;
+        [Header("Chunk Timing")]
+        public bool logSlowChunkTimings = true;
+        public int slowChunkTimingLogMs = 25;
 
         public int initialPoolSize = 20; // pre-instantiate this many chunks
 
@@ -42,6 +45,7 @@ namespace Core
 
         // --- new: track pending requests so we don't enqueue duplicates
         private HashSet<Vector3Int> pendingRequests = new HashSet<Vector3Int>();
+        private Dictionary<Vector3Int, long> generationQueuedAtTicks = new Dictionary<Vector3Int, long>();
         protected HashSet<Vector3Int> knownAllAirChunks = new HashSet<Vector3Int>();
         
         private Settings settings;
@@ -144,6 +148,8 @@ namespace Core
         private void ApplyChunkResult(ChunkGenResult res)
         {
             if (res == null) return;
+            long applyStartTicks = System.Diagnostics.Stopwatch.GetTimestamp();
+            long meshApplyTicks = 0;
 
             // If chunk outside of render distance
             if (IsOutsideRenderDistance(res.coord))
@@ -214,7 +220,9 @@ namespace Core
             if (chunkRender != null && res.meshData != null)
             {
                 chunk.meshData = res.meshData;
+                long meshApplyStartTicks = System.Diagnostics.Stopwatch.GetTimestamp();
                 chunkRender.ApplyMeshData(res.meshData);
+                meshApplyTicks = System.Diagnostics.Stopwatch.GetTimestamp() - meshApplyStartTicks;
                 EnqueueNeighborRebuilds(chunk.coord);
             }
             else
@@ -234,6 +242,40 @@ namespace Core
             
             // Remove from pending requests set so future generates are allowed
             pendingRequests.Remove(res.coord);
+            LogChunkTimingIfSlow(res, applyStartTicks, meshApplyTicks);
+        }
+
+        private void LogChunkTimingIfSlow(ChunkGenResult res, long applyStartTicks, long meshApplyTicks)
+        {
+            if (!logSlowChunkTimings || res?.timing == null)
+                return;
+
+            long nowTicks = System.Diagnostics.Stopwatch.GetTimestamp();
+            ChunkTiming timing = res.timing;
+            float totalMs = TicksToMilliseconds(nowTicks - timing.generationQueuedTicks);
+
+            if (totalMs < slowChunkTimingLogMs)
+                return;
+
+            float queueMs = TicksToMilliseconds(timing.workerStartTicks - timing.enqueueTicks);
+            float generationQueueMs = TicksToMilliseconds(timing.enqueueTicks - timing.generationQueuedTicks);
+            float workerMs = TicksToMilliseconds(timing.workerEndTicks - timing.workerStartTicks);
+            float resultWaitMs = TicksToMilliseconds(applyStartTicks - timing.workerEndTicks);
+            float applyMs = TicksToMilliseconds(nowTicks - applyStartTicks);
+
+            Debug.Log(
+                $"Chunk timing {res.coord} | total={totalMs:F1}ms | " +
+                $"genQueue={generationQueueMs:F1}ms workerQueue={queueMs:F1}ms worker={workerMs:F1}ms " +
+                $"resultWait={resultWaitMs:F1}ms apply={applyMs:F1}ms | " +
+                $"disk={TicksToMilliseconds(timing.diskLoadTicks):F1}ms loaded={timing.loadedFromDisk} " +
+                $"special={TicksToMilliseconds(timing.specialMeshTicks):F1}ms padded={TicksToMilliseconds(timing.paddedTicks):F1}ms " +
+                $"analyze={TicksToMilliseconds(timing.analyzeTicks):F1}ms mesh={TicksToMilliseconds(timing.meshTicks):F1}ms " +
+                $"meshApply={TicksToMilliseconds(meshApplyTicks):F1}ms | queues gen={generationQue.Count} mesh={meshQue.Count} trans={transformQueue.Count}");
+        }
+
+        private static float TicksToMilliseconds(long ticks)
+        {
+            return ticks * 1000f / System.Diagnostics.Stopwatch.Frequency;
         }
 
         public static Vector3Int IndexToPos(int index)
@@ -301,7 +343,7 @@ namespace Core
                     if (!chunks.ContainsKey(logicalCoord) && !knownAllAirChunks.Contains(logicalCoord) &&
                         !pendingRequests.Contains(logicalCoord) && !generationQue.Contains(logicalCoord))
                     {
-                        generationQue.Add(logicalCoord);
+                        AddGenerationQueue(logicalCoord);
                     }
                 }
             }
@@ -383,7 +425,7 @@ namespace Core
             return chunk;
         }
 
-        private void EnqueueChunkDataRequest(Vector3Int coord)
+        private void EnqueueChunkDataRequest(Vector3Int coord, long generationQueuedTicks = 0)
         {
             int lodScale = chunks.TryGetValue(coord, out var existingChunk)
                 ? existingChunk.GetLodScale()
@@ -417,10 +459,32 @@ namespace Core
                 neighborStates,
                 specialMeshBlocks,
                 allowDiskLoad: existingChunk == null,
-                chunkSavePath: existingChunk == null ? WorldSaveSystem.GetChunkPath(coord) : null);
+                chunkSavePath: existingChunk == null ? WorldSaveSystem.GetChunkPath(coord) : null,
+                generationQueuedTicks: generationQueuedTicks);
             
             pendingRequests.Add(coord);
             threadedWorker.EnqueueRequest(req);
+        }
+
+        private void AddGenerationQueue(Vector3Int coord)
+        {
+            if (generationQue.Add(coord))
+            {
+                generationQueuedAtTicks[coord] = System.Diagnostics.Stopwatch.GetTimestamp();
+            }
+        }
+
+        private long RemoveGenerationQueue(Vector3Int coord)
+        {
+            generationQue.Remove(coord);
+
+            if (generationQueuedAtTicks.TryGetValue(coord, out long queuedTicks))
+            {
+                generationQueuedAtTicks.Remove(coord);
+                return queuedTicks;
+            }
+
+            return 0;
         }
         
         private static HashSet<Vector3Int> BuildSpecialMeshBlocksSnapshot(
@@ -471,7 +535,7 @@ namespace Core
             chunkPool.Enqueue(chunk.renderer.gameObject);
 
             meshQue.Remove(chunk);
-            generationQue.Remove(coord);
+            RemoveGenerationQueue(coord);
 
             // Make sure to remove any pending request marker
             pendingRequests.Remove(coord);
@@ -526,7 +590,7 @@ namespace Core
                     chunk.blockEntities.Clear();
                     
                     meshQue.Remove(chunk);
-                    generationQue.Remove(coord);
+                    RemoveGenerationQueue(coord);
                     pendingRequests.Remove(coord);
                     
                     // Chunk is outside the new view distance
@@ -585,14 +649,14 @@ namespace Core
             {
                 if (!pendingRequests.Contains(chunkCord) && !generationQue.Contains(chunkCord))
                 {
-                    generationQue.Add(chunkCord);
+                    AddGenerationQueue(chunkCord);
                 }
 
                 return null;
             }
 
             knownAllAirChunks.Remove(chunkCord);
-            generationQue.Remove(chunkCord);
+            RemoveGenerationQueue(chunkCord);
             pendingRequests.Remove(chunkCord);
 
             chunkCount++;
@@ -1158,7 +1222,7 @@ namespace Core
             {
                 foreach (var coord in toRemove)
                 {
-                    generationQue.Remove(coord);
+                    RemoveGenerationQueue(coord);
                 }
             }
 
@@ -1257,8 +1321,8 @@ namespace Core
             {
                 foreach (var coord in orderedGeneration)
                 {
-                    generationQue.Remove(coord);
-                    EnqueueChunkDataRequest(coord);
+                    long generationQueuedTicks = RemoveGenerationQueue(coord);
+                    EnqueueChunkDataRequest(coord, generationQueuedTicks);
                 }
             }
             
