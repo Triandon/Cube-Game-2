@@ -13,8 +13,8 @@ public class MeshData
 {
     public readonly VertexPositionList vertices = new VertexPositionList();
     public List<int> triangles = new List<int>();
-    public List<Vector2> uvs = new List<Vector2>();
-    public List<Vector4> uvMeta = new List<Vector4>();
+    public readonly PackedUvList uvs = new PackedUvList();
+    public List<ushort> atlasTileIndexes = new List<ushort>();
     public List<Vector3> normals = new List<Vector3>();
 }
 
@@ -24,9 +24,9 @@ public sealed class VertexPositionList
     private const float InversePositionScale = 1f / PositionScale;
 
     public readonly List<PackedVertexPosition> packedPositions = new List<PackedVertexPosition>();
-    
+
     public int Count => packedPositions.Count;
-    
+
     public Vector3 this[int index] => packedPositions[index].ToVector3();
 
     public void Add(Vector3 position)
@@ -75,6 +75,73 @@ public struct PackedVertexPosition
             VertexPositionList.UnpackAxis(x),
             VertexPositionList.UnpackAxis(y),
             VertexPositionList.UnpackAxis(z));
+    }
+}
+
+public sealed class PackedUvList
+{
+    public const float UvScale = 100f;
+    private const float InverseUvScale = 1f / UvScale;
+
+    public readonly List<PackedUv> packedUvs = new List<PackedUv>();
+
+    public int Count => packedUvs.Count;
+
+    public Vector2 this[int index] => packedUvs[index].ToVector2();
+
+    public void Add(Vector2 uv)
+    {
+        packedUvs.Add(PackedUv.FromVector2(uv));
+    }
+
+    public static ushort PackAxis(float value)
+    {
+        return (ushort)Mathf.Clamp(Mathf.RoundToInt(value * UvScale), 0, ushort.MaxValue);
+    }
+
+    public static float UnpackAxis(ushort value)
+    {
+        return value * InverseUvScale;
+    }
+}
+
+[StructLayout(LayoutKind.Sequential, Pack = 1)]
+public struct PackedUv
+{
+    public ushort u;
+    public ushort v;
+
+    public PackedUv(ushort u, ushort v)
+    {
+        this.u = u;
+        this.v = v;
+    }
+
+    public static PackedUv FromVector2(Vector2 uv)
+    {
+        return new PackedUv(
+            PackedUvList.PackAxis(uv.x),
+            PackedUvList.PackAxis(uv.y));
+    }
+
+    public Vector2 ToVector2()
+    {
+        return new Vector2(
+            PackedUvList.UnpackAxis(u),
+            PackedUvList.UnpackAxis(v));
+    }
+}
+
+[StructLayout(LayoutKind.Sequential, Pack = 1)]
+public struct PackedAtlasTile
+{
+    public ushort tileIndex;
+    public ushort padding;
+
+    public PackedAtlasTile(ushort tileIndex)
+    {
+        this.tileIndex = tileIndex;
+        padding = 0;
     }
 }
 
@@ -973,6 +1040,11 @@ public static class ChunkMeshGeneratorThreaded
         AddPrismFaceUV(indices.Length, atlasIndex, mesh);
     }
 
+    private static ushort PackAtlasTileIndex(int textureID)
+    {
+        return (ushort)Mathf.Clamp(textureID, 0, ushort.MaxValue);
+    }
+
     private static void AddPrismFaceUV(int vertexCount, int textureID, MeshData mesh)
     {
         if (vertexCount == 3)
@@ -989,17 +1061,9 @@ public static class ChunkMeshGeneratorThreaded
             mesh.uvs.Add(new Vector2(1f, 1f));
         }
 
-        int tiles = ATLAS_TILES;
-        float tileSize = 1f / tiles;
-        int col = textureID % tiles;
-        int row = textureID / tiles;
-        float uMin = col * tileSize;
-        float vMax = 1f - row * tileSize;
-        float vMin = vMax - tileSize;
-        Vector4 meta = new Vector4(uMin, vMin, tileSize, tileSize);
-
+        ushort tileIndex = PackAtlasTileIndex(textureID);
         for (int i = 0; i < vertexCount; i++)
-            mesh.uvMeta.Add(meta);
+            mesh.atlasTileIndexes.Add(tileIndex);
     }
 
     private static Vector3 ComputeFaceNormal(VertexPositionList vertices, int baseIndex, int count, Vector3Int fallbackNormal)
@@ -1246,16 +1310,7 @@ public static class ChunkMeshGeneratorThreaded
         string facing,
         MeshData mesh)
     {
-        int tiles = ATLAS_TILES;
-        float tileSize = 1f / tiles;
-
-        int col = textureID % tiles;
-        int row = textureID / tiles;
-
-        float uMin = col * tileSize;
-        float vMax = 1f - row * tileSize;
-        float vMin = vMax - tileSize;
-
+        
         int turnsToEast = GetHorizontalTurnsToEastReference(facing);
         Vector3Int localDir = RotateDirToEastReference(dir, turnsToEast);
         Vector3[] localQuad = new Vector3[quad.Length];
@@ -1340,12 +1395,12 @@ public static class ChunkMeshGeneratorThreaded
 
             mesh.uvs.Add(new Vector2(u * uScale, v * vScale));
         }
-        
-        Vector4 meta = new Vector4(uMin, vMin, tileSize, tileSize);
-        mesh.uvMeta.Add(meta);
-        mesh.uvMeta.Add(meta);
-        mesh.uvMeta.Add(meta);
-        mesh.uvMeta.Add(meta);
+
+        ushort tileIndex = PackAtlasTileIndex(textureID);
+        mesh.atlasTileIndexes.Add(tileIndex);
+        mesh.atlasTileIndexes.Add(tileIndex);
+        mesh.atlasTileIndexes.Add(tileIndex);
+        mesh.atlasTileIndexes.Add(tileIndex);
     }
     
     private static byte SampleBlock(
@@ -1462,16 +1517,6 @@ public static class ChunkMeshGeneratorThreaded
 
     private static void AddFaceUV(Vector3Int dir, int textureID, int width, int height, MeshData mesh)
     {
-        int tiles = ATLAS_TILES;
-        float tileSize = 1f / tiles;
-
-        int col = textureID % tiles;
-        int row = textureID / tiles;
-
-        float uMin = col * tileSize;
-        float vMax = 1f - row * tileSize; // top
-        float vMin = vMax - tileSize; // bottom
-
         float uScale = width;
         float vScale = height;
 
@@ -1486,11 +1531,11 @@ public static class ChunkMeshGeneratorThreaded
         mesh.uvs.Add(new Vector2(0f, vScale)); // vertex 2
         mesh.uvs.Add(new Vector2(uScale, vScale)); // vertex 3
 
-        Vector4 meta = new Vector4(uMin, vMin, tileSize, tileSize);
-        mesh.uvMeta.Add(meta);
-        mesh.uvMeta.Add(meta);
-        mesh.uvMeta.Add(meta);
-        mesh.uvMeta.Add(meta);
+        ushort tileIndex = PackAtlasTileIndex(textureID);
+        mesh.atlasTileIndexes.Add(tileIndex);
+        mesh.atlasTileIndexes.Add(tileIndex);
+        mesh.atlasTileIndexes.Add(tileIndex);
+        mesh.atlasTileIndexes.Add(tileIndex);
     }
     
     private static int GetHorizontalTurnsToEastReference(string facing)

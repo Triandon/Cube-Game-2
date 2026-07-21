@@ -25,8 +25,8 @@ Shader "Custom/VoxelAtlas_Repeating"
             struct appdata
             {
                 uint4 vertex : POSITION;
-                float2 uv     : TEXCOORD0; // UV0: block-space coords (0..width,0..height)
-                float4 uv1    : TEXCOORD1; // UV1: (uMin, vMin, tileSizeX, tileSizeY)
+                uint2 uv     : TEXCOORD0; // fixed-point block-space UV, scale 100
+                uint2 uv1    : TEXCOORD1; // x = atlas tile index
             };
 
             struct v2f
@@ -40,8 +40,15 @@ Shader "Custom/VoxelAtlas_Repeating"
             {
                 v2f o;
                 o.pos = UnityObjectToClipPos(float4((float3)v.vertex.xyz / 100.0, 1.0));
-                o.uv0 = v.uv;
-                o.meta = v.uv1;
+                o.uv0 = (float2)v.uv / 100.0;
+                float tileSize = 1.0 / _AtlasTiles;
+                float tileIndex = (float)v.uv1.x;
+                float tileCol = fmod(tileIndex, _AtlasTiles);
+                float tileRow = floor(tileIndex / _AtlasTiles);
+                float uMin = tileCol * tileSize;
+                float vMax = 1.0 - tileRow * tileSize;
+                float vMin = vMax - tileSize;
+                o.meta = float4(uMin, vMin, tileSize, tileSize);
                 return o;
             }
 

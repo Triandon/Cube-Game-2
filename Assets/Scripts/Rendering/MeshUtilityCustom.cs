@@ -10,8 +10,8 @@ public static class MeshUtilityCustom
         new VertexAttributeDescriptor(VertexAttribute.Position, VertexAttributeFormat.UInt16, 4),
         new VertexAttributeDescriptor(VertexAttribute.Normal, VertexAttributeFormat.SNorm8, 4),
         new VertexAttributeDescriptor(VertexAttribute.Color, VertexAttributeFormat.UNorm8, 4),
-        new VertexAttributeDescriptor(VertexAttribute.TexCoord0, VertexAttributeFormat.Float32, 2),
-        new VertexAttributeDescriptor(VertexAttribute.TexCoord1, VertexAttributeFormat.Float32, 4),
+        new VertexAttributeDescriptor(VertexAttribute.TexCoord0, VertexAttributeFormat.UInt16, 2),
+        new VertexAttributeDescriptor(VertexAttribute.TexCoord1, VertexAttributeFormat.UInt16, 2),
     };
 
     private static readonly Color32 DefaultVertexColor = new Color32(255, 255, 255, 255);
@@ -22,10 +22,11 @@ public static class MeshUtilityCustom
         public PackedVertexPosition position;
         public int normal;
         public Color32 color;
-        public Vector2 uv0;
-        public Vector4 uv1;
+        public PackedUv uv0;
+        public PackedAtlasTile uv1;
 
-        public ChunkVertex(PackedVertexPosition position, Vector3 normal, Vector2 uv0, Vector4 uv1)
+        public ChunkVertex(PackedVertexPosition position, Vector3 normal,
+            PackedUv uv0, PackedAtlasTile uv1)
         {
             this.position = position;
             this.normal = PackSNorm8Vector4(normal);
@@ -44,9 +45,11 @@ public static class MeshUtilityCustom
         for (int i = 0; i < vertexCount; i++)
         {
             Vector3 normal = i < meshData.normals.Count ? meshData.normals[i] : Vector3.up;
-            Vector2 uv0 = i < meshData.uvs.Count ? meshData.uvs[i] : Vector2.zero;
-            Vector4 uv1 = i < meshData.uvMeta.Count ? meshData.uvMeta[i] : Vector4.zero;
-            vertices[i] = new ChunkVertex(meshData.vertices.packedPositions[i], normal, uv0, uv1);
+            PackedUv uv0 = i < meshData.uvs.Count ? meshData.uvs.packedUvs[i] : default(PackedUv);
+            PackedAtlasTile tile = i < meshData.atlasTileIndexes.Count
+                ? new PackedAtlasTile(meshData.atlasTileIndexes[i])
+                : default(PackedAtlasTile);
+            vertices[i] = new ChunkVertex(meshData.vertices.packedPositions[i], normal, uv0, tile);
         }
 
         mesh.Clear();

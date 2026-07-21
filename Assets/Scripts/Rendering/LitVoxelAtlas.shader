@@ -134,8 +134,8 @@ Shader "Custom/MyLitShader"
     struct appdata
     {
         uint4 vertex : POSITION;
-        float2 uv : TEXCOORD0;       // Local tile UV
-        float4 uv1 : TEXCOORD1;      // (baseUV.xy, tileSize.xy)
+        uint2 uv : TEXCOORD0;       // fixed-point local tile UV, scale 100
+        uint2 uv1 : TEXCOORD1;      // x = atlas tile index
         float3 normal : NORMAL;
         float4 tangent : TANGENT;
     };
@@ -168,8 +168,15 @@ Shader "Custom/MyLitShader"
         o.tangentWS = nInputs.tangentWS;
         o.tangentSign = v.tangent.w;
 
-        o.uvLocal = v.uv;
-        o.atlasMeta = v.uv1;
+        o.uvLocal = (float2)v.uv / 100.0;
+        float tileSize = 1.0 / _AtlasTiles;
+        float tileIndex = (float)v.uv1.x;
+        float tileCol = fmod(tileIndex, _AtlasTiles);
+        float tileRow = floor(tileIndex / _AtlasTiles);
+        float uMin = tileCol * tileSize;
+        float vMax = 1.0 - tileRow * tileSize;
+        float vMin = vMax - tileSize;
+        o.atlasMeta = float4(uMin, vMin, tileSize, tileSize);
 
         return o;
     }
