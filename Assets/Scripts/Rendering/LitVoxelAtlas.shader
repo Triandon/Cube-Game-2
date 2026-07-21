@@ -105,6 +105,7 @@ Shader "Custom/MyLitShader"
 
     HLSLPROGRAM
 
+    #pragma target 4.5
     #pragma vertex vert
     #pragma fragment frag
 
@@ -127,10 +128,12 @@ Shader "Custom/MyLitShader"
     CBUFFER_START(UnityPerMaterial)
         float _AtlasTiles;
     CBUFFER_END
+    
+    static const float VERTEX_POSITION_SCALE = 100.0;
 
     struct appdata
     {
-        float4 vertex : POSITION;
+        uint4 vertex : POSITION;
         float2 uv : TEXCOORD0;       // Local tile UV
         float4 uv1 : TEXCOORD1;      // (baseUV.xy, tileSize.xy)
         float3 normal : NORMAL;
@@ -152,8 +155,11 @@ Shader "Custom/MyLitShader"
     {
         v2f o;
 
+        // Decode fixed-point ushort chunk-local position to object-space block units.
+        float3 positionOS = (float3)v.vertex.xyz / VERTEX_POSITION_SCALE;
+        
         // Position + normal transform from URP helpers
-        VertexPositionInputs posInputs = GetVertexPositionInputs(v.vertex.xyz);
+        VertexPositionInputs posInputs = GetVertexPositionInputs(positionOS);
         VertexNormalInputs nInputs = GetVertexNormalInputs(v.normal, v.tangent);
 
         o.posCS = posInputs.positionCS;
@@ -521,6 +527,7 @@ inputData.shadowMask = half4(1,1,1,1);
 
             // -------------------------------------
             // Shader Stages
+            #pragma target 4.5
             #pragma vertex vert
             #pragma fragment frag
 

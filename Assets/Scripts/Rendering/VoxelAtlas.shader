@@ -14,6 +14,7 @@ Shader "Custom/VoxelAtlas_Repeating"
         Pass
         {
             CGPROGRAM
+            #pragma  target 4.5
             #pragma vertex vert
             #pragma fragment frag
             #include "UnityCG.cginc"
@@ -23,7 +24,7 @@ Shader "Custom/VoxelAtlas_Repeating"
 
             struct appdata
             {
-                float4 vertex : POSITION;
+                uint4 vertex : POSITION;
                 float2 uv     : TEXCOORD0; // UV0: block-space coords (0..width,0..height)
                 float4 uv1    : TEXCOORD1; // UV1: (uMin, vMin, tileSizeX, tileSizeY)
             };
@@ -38,7 +39,7 @@ Shader "Custom/VoxelAtlas_Repeating"
             v2f vert(appdata v)
             {
                 v2f o;
-                o.pos = UnityObjectToClipPos(v.vertex);
+                o.pos = UnityObjectToClipPos(float4((float3)v.vertex.xyz / 100.0, 1.0));
                 o.uv0 = v.uv;
                 o.meta = v.uv1;
                 return o;

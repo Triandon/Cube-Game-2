@@ -7,7 +7,7 @@ public static class MeshUtilityCustom
     
     private static readonly VertexAttributeDescriptor[] ChunkVertexLayout =
     {
-        new VertexAttributeDescriptor(VertexAttribute.Position, VertexAttributeFormat.Float32, 3),
+        new VertexAttributeDescriptor(VertexAttribute.Position, VertexAttributeFormat.UInt16, 4),
         new VertexAttributeDescriptor(VertexAttribute.Normal, VertexAttributeFormat.SNorm8, 4),
         new VertexAttributeDescriptor(VertexAttribute.Color, VertexAttributeFormat.UNorm8, 4),
         new VertexAttributeDescriptor(VertexAttribute.TexCoord0, VertexAttributeFormat.Float32, 2),
@@ -19,13 +19,13 @@ public static class MeshUtilityCustom
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
     private struct ChunkVertex
     {
-        public Vector3 position;
+        public PackedVertexPosition position;
         public int normal;
         public Color32 color;
         public Vector2 uv0;
         public Vector4 uv1;
 
-        public ChunkVertex(Vector3 position, Vector3 normal, Vector2 uv0, Vector4 uv1)
+        public ChunkVertex(PackedVertexPosition position, Vector3 normal, Vector2 uv0, Vector4 uv1)
         {
             this.position = position;
             this.normal = PackSNorm8Vector4(normal);
@@ -46,7 +46,7 @@ public static class MeshUtilityCustom
             Vector3 normal = i < meshData.normals.Count ? meshData.normals[i] : Vector3.up;
             Vector2 uv0 = i < meshData.uvs.Count ? meshData.uvs[i] : Vector2.zero;
             Vector4 uv1 = i < meshData.uvMeta.Count ? meshData.uvMeta[i] : Vector4.zero;
-            vertices[i] = new ChunkVertex(meshData.vertices[i], normal, uv0, uv1);
+            vertices[i] = new ChunkVertex(meshData.vertices.packedPositions[i], normal, uv0, uv1);
         }
 
         mesh.Clear();
@@ -57,8 +57,31 @@ public static class MeshUtilityCustom
         mesh.SetIndexBufferData(meshData.triangles, 0, 0, indexCount, MeshUpdateFlags.DontRecalculateBounds);
         mesh.subMeshCount = 1;
         mesh.SetSubMesh(0, new SubMeshDescriptor(0, indexCount, MeshTopology.Triangles), MeshUpdateFlags.DontRecalculateBounds);
-        mesh.RecalculateBounds();
+        mesh.bounds = CalculateDecodedBounds(meshData);
     }
+    
+    private static Bounds CalculateDecodedBounds(MeshData meshData)
+    {
+        int vertexCount = meshData.vertices.Count;
+        if (vertexCount == 0)
+            return new Bounds(Vector3.zero, Vector3.zero);
+
+        Vector3 min = meshData.vertices[0];
+        Vector3 max = min;
+
+        for (int i = 1; i < vertexCount; i++)
+        {
+            Vector3 position = meshData.vertices[i];
+            min = Vector3.Min(min, position);
+            max = Vector3.Max(max, position);
+        }
+
+        Bounds bounds = new Bounds();
+        bounds.SetMinMax(min, max);
+        return bounds;
+    }
+
+
     
     private const int PackedNormalRight = 0x7F00007F;
     private const int PackedNormalLeft = 0x7F000081;

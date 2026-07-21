@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.InteropServices;
 using Core;
 using Core.Block;
 using NUnit.Framework;
@@ -10,12 +11,73 @@ using UnityEngine;
 
 public class MeshData
 {
-    public List<Vector3> vertices = new List<Vector3>();
+    public readonly VertexPositionList vertices = new VertexPositionList();
     public List<int> triangles = new List<int>();
     public List<Vector2> uvs = new List<Vector2>();
     public List<Vector4> uvMeta = new List<Vector4>();
     public List<Vector3> normals = new List<Vector3>();
 }
+
+public sealed class VertexPositionList
+{
+    public const float PositionScale = 100f;
+    private const float InversePositionScale = 1f / PositionScale;
+
+    public readonly List<PackedVertexPosition> packedPositions = new List<PackedVertexPosition>();
+    
+    public int Count => packedPositions.Count;
+    
+    public Vector3 this[int index] => packedPositions[index].ToVector3();
+
+    public void Add(Vector3 position)
+    {
+        packedPositions.Add(PackedVertexPosition.FromVector3(position));
+    }
+
+    public static ushort PackAxis(float value)
+    {
+        return (ushort)Mathf.Clamp(Mathf.RoundToInt(value * PositionScale), 0, ushort.MaxValue);
+    }
+
+    public static float UnpackAxis(ushort value)
+    {
+        return value * InversePositionScale;
+    }
+}
+
+[StructLayout(LayoutKind.Sequential, Pack = 1)]
+public struct PackedVertexPosition
+{
+    public ushort x;
+    public ushort y;
+    public ushort z;
+    public ushort w;
+
+    public PackedVertexPosition(ushort x, ushort y, ushort z)
+    {
+        this.x = x;
+        this.y = y;
+        this.z = z;
+        w = 0;
+    }
+
+    public static PackedVertexPosition FromVector3(Vector3 position)
+    {
+        return new PackedVertexPosition(
+            VertexPositionList.PackAxis(position.x),
+            VertexPositionList.PackAxis(position.y),
+            VertexPositionList.PackAxis(position.z));
+    }
+
+    public Vector3 ToVector3()
+    {
+        return new Vector3(
+            VertexPositionList.UnpackAxis(x),
+            VertexPositionList.UnpackAxis(y),
+            VertexPositionList.UnpackAxis(z));
+    }
+}
+
 
 public static class ChunkMeshGeneratorThreaded
 {
@@ -940,7 +1002,7 @@ public static class ChunkMeshGeneratorThreaded
             mesh.uvMeta.Add(meta);
     }
 
-    private static Vector3 ComputeFaceNormal(List<Vector3> vertices, int baseIndex, int count, Vector3Int fallbackNormal)
+    private static Vector3 ComputeFaceNormal(VertexPositionList vertices, int baseIndex, int count, Vector3Int fallbackNormal)
     {
         if (count < 3)
             return fallbackNormal;
