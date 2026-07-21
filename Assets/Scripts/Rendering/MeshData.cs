@@ -15,9 +15,6 @@ public class MeshData
     public List<Vector2> uvs = new List<Vector2>();
     public List<Vector4> uvMeta = new List<Vector4>();
     public List<Vector3> normals = new List<Vector3>();
-
-    public List<Vector3> colliderVertices = new List<Vector3>();
-    public List<int> colliderTriangles = new List<int>();
 }
 
 public static class ChunkMeshGeneratorThreaded
@@ -905,16 +902,11 @@ public static class ChunkMeshGeneratorThreaded
         if (indices.Length == 4)
         {
             AddFaceTriangles(mesh.triangles, baseIndex, 0, 1, 2, 3, faceNormal, false, mesh, baseIndex);
-            AddFaceTriangles(mesh.colliderTriangles, mesh.colliderVertices.Count, 0, 1, 2, 3, faceNormal, true, mesh, baseIndex);
         }
         else if (indices.Length == 3)
         {
             AddTriangle(mesh.triangles, baseIndex, 0, 1, 2, faceNormal, false, mesh, baseIndex);
-            AddTriangle(mesh.colliderTriangles, mesh.colliderVertices.Count, 0, 1, 2, faceNormal, true, mesh, baseIndex);
         }
-
-        for (int i = 0; i < indices.Length; i++)
-            mesh.colliderVertices.Add(mesh.vertices[baseIndex + i]);
 
         AddPrismFaceUV(indices.Length, atlasIndex, mesh);
     }
@@ -1182,19 +1174,6 @@ public static class ChunkMeshGeneratorThreaded
 
         bool stretchTexture = IsStretchy(blockId);
         AddStateDrivenFaceUV(dir, quad, atlasIndex, stretchTexture, GetFacing(state), mesh);
-
-        int colBase = mesh.colliderVertices.Count;
-        for (int i = 0; i < 4; i++)
-        {
-            mesh.colliderVertices.Add(mesh.vertices[baseIndex + i]);
-        }
-
-        mesh.colliderTriangles.Add(colBase + 0);
-        mesh.colliderTriangles.Add(colBase + 1);
-        mesh.colliderTriangles.Add(colBase + 2);
-        mesh.colliderTriangles.Add(colBase + 2);
-        mesh.colliderTriangles.Add(colBase + 1);
-        mesh.colliderTriangles.Add(colBase + 3);
     }
 
     private static void AddStateDrivenFaceUV(
@@ -1413,41 +1392,6 @@ public static class ChunkMeshGeneratorThreaded
 
         // UVs and UV meta
         AddFaceUV(dir, atlasIndex, width, height, mesh);
-
-        // Collider: add vertices then compute triangle areas and add non-degenerate triangles
-        int colBase = mesh.colliderVertices.Count;
-        mesh.colliderVertices.Add(mesh.vertices[baseIndex + 0]);
-        mesh.colliderVertices.Add(mesh.vertices[baseIndex + 1]);
-        mesh.colliderVertices.Add(mesh.vertices[baseIndex + 2]);
-        mesh.colliderVertices.Add(mesh.vertices[baseIndex + 3]);
-
-        int c0 = colBase + 0;
-        int c1 = colBase + 1;
-        int c2 = colBase + 2;
-        int c3 = colBase + 3;
-
-        const float areaEpsilon = 1e-6f;
-        Vector3 caA = mesh.colliderVertices[c2] - mesh.colliderVertices[c0];
-        Vector3 cbA = mesh.colliderVertices[c1] - mesh.colliderVertices[c0];
-        float areaA = Vector3.Cross(caA, cbA).sqrMagnitude * 0.25f;
-
-        if (areaA > areaEpsilon)
-        {
-            mesh.colliderTriangles.Add(c0);
-            mesh.colliderTriangles.Add(c1);
-            mesh.colliderTriangles.Add(c2);
-        }
-
-        Vector3 caB = mesh.colliderVertices[c3] - mesh.colliderVertices[c2];
-        Vector3 cbB = mesh.colliderVertices[c1] - mesh.colliderVertices[c2];
-        float areaB = Vector3.Cross(caB, cbB).sqrMagnitude * 0.25f;
-
-        if (areaB > areaEpsilon)
-        {
-            mesh.colliderTriangles.Add(c2);
-            mesh.colliderTriangles.Add(c1);
-            mesh.colliderTriangles.Add(c3);
-        }
     }
 
 
