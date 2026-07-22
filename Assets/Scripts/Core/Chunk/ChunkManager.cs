@@ -216,7 +216,13 @@ namespace Core
             // Apply the worker mesh data to the chunk's ChunkRendering (main thread only)
             var chunkRender = chunk.renderer;
             if (chunkRender != null)
+                //&& res.meshData != null
             {
+                //chunk.meshData = res.meshData;
+                //chunkRender.ApplyMeshData(res.meshData);
+                // REMOVE meshQue.Add
+                //todo Place to fix!!!
+                
                 meshQue.Add(chunk);
                 EnqueueNeighborRebuilds(chunk.coord);
             }
