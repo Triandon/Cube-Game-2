@@ -16,6 +16,10 @@ namespace Core
         public Dictionary<Vector3Int, InventoryHolder> blockEntities = new Dictionary<Vector3Int, InventoryHolder>();
         public HashSet<Vector3Int> specialMeshBlocks = new HashSet<Vector3Int>();
         
+        //Lightning data
+        public byte[,,] skyLight;
+        public byte[,,] blockLight;
+        
         public bool isDirty = false;
         public bool isColliderDirty = false;
         public int chunkNumber;
@@ -29,8 +33,10 @@ namespace Core
         {
             this.coord = coord;
             blocks = new byte[CHUNK_SIZE, CHUNK_SIZE, CHUNK_SIZE];
-
             states = new BlockStateContainer[CHUNK_SIZE, CHUNK_SIZE, CHUNK_SIZE];
+
+            skyLight = new byte[CHUNK_SIZE, CHUNK_SIZE, CHUNK_SIZE];
+            blockLight = new byte[CHUNK_SIZE, CHUNK_SIZE, CHUNK_SIZE];
         }
 
         
