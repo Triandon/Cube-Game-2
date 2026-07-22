@@ -107,7 +107,8 @@ public class ChunkRendering : MonoBehaviour
             (x,y,z) => chunk.GetStateAt(x,y,z),
             chunk.GetLodScale(),
             chunk.chunkManager.GetNeighborLODInfo(chunk.coord),
-            chunk.specialMeshBlocks
+            chunk.specialMeshBlocks, (x,y,z) => chunk.GetSkyLight(x, y, z),
+            (x, y, z) => chunk.GetBlockLight(x, y, z)
         );
 
         // Store it

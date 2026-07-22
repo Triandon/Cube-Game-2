@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 namespace Core
@@ -8,13 +9,20 @@ namespace Core
     
         [Header("World Size in chunks!")] 
         public int worldSize = 50;
-        public int worldSizeY = 3;
+        public int worldSizeY = 10;
+
+        [Header("Lighting SunLight")] [Range(0f, 1f)]
+        public float SunLight = 1f;
+        
+        private static readonly int SunLightShaderId = Shader.PropertyToID("_SunLight");
 
         private TickCaller tickCaller;
         
         private void Awake()
         {
             Instance = this;
+
+            ApplySunLight();
 
             tickCaller = GetComponent<TickCaller>();
             if (tickCaller == null)
@@ -31,7 +39,19 @@ namespace Core
         
         void Update()
         {
+            ApplySunLight();
             tickCaller?.Tick(Time.deltaTime);
+        }
+
+        private void OnValidate()
+        {
+            SunLight = Mathf.Clamp01(SunLight);
+            ApplySunLight();
+        }
+
+        private void ApplySunLight()
+        {
+            Shader.SetGlobalFloat(SunLightShaderId, Mathf.Clamp01(SunLight));
         }
 
         public TickCaller GetTickCaller()

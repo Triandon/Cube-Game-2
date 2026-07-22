@@ -10,6 +10,8 @@ public class ChunkGenResult
     public MeshData meshData;
     public List<Vector3Int> blockEntityLocals;
     public bool isAllAir;
+    public byte[,,] skyLight;
+    public byte[,,] blockLight;
     
     //Tick system
     public List<Vector3Int> instantTickLocals;
@@ -18,7 +20,8 @@ public class ChunkGenResult
 
     public ChunkGenResult(Vector3Int coord, byte[,,] blocks, BlockStateContainer[,,] states,MeshData meshData,
         List<Vector3Int> blockEntityLocals, bool isAllAir,List<Vector3Int> instantTickLocals = null,
-        List<Vector3Int> scheduledTickLocals = null, List<Vector3Int> randomTickLocals = null)
+        List<Vector3Int> scheduledTickLocals = null, List<Vector3Int> randomTickLocals = null,
+        byte[,,] skyLight = null, byte[,,] blockLight = null)
     {
         this.coord = coord;
         this.blocks = blocks;
@@ -29,5 +32,7 @@ public class ChunkGenResult
         this.instantTickLocals = instantTickLocals;
         this.scheduledTickLocals = scheduledTickLocals;
         this.randomTickLocals = randomTickLocals;
+        this.skyLight = skyLight;
+        this.blockLight = blockLight;
     }
 }

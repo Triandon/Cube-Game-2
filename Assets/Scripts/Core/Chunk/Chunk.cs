@@ -325,6 +325,35 @@ namespace Core
             return 1 << (int)lod;
         }
 
+        public byte GetSkyLight(int x, int y, int z)
+        {
+            if (x >= 0 && x < CHUNK_SIZE && y >= 0 && y < CHUNK_SIZE && z >= 0 && z < CHUNK_SIZE)
+                return skyLight != null ? skyLight[x, y, z] : VoxelLight.Max;
+
+            Vector3Int worldPos = coord * CHUNK_SIZE + new Vector3Int(x, y, z);
+            Chunk neighbor = chunkManager != null ? chunkManager.GetChunkFromWorldPos(worldPos) : null;
+            if (neighbor == null)
+                return VoxelLight.Max;
+
+            Vector3Int local = neighbor.WorldToLocal(worldPos);
+            return neighbor.skyLight != null ? neighbor.skyLight[local.x, local.y, local.z] : VoxelLight.Max;
+        }
+
+        public byte GetBlockLight(int x, int y, int z)
+        {
+            if (x >= 0 && x < CHUNK_SIZE && y >= 0 && y < CHUNK_SIZE && z >= 0 && z < CHUNK_SIZE)
+                return blockLight != null ? blockLight[x, y, z] : VoxelLight.Min;
+
+            Vector3Int worldPos = coord * CHUNK_SIZE + new Vector3Int(x, y, z);
+            Chunk neighbor = chunkManager != null ? chunkManager.GetChunkFromWorldPos(worldPos) : null;
+            if (neighbor == null)
+                return VoxelLight.Min;
+
+            Vector3Int local = neighbor.WorldToLocal(worldPos);
+            return neighbor.blockLight != null ? neighbor.blockLight[local.x, local.y, local.z] : VoxelLight.Min;
+        }
+
+
     }
     
 }

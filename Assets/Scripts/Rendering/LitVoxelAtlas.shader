@@ -129,6 +129,8 @@ Shader "Custom/MyLitShader"
         float _AtlasTiles;
     CBUFFER_END
     
+    float _SunLight;
+    
     static const float VERTEX_POSITION_SCALE = 100.0;
 
     struct appdata
@@ -136,6 +138,7 @@ Shader "Custom/MyLitShader"
         uint4 vertex : POSITION;
         uint2 uv : TEXCOORD0;       // fixed-point local tile UV, scale 100
         uint2 uv1 : TEXCOORD1;      // x = atlas tile index
+        half4 vertexColor : COLOR0;
         float3 normal : NORMAL;
         float4 tangent : TANGENT;
     };
@@ -149,6 +152,7 @@ Shader "Custom/MyLitShader"
         float tangentSign : TEXCOORD3;
         float2 uvLocal : TEXCOORD4;
         float4 atlasMeta : TEXCOORD5;
+        float light : TEXCOORD6;
     };
 
     v2f vert(appdata v)
@@ -177,7 +181,8 @@ Shader "Custom/MyLitShader"
         float vMax = 1.0 - tileRow * tileSize;
         float vMin = vMax - tileSize;
         o.atlasMeta = float4(uMin, vMin, tileSize, tileSize);
-
+        o.light = v.vertexColor.r;
+        
         return o;
     }
 
@@ -191,6 +196,7 @@ half4 frag(v2f i) : SV_Target
 
     // --- Sample BaseMap manually ---
     half4 albedo = _BaseMap.Sample(sampler_BaseMap, atlasUV) * _BaseColor;
+    albedo.rgb *= saturate(i.light) * saturate(_SunLight);
 
     // --- Input data ---
     InputData inputData;

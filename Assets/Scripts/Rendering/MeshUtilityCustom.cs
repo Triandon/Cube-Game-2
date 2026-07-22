@@ -50,6 +50,9 @@ public static class MeshUtilityCustom
                 ? new PackedAtlasTile(meshData.atlasTileIndexes[i])
                 : default(PackedAtlasTile);
             vertices[i] = new ChunkVertex(meshData.vertices.packedPositions[i], normal, uv0, tile);
+            
+            if (i < meshData.colors.Count)
+                vertices[i].color = meshData.colors[i];
         }
 
         mesh.Clear();

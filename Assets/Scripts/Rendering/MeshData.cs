@@ -16,6 +16,7 @@ public class MeshData
     public readonly PackedUvList uvs = new PackedUvList();
     public List<ushort> atlasTileIndexes = new List<ushort>();
     public readonly PackedNormalList normals = new PackedNormalList();
+    public List<Color32> colors = new List<Color32>();
 }
 
 public sealed class VertexPositionList
@@ -203,6 +204,7 @@ public static class ChunkMeshGeneratorThreaded
     {
         public bool occluded;
         public int atlasIndex;
+        public byte light;
     }
     
     public struct NeighborLODInfo
@@ -214,7 +216,8 @@ public static class ChunkMeshGeneratorThreaded
     
     public static MeshData GenerateMeshData(Func<int,int,int,byte> getBlock,
         Func<int, int, int, BlockStateContainer> getState, int lodScale, NeighborLODInfo neighbors,
-        IReadOnlyCollection<Vector3Int> specialMeshBlocks = null)
+        IReadOnlyCollection<Vector3Int> specialMeshBlocks = null,
+        Func<int, int, int, byte> getSkyLight = null, Func<int, int, int, byte> getBlockLight = null)
     {
         var mesh = new MeshData();
         bool hasSpecialMeshBlocks = lodScale == 1 && specialMeshBlocks != null && specialMeshBlocks.Count > 0;
@@ -234,11 +237,11 @@ public static class ChunkMeshGeneratorThreaded
         {
             if (lodScale == 1)
             {
-                Direction(getBlock, getState, dir, mesh, assumeOpaqueCubeOnly);
+                Direction(getBlock, getState, getSkyLight, getBlockLight, dir, mesh, assumeOpaqueCubeOnly);
             }
             else
             {
-                GreedyDirection(getBlock, getState, dir, mesh,mask, lodScale, neighbors, assumeOpaqueCubeOnly);
+                GreedyDirection(getBlock, getState, getSkyLight, getBlockLight, dir, mesh,mask, lodScale, neighbors, assumeOpaqueCubeOnly);
             }
         }
 
@@ -252,6 +255,7 @@ public static class ChunkMeshGeneratorThreaded
     // LOD0 keeps full block-face detail: visible cube faces are emitted one block at a time
     // instead of being combined by the greedy merger used for higher LODs.
     private static void Direction(Func<int,int,int,byte> getBlock, Func<int, int, int, BlockStateContainer> getState,
+        Func<int, int, int, byte> getSkyLight, Func<int, int, int, byte> getBlockLight,
         Vector3Int dir, MeshData mesh, bool assumeOpaqueCubeOnly)
     {
         for (int w = 0; w < CHUNK_SIZE; w++)
@@ -316,7 +320,8 @@ public static class ChunkMeshGeneratorThreaded
                     int atlasIdx = GetAtlasIndex(currentBlock, currentState, dir);
                     if (atlasIdx >= 0)
                     {
-                        AddQuadFromMask(u, v, 1, 1, w, dir, atlasIdx, mesh, 1);
+                        byte light = SampleFaceLight(getSkyLight, getBlockLight, x + dir.x, y + dir.y, z + dir.z, x, y, z);
+                        AddQuadFromMask(u, v, 1, 1, w, dir, atlasIdx, mesh, 1, light);
                     }
                 }
             }
@@ -325,7 +330,8 @@ public static class ChunkMeshGeneratorThreaded
 
     
     // Greedy direction implementation adapted to be fully data-only and match original behavior
-    private static void GreedyDirection(Func<int,int,int,byte> getBlock, Func<int, int, int, BlockStateContainer> getState, 
+    private static void GreedyDirection(Func<int,int,int,byte> getBlock, Func<int, int, int, BlockStateContainer> getState,
+        Func<int, int, int, byte> getSkyLight, Func<int, int, int, byte> getBlockLight, 
         Vector3Int dir, MeshData mesh,MaskCell[,] mask, int lodScale, NeighborLODInfo neighbors, bool assumeOpaqueCubeOnly)
     {
         int neighborScale =
@@ -364,6 +370,7 @@ public static class ChunkMeshGeneratorThreaded
                     
                     mask[mu, mv].occluded = false;
                     mask[mu, mv].atlasIndex = -1;
+                    mask[mu, mv].light = 0;
 
                     int x = 0, y = 0, z = 0;
                     if (dir.x != 0)
@@ -433,6 +440,7 @@ public static class ChunkMeshGeneratorThreaded
                         {
                             mask[mu, mv].occluded = true;
                             mask[mu, mv].atlasIndex = atlasIdx;
+                            mask[mu, mv].light = SampleFaceLight(getSkyLight, getBlockLight, x + dir.x * lodScale, y + dir.y * lodScale, z + dir.z * lodScale, x, y, z);
                         }
                         else
                         {
@@ -455,11 +463,13 @@ public static class ChunkMeshGeneratorThreaded
                     }
 
                     int atlasIndex = mask[u, v].atlasIndex;
+                    byte light = mask[u, v].light;
 
                     // extend width (v direction)
                     int width = 1;
                     while (v + width < mSize && mask[u, v + width].occluded &&
-                           mask[u, v + width].atlasIndex == atlasIndex)
+                           mask[u, v + width].atlasIndex == atlasIndex &&
+                           mask[u, v + width].light == light)
                         width++;
 
                     // extend height (u direction)
@@ -469,7 +479,8 @@ public static class ChunkMeshGeneratorThreaded
                     {
                         for (int k = 0; k < width; k++)
                         {
-                            if (!mask[u + height, v + k].occluded || mask[u + height, v + k].atlasIndex != atlasIndex)
+                            if (!mask[u + height, v + k].occluded || mask[u + height, v + k].atlasIndex != atlasIndex ||
+                                mask[u + height, v + k].light != light)
                             {
                                 done = true;
                                 break;
@@ -485,7 +496,7 @@ public static class ChunkMeshGeneratorThreaded
                             mask[u + du, v + dv].occluded = false;
 
                     // Add the merged quad: compute its 4 corner positions in chunk-local space
-                    AddQuadFromMask(u, v, width, height, w, dir, atlasIndex, mesh, lodScale);
+                    AddQuadFromMask(u, v, width, height, w, dir, atlasIndex, mesh, lodScale, light);
                     
                     // advance v cursor
                     v += width;
@@ -1085,6 +1096,7 @@ public static class ChunkMeshGeneratorThreaded
         }
 
         AddPrismFaceUV(indices.Length, atlasIndex, mesh);
+        AddVertexLight(mesh, indices.Length, VoxelLight.Max);
     }
 
     private static ushort PackAtlasTileIndex(int textureID)
@@ -1470,7 +1482,8 @@ public static class ChunkMeshGeneratorThreaded
     
 
     
-    private static void AddQuadFromMask(int u, int v, int width, int height, int w, Vector3Int dir, int atlasIndex, MeshData mesh, int lodScale)
+    private static void AddQuadFromMask(int u, int v, int width, int height, int w, Vector3Int dir, int atlasIndex, MeshData mesh, int lodScale,
+        byte light)
     {
         if (width <= 0 || height <= 0) return;
 
@@ -1556,6 +1569,7 @@ public static class ChunkMeshGeneratorThreaded
 
         // UVs and UV meta
         AddFaceUV(dir, atlasIndex, width, height, mesh);
+        AddVertexLight(mesh, 4, light);
     }
 
 
@@ -1631,6 +1645,31 @@ public static class ChunkMeshGeneratorThreaded
                 return dir;
         }
     }
+    
+    private static byte SampleFaceLight(Func<int, int, int, byte> getSkyLight, Func<int, int, int, byte> getBlockLight,
+        int lightX, int lightY, int lightZ, int fallbackX, int fallbackY, int fallbackZ)
+    {
+        byte sky = getSkyLight != null ? getSkyLight(lightX, lightY, lightZ) : VoxelLight.Max;
+        byte block = getBlockLight != null ? getBlockLight(lightX, lightY, lightZ) : VoxelLight.Min;
+
+        if (sky == VoxelLight.Min && block == VoxelLight.Min)
+        {
+            sky = getSkyLight != null ? getSkyLight(fallbackX, fallbackY, fallbackZ) : VoxelLight.Max;
+            block = getBlockLight != null ? getBlockLight(fallbackX, fallbackY, fallbackZ) : VoxelLight.Min;
+        }
+
+        return VoxelLight.GetHighest(sky, block);
+    }
+
+    private static void AddVertexLight(MeshData mesh, int vertexCount, byte light)
+    {
+        byte value = (byte)Mathf.Clamp(Mathf.RoundToInt(Mathf.Clamp(light, VoxelLight.Min, VoxelLight.Max) / 15f * 255f), 0, 255);
+        Color32 color = new Color32(value, value, value, 255);
+
+        for (int i = 0; i < vertexCount; i++)
+            mesh.colors.Add(color);
+    }
+    
 
 }
 

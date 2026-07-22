@@ -181,7 +181,11 @@ namespace Core
             chunk.blocks = res.blocks ?? new byte[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
             chunk.states = res.states ?? new BlockStateContainer[Chunk.CHUNK_SIZE,
                 Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
+            chunk.skyLight = res.skyLight ?? new byte[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
+            chunk.blockLight = res.blockLight ?? new byte[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
+            
             chunk.RebuildSpecialMeshBlocks();
+            RecalculateSkyLight(chunk);
 
             //Rebuilds block entities  AFTER chunk is ready, the entity is a GO
             if (res.blockEntityLocals != null && res.blockEntityLocals.Count > 0)
@@ -211,10 +215,9 @@ namespace Core
 
             // Apply the worker mesh data to the chunk's ChunkRendering (main thread only)
             var chunkRender = chunk.renderer;
-            if (chunkRender != null && res.meshData != null)
+            if (chunkRender != null)
             {
-                chunk.meshData = res.meshData;
-                chunkRender.ApplyMeshData(res.meshData);
+                meshQue.Add(chunk);
                 EnqueueNeighborRebuilds(chunk.coord);
             }
             else
@@ -349,6 +352,10 @@ namespace Core
 
                 // Reset old data
                 chunk.blocks = new byte[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
+                chunk.states = new BlockStateContainer[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
+                chunk.skyLight = new byte[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
+                chunk.blockLight = new byte[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
+
                 chunk.isDirty = false;
 
                 go.SetActive(false);
@@ -417,26 +424,33 @@ namespace Core
                 neighborStates,
                 specialMeshBlocks,
                 allowDiskLoad: existingChunk == null,
-                chunkSavePath: existingChunk == null ? WorldSaveSystem.GetChunkPath(coord) : null);
+                chunkSavePath: existingChunk == null ? WorldSaveSystem.GetChunkPath(coord) : null,
+                incomingSkyLightFromAbove: BuildIncomingSkyLightFromAbove(coord));
             
             pendingRequests.Add(coord);
             threadedWorker.EnqueueRequest(req);
         }
         
-        private static HashSet<Vector3Int> BuildSpecialMeshBlocksSnapshot(
-            Vector3Int coord,
-            byte[,,] blocks,
-            BlockStateContainer[,,] states)
+        private byte[,] BuildIncomingSkyLightFromAbove(Vector3Int coord)
         {
-            Chunk tempChunk = new Chunk(coord)
-            {
-                blocks = blocks,
-                states = states
-            };
-            tempChunk.RebuildSpecialMeshBlocks();
-            return tempChunk.GetSpecialMeshBlocksSnapshot();
-        }
+            int S = Chunk.CHUNK_SIZE;
+            byte[,] incoming = new byte[S, S];
 
+            if (chunks.TryGetValue(coord + Vector3Int.up, out Chunk above) && above?.skyLight != null)
+            {
+                for (int x = 0; x < S; x++)
+                for (int z = 0; z < S; z++)
+                    incoming[x, z] = above.skyLight[x, 0, z];
+            }
+            else
+            {
+                for (int x = 0; x < S; x++)
+                for (int z = 0; z < S; z++)
+                    incoming[x, z] = VoxelLight.Max;
+            }
+
+            return incoming;
+        }
 
         private void RemoveChunk(Chunk chunk, Vector3Int coord)
         {
@@ -452,6 +466,8 @@ namespace Core
             // Reset chunk state before returning to pool
             chunk.blocks = new byte[C, C, C];
             chunk.states = new BlockStateContainer[C, C, C];
+            chunk.skyLight = new byte[C, C, C];
+            chunk.blockLight = new byte[C, C, C];
             chunk.specialMeshBlocks.Clear();
             chunk.chunkNumber = -1;
             
@@ -658,6 +674,7 @@ namespace Core
             
             // Sets block at the local chunk
             chunk.SetBlockLocal(local, id, state);
+            RecalculateSkyLightColumn(worldPos.x, worldPos.z);
             tickCaller?.OnBlockChanged(worldPos, oldId, id);
             
             // Enqueue neighbors if block is on border
@@ -1020,6 +1037,68 @@ namespace Core
 
             return (blockDict, stateDict);
         }
+        
+        private void RecalculateSkyLight(Chunk chunk)
+        {
+            if (chunk == null || chunk.blocks == null)
+                return;
+
+            chunk.skyLight ??= new byte[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
+            chunk.blockLight ??= new byte[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
+
+            for (int x = 0; x < Chunk.CHUNK_SIZE; x++)
+            for (int z = 0; z < Chunk.CHUNK_SIZE; z++)
+                RecalculateSkyLightColumn(chunk.coord.x * Chunk.CHUNK_SIZE + x, chunk.coord.z * Chunk.CHUNK_SIZE + z);
+        }
+
+        private void RecalculateSkyLightColumn(int worldX, int worldZ)
+        {
+            int chunkX = Mathf.FloorToInt((float)worldX / Chunk.CHUNK_SIZE);
+            int chunkZ = Mathf.FloorToInt((float)worldZ / Chunk.CHUNK_SIZE);
+            int localX = worldX - chunkX * Chunk.CHUNK_SIZE;
+            int localZ = worldZ - chunkZ * Chunk.CHUNK_SIZE;
+
+            List<Chunk> columnChunks = new List<Chunk>();
+            foreach (Chunk chunk in chunks.Values)
+            {
+                if (chunk == null || chunk.blocks == null)
+                    continue;
+
+                if (chunk.coord.x == chunkX && chunk.coord.z == chunkZ)
+                    columnChunks.Add(chunk);
+            }
+
+            if (columnChunks.Count == 0)
+                return;
+
+            columnChunks.Sort((a, b) => b.coord.y.CompareTo(a.coord.y));
+
+            byte currentSkyLight = VoxelLight.Max;
+            HashSet<Chunk> touchedChunks = new HashSet<Chunk>();
+
+            foreach (Chunk columnChunk in columnChunks)
+            {
+                columnChunk.skyLight ??= new byte[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
+
+                for (int localY = Chunk.CHUNK_SIZE - 1; localY >= 0; localY--)
+                {
+                    byte blockId = columnChunk.blocks[localX, localY, localZ];
+                    byte newLight = VoxelLight.BlocksSkyLight(blockId) ? VoxelLight.Min : currentSkyLight;
+
+                    if (columnChunk.skyLight[localX, localY, localZ] != newLight)
+                    {
+                        columnChunk.skyLight[localX, localY, localZ] = newLight;
+                        touchedChunks.Add(columnChunk);
+                    }
+
+                    if (VoxelLight.BlocksSkyLight(blockId))
+                        currentSkyLight = VoxelLight.Min;
+                }
+            }
+
+            foreach (Chunk touched in touchedChunks)
+                meshQue.Add(touched);
+        }
 
         private bool IsChunkBusy(Vector3Int coord, Chunk chunk)
         {
@@ -1039,6 +1118,7 @@ namespace Core
             if (chunk == null || chunk.renderer == null)
                 return;
             
+            RecalculateSkyLight(chunk);
             chunk.renderer.Rebuild();
             chunk.isColliderDirty = false;
         }

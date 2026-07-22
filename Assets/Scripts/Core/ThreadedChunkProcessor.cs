@@ -53,9 +53,14 @@ public static class ThreadedChunkProcessor
         bool isAllAir = AnalyzeBlocks(center, out List<Vector3Int> blockEntities,
             out List<Vector3Int> instantTickLocals, out List<Vector3Int> scheduledTickLocals,
             out List<Vector3Int> randomTickLocals);
+
+        byte[,,] skyLight = BuildSkyLight(center, req.incomingSkyLightFromAbove);
+        byte[,,] blockLight = new byte[S, S, S];
+        
         if (isAllAir)
             return new ChunkGenResult(coord, center, req.states, new MeshData(), null,
-                true, instantTickLocals, scheduledTickLocals, randomTickLocals);
+                true, instantTickLocals, scheduledTickLocals, randomTickLocals,
+                skyLight, blockLight);
 
         // ------------------------------------
         // 3. THREAD-SAFE BLOCK QUERY
@@ -90,6 +95,23 @@ public static class ThreadedChunkProcessor
             
             return states[px, py, pz];
         };
+        
+        Func<int, int, int, byte> getSkyLight = (x, y, z) =>
+        {
+            if ((uint)x >= (uint)S || (uint)y >= (uint)S || (uint)z >= (uint)S)
+                return VoxelLight.Max;
+
+            return skyLight[x, y, z];
+        };
+
+        Func<int, int, int, byte> getBlockLight = (x, y, z) =>
+        {
+            if ((uint)x >= (uint)S || (uint)y >= (uint)S || (uint)z >= (uint)S)
+                return VoxelLight.Min;
+
+            return blockLight[x, y, z];
+        };
+        
 
 
         // ------------------------------------
@@ -98,7 +120,8 @@ public static class ThreadedChunkProcessor
         MeshData meshData;
         try
         {
-            meshData = ChunkMeshGeneratorThreaded.GenerateMeshData(getBlock,getState,req.lodScale,req.neighborLods, req.specialMeshBlocks);
+            meshData = ChunkMeshGeneratorThreaded.GenerateMeshData(getBlock,getState,req.lodScale,req.neighborLods, req.specialMeshBlocks,
+                getSkyLight, getBlockLight);
         }
         catch (Exception e)
         {
@@ -110,7 +133,8 @@ public static class ThreadedChunkProcessor
         // 5. RETURN RESULT
         // ------------------------------------
         return new ChunkGenResult(coord, center, req.states ,meshData,blockEntities,
-            false,instantTickLocals, scheduledTickLocals, randomTickLocals);
+            false,instantTickLocals, scheduledTickLocals, randomTickLocals,
+            skyLight, blockLight);
     }
 
     private static byte[] BuildPaddedFromCenter(byte[,,] center, Vector3Int coord,
@@ -446,5 +470,31 @@ public static class ThreadedChunkProcessor
 
         return isAllAir;
     }
+    
+    private static byte[,,] BuildSkyLight(byte[,,] blocks, byte[,] incomingSkyLightFromAbove)
+    {
+        int S = Chunk.CHUNK_SIZE;
+        byte[,,] skyLight = new byte[S, S, S];
+
+        for (int x = 0; x < S; x++)
+        for (int z = 0; z < S; z++)
+        {
+            byte currentSkyLight = incomingSkyLightFromAbove != null
+                ? incomingSkyLightFromAbove[x, z]
+                : VoxelLight.Max;
+
+            for (int y = S - 1; y >= 0; y--)
+            {
+                byte blockId = blocks[x, y, z];
+                skyLight[x, y, z] = VoxelLight.BlocksSkyLight(blockId) ? VoxelLight.Min : currentSkyLight;
+
+                if (VoxelLight.BlocksSkyLight(blockId))
+                    currentSkyLight = VoxelLight.Min;
+            }
+        }
+
+        return skyLight;
+    }
+
     
 }
