@@ -15,7 +15,7 @@ public class MeshData
     public List<int> triangles = new List<int>();
     public readonly PackedUvList uvs = new PackedUvList();
     public List<ushort> atlasTileIndexes = new List<ushort>();
-    public List<Vector3> normals = new List<Vector3>();
+    public readonly PackedNormalList normals = new PackedNormalList();
 }
 
 public sealed class VertexPositionList
@@ -145,6 +145,53 @@ public struct PackedAtlasTile
     }
 }
 
+public sealed class PackedNormalList
+{
+    public readonly List<int> packedNormals = new List<int>();
+
+    public int Count => packedNormals.Count;
+
+    public int this[int index] => packedNormals[index];
+
+    public void Add(Vector3 normal)
+    {
+        packedNormals.Add(PackedNormal.Pack(normal));
+    }
+}
+
+public static class PackedNormal
+{
+    public const int Up = 0x7F007F00;
+
+    private const int Right = 0x7F00007F;
+    private const int Left = 0x7F000081;
+    private const int Down = 0x7F008100;
+    private const int Forward = 0x7F7F0000;
+    private const int Back = 0x7F810000;
+
+    public static int Pack(Vector3 value)
+    {
+        // Fast path for the six normals emitted by regular voxel faces.
+        if (value == Vector3.right) return Right;
+        if (value == Vector3.left) return Left;
+        if (value == Vector3.up) return Up;
+        if (value == Vector3.down) return Down;
+        if (value == Vector3.forward) return Forward;
+        if (value == Vector3.back) return Back;
+
+        byte x = unchecked((byte)PackSNorm8(value.x));
+        byte y = unchecked((byte)PackSNorm8(value.y));
+        byte z = unchecked((byte)PackSNorm8(value.z));
+        byte w = unchecked((byte)127);
+
+        return x | (y << 8) | (z << 16) | (w << 24);
+    }
+
+    private static sbyte PackSNorm8(float value)
+    {
+        return (sbyte)Mathf.RoundToInt(Mathf.Clamp(value, -1f, 1f) * 127f);
+    }
+}
 
 public static class ChunkMeshGeneratorThreaded
 {

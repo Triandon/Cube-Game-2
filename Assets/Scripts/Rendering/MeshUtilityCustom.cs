@@ -25,11 +25,11 @@ public static class MeshUtilityCustom
         public PackedUv uv0;
         public PackedAtlasTile uv1;
 
-        public ChunkVertex(PackedVertexPosition position, Vector3 normal,
+        public ChunkVertex(PackedVertexPosition position, int normal,
             PackedUv uv0, PackedAtlasTile uv1)
         {
             this.position = position;
-            this.normal = PackSNorm8Vector4(normal);
+            this.normal = normal;
             color = DefaultVertexColor;
             this.uv0 = uv0;
             this.uv1 = uv1;
@@ -44,7 +44,7 @@ public static class MeshUtilityCustom
 
         for (int i = 0; i < vertexCount; i++)
         {
-            Vector3 normal = i < meshData.normals.Count ? meshData.normals[i] : Vector3.up;
+            int normal = i < meshData.normals.Count ? meshData.normals[i] : PackedNormal.Up;
             PackedUv uv0 = i < meshData.uvs.Count ? meshData.uvs.packedUvs[i] : default(PackedUv);
             PackedAtlasTile tile = i < meshData.atlasTileIndexes.Count
                 ? new PackedAtlasTile(meshData.atlasTileIndexes[i])
@@ -82,37 +82,5 @@ public static class MeshUtilityCustom
         Bounds bounds = new Bounds();
         bounds.SetMinMax(min, max);
         return bounds;
-    }
-
-
-    
-    private const int PackedNormalRight = 0x7F00007F;
-    private const int PackedNormalLeft = 0x7F000081;
-    private const int PackedNormalUp = 0x7F007F00;
-    private const int PackedNormalDown = 0x7F008100;
-    private const int PackedNormalForward = 0x7F7F0000;
-    private const int PackedNormalBack = 0x7F810000;
-
-    private static int PackSNorm8Vector4(Vector3 value)
-    {
-        // Fast path for normal voxel face directions.
-        if (value == Vector3.right) return PackedNormalRight;
-        if (value == Vector3.left) return PackedNormalLeft;
-        if (value == Vector3.up) return PackedNormalUp;
-        if (value == Vector3.down) return PackedNormalDown;
-        if (value == Vector3.forward) return PackedNormalForward;
-        if (value == Vector3.back) return PackedNormalBack;
-
-        byte x = unchecked((byte)PackSNorm8(value.x));
-        byte y = unchecked((byte)PackSNorm8(value.y));
-        byte z = unchecked((byte)PackSNorm8(value.z));
-        byte w = unchecked((byte)127);
-
-        return x | (y << 8) | (z << 16) | (w << 24);
-    }
-
-    private static sbyte PackSNorm8(float value)
-    {
-        return (sbyte)Mathf.RoundToInt(Mathf.Clamp(value, -1f, 1f) * 127f);
     }
 }
