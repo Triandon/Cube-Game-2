@@ -46,7 +46,10 @@ namespace Core
         
         private Settings settings;
         private int lodDistance;
-        
+        private LightPropagator lightPropagator;
+        private ChunkLightWorld lightWorld;
+        private bool lightingRebuildPending;
+        private bool lightingRebuildUrgent;
         
         //If a player moves (so the chunks also moves), then if the player increase render distance new chunks
         //gets generated and there forms a line where moved chunks arent getting re rendered :(
@@ -73,6 +76,8 @@ namespace Core
             tickCaller = World.Instance != null ? World.Instance.GetTickCaller() : null;
             
             BlockRegistry.BuildThreadLookup();
+            lightWorld = new ChunkLightWorld(this);
+            lightPropagator = new LightPropagator(lightWorld);
 
             // start worker threads (use processorCount -1 or 1 minimum)
             threadedWorker = new ThreadedChunkWorker(Math.Max(1, SystemInfo.processorCount - 1));
@@ -90,6 +95,7 @@ namespace Core
 
             // Pull worker results onto the main thread immediately
             ProcessWorkerResults();
+            FlushLightingRebuild();
             
             if (HasMovedChunkDistance())
             {
@@ -185,7 +191,7 @@ namespace Core
             chunk.blockLight = res.blockLight ?? new byte[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
             
             chunk.RebuildSpecialMeshBlocks();
-            RecalculateSkyLight(chunk);
+            lightingRebuildPending = true;
 
             //Rebuilds block entities  AFTER chunk is ready, the entity is a GO
             if (res.blockEntityLocals != null && res.blockEntityLocals.Count > 0)
@@ -562,6 +568,11 @@ namespace Core
                 chunks.Remove(key.coord);
                 chunkCount--;
             }
+
+            if (chunksToRemove.Count > 0)
+            {
+                lightingRebuildPending = true;
+            }
         }
 
         public Chunk GetChunk(Vector3Int coord)
@@ -680,7 +691,9 @@ namespace Core
             
             // Sets block at the local chunk
             chunk.SetBlockLocal(local, id, state);
-            RecalculateSkyLightColumn(worldPos.x, worldPos.z);
+            lightingRebuildPending = true;
+            lightingRebuildUrgent = true;
+            FlushLightingRebuild();
             tickCaller?.OnBlockChanged(worldPos, oldId, id);
             
             // Enqueue neighbors if block is on border
@@ -1044,67 +1057,221 @@ namespace Core
             return (blockDict, stateDict);
         }
         
-        private void RecalculateSkyLight(Chunk chunk)
+        public void AddBlockLight(Vector3Int worldPos, byte level = VoxelLight.Max)
         {
-            if (chunk == null || chunk.blocks == null)
-                return;
-
-            chunk.skyLight ??= new byte[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
-            chunk.blockLight ??= new byte[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
-
-            for (int x = 0; x < Chunk.CHUNK_SIZE; x++)
-            for (int z = 0; z < Chunk.CHUNK_SIZE; z++)
-                RecalculateSkyLightColumn(chunk.coord.x * Chunk.CHUNK_SIZE + x, chunk.coord.z * Chunk.CHUNK_SIZE + z);
+            EnsureLightPropagator();
+            lightPropagator.AddBlockLight(worldPos, level);
+            EnqueueChangedLightMeshes();
         }
 
-        private void RecalculateSkyLightColumn(int worldX, int worldZ)
+        public void RemoveBlockLight(Vector3Int worldPos)
         {
-            int chunkX = Mathf.FloorToInt((float)worldX / Chunk.CHUNK_SIZE);
-            int chunkZ = Mathf.FloorToInt((float)worldZ / Chunk.CHUNK_SIZE);
-            int localX = worldX - chunkX * Chunk.CHUNK_SIZE;
-            int localZ = worldZ - chunkZ * Chunk.CHUNK_SIZE;
+            EnsureLightPropagator();
+            lightPropagator.RemoveBlockLight(worldPos);
+            EnqueueChangedLightMeshes();
+        }
 
-            List<Chunk> columnChunks = new List<Chunk>();
-            foreach (Chunk chunk in chunks.Values)
-            {
-                if (chunk == null || chunk.blocks == null)
-                    continue;
+        private void RebuildLoadedSkyLight()
+        {
+            EnsureLightPropagator();
+            lightPropagator.RebuildSkyLight();
+            EnqueueChangedLightMeshes();
+        }
 
-                if (chunk.coord.x == chunkX && chunk.coord.z == chunkZ)
-                    columnChunks.Add(chunk);
-            }
+        private void FlushLightingRebuild()
+        {
+            if (!lightingRebuildPending)
+                return;
+            
+            // Chunk streaming can deliver many results over consecutive frames.
+            // Coalesce them into one rebuild after the current generation burst.
+            if (!lightingRebuildUrgent && (pendingRequests.Count > 0 || generationQue.Count > 0))
+                return;
+            
+            lightingRebuildPending = false;
+            lightingRebuildUrgent = false;
+            EnsureLightPropagator();
+            lightWorld.BeginSkyRebuild();
+            lightPropagator.RebuildSkyLight();
+            lightWorld.EndSkyRebuild();
 
-            if (columnChunks.Count == 0)
+            // With no block-light sources there is nothing to propagate. Avoid a
+            // second complete traversal during normal chunk streaming.
+            if (lightPropagator.HasBlockLightSources)
+                lightPropagator.RebuildBlockLight();
+
+            EnqueueChangedLightMeshes();
+        }
+
+        private void EnsureLightPropagator()
+        {
+            if (lightPropagator != null)
                 return;
 
-            columnChunks.Sort((a, b) => b.coord.y.CompareTo(a.coord.y));
-
-            byte currentSkyLight = VoxelLight.Max;
-            HashSet<Chunk> touchedChunks = new HashSet<Chunk>();
-
-            foreach (Chunk columnChunk in columnChunks)
+            lightWorld = new ChunkLightWorld(this);
+            lightPropagator = new LightPropagator(lightWorld);
+        }
+        
+        private void EnqueueChangedLightMeshes()
+        {
+            foreach (Chunk changed in lightWorld.DrainTouchedChunks())
             {
-                columnChunk.skyLight ??= new byte[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
-
-                for (int localY = Chunk.CHUNK_SIZE - 1; localY >= 0; localY--)
+                if (changed?.renderer == null)
+                    continue;
+                
+                meshQue.Add(changed);
+                foreach (Vector3Int direction in dirs)
                 {
-                    byte blockId = columnChunk.blocks[localX, localY, localZ];
-                    byte newLight = VoxelLight.BlocksSkyLight(blockId) ? VoxelLight.Min : currentSkyLight;
+                    if (chunks.TryGetValue(changed.coord + direction, out Chunk neighbor) && neighbor?.renderer != null)
+                        meshQue.Add(neighbor);
+                }
+            }
+        }
 
-                    if (columnChunk.skyLight[localX, localY, localZ] != newLight)
-                    {
-                        columnChunk.skyLight[localX, localY, localZ] = newLight;
-                        touchedChunks.Add(columnChunk);
-                    }
 
-                    if (VoxelLight.BlocksSkyLight(blockId))
-                        currentSkyLight = VoxelLight.Min;
+        private sealed class ChunkLightWorld : LightPropagator.ILightWorld
+        {
+            private readonly ChunkManager manager;
+            private readonly HashSet<Chunk> touchedChunks = new HashSet<Chunk>();
+            private Dictionary<Chunk, byte[,,]> stagedSkyLight;
+
+            public ChunkLightWorld(ChunkManager manager)
+            {
+                this.manager = manager;
+            }
+
+            public void BeginSkyRebuild()
+            {
+                stagedSkyLight = new Dictionary<Chunk, byte[,,]>(manager.chunks.Count);
+                foreach (Chunk chunk in manager.chunks.Values)
+                {
+                    if (chunk?.blocks != null)
+                        stagedSkyLight[chunk] = new byte[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
                 }
             }
 
-            foreach (Chunk touched in touchedChunks)
-                meshQue.Add(touched);
+            public void EndSkyRebuild()
+            {
+                foreach (KeyValuePair<Chunk, byte[,,]> entry in stagedSkyLight)
+                {
+                    if (!LightMapsEqual(entry.Key.skyLight, entry.Value))
+                    {
+                        entry.Key.skyLight = entry.Value;
+                        touchedChunks.Add(entry.Key);
+                    }
+                }
+                
+                stagedSkyLight = null;
+            }
+
+            public IEnumerable<Chunk> DrainTouchedChunks()
+            {
+                Chunk[] result = touchedChunks.ToArray();
+                touchedChunks.Clear();
+                return result;
+            }
+            
+            public IEnumerable<Vector3Int> GetLoadedVoxels()
+            {
+                foreach (Chunk chunk in manager.chunks.Values)
+                {
+                    if (chunk?.blocks == null)
+                        continue;
+
+                    Vector3Int origin = chunk.coord * Chunk.CHUNK_SIZE;
+                    for (int x = 0; x < Chunk.CHUNK_SIZE; x++)
+                    for (int y = 0; y < Chunk.CHUNK_SIZE; y++)
+                    for (int z = 0; z < Chunk.CHUNK_SIZE; z++)
+                        yield return origin + new Vector3Int(x, y, z);
+                }
+            }
+            
+            public bool TryGetVoxel(Vector3Int position, out byte blockId)
+            {
+                Chunk chunk = manager.GetChunkFromWorldPos(position);
+                if (chunk?.blocks == null)
+                {
+                    blockId = 0;
+                    return false;
+                }
+
+                Vector3Int local = chunk.WorldToLocal(position);
+                blockId = chunk.blocks[local.x, local.y, local.z];
+                return true;
+            }
+
+            public byte GetLight(Vector3Int position, LightPropagator.Channel channel)
+            {
+                Chunk chunk = manager.GetChunkFromWorldPos(position);
+                if (chunk == null)
+                    return VoxelLight.Min;
+
+                Vector3Int local = chunk.WorldToLocal(position);
+                byte[,,] map = channel == LightPropagator.Channel.Sky
+                    ? GetSkyMap(chunk)
+                    : chunk.blockLight;
+                return map?[local.x, local.y, local.z] ?? VoxelLight.Min;
+            }
+            
+            public void SetLight(Vector3Int position, LightPropagator.Channel channel, byte value)
+            {
+                Chunk chunk = manager.GetChunkFromWorldPos(position);
+                if (chunk == null)
+                    return;
+
+                Vector3Int local = chunk.WorldToLocal(position);
+                if (channel == LightPropagator.Channel.Sky)
+                {
+                    byte[,,] map = GetSkyMap(chunk);
+                    if (map == null)
+                    {
+                        chunk.skyLight = new byte[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
+                        map = chunk.skyLight;
+                    }
+                    
+                    if (map[local.x, local.y, local.z] != value)
+                    {
+                        map[local.x, local.y, local.z] = value;
+                        if (stagedSkyLight == null)
+                            touchedChunks.Add(chunk);
+                    }
+                }
+                else
+                {
+                    chunk.blockLight ??= new byte[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
+                    if (chunk.blockLight[local.x, local.y, local.z] != value)
+                    {
+                        chunk.blockLight[local.x, local.y, local.z] = value;
+                        touchedChunks.Add(chunk);
+                    }
+                }
+            }
+            
+            private byte[,,] GetSkyMap(Chunk chunk)
+            {
+                if (stagedSkyLight != null && stagedSkyLight.TryGetValue(chunk, out byte[,,] staged))
+                    return staged;
+
+                return chunk.skyLight;
+            }
+
+            private static bool LightMapsEqual(byte[,,] left, byte[,,] right)
+            {
+                if (left == null)
+                    return false;
+
+                for (int x = 0; x < Chunk.CHUNK_SIZE; x++)
+                for (int y = 0; y < Chunk.CHUNK_SIZE; y++)
+                for (int z = 0; z < Chunk.CHUNK_SIZE; z++)
+                {
+                    if (left[x, y, z] != right[x, y, z])
+                        return false;
+                }
+
+                return true;
+            }
         }
+
 
         private bool IsChunkBusy(Vector3Int coord, Chunk chunk)
         {
@@ -1124,7 +1291,6 @@ namespace Core
             if (chunk == null || chunk.renderer == null)
                 return;
             
-            RecalculateSkyLight(chunk);
             chunk.renderer.Rebuild();
             chunk.isColliderDirty = false;
         }

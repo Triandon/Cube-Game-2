@@ -38,7 +38,7 @@ Shader "Custom/VoxelAtlas"
                 float4 posCS : SV_POSITION;
                 float2 uvLocal : TEXCOORD0;
                 float4 atlasMeta : TEXCOORD1;
-                half light : TEXCOORD2;
+                half2 light : TEXCOORD2;
             };
 
             v2f vert(appdata v)
@@ -62,7 +62,7 @@ Shader "Custom/VoxelAtlas"
                 o.atlasMeta = float4(uMin, vMin, tileSize, tileSize);
 
                 // MeshData stores the custom voxel light in COLOR0.r.
-                o.light = v.vertexColor.r;
+                o.light = v.vertexColor.rg;
                 return o;
 
             }
@@ -75,7 +75,8 @@ Shader "Custom/VoxelAtlas"
                 float2 sampleUV = baseUV + tileLocal * tileSize;
 
                 fixed4 col = tex2D(_MainTex, sampleUV);
-                col.rgb *= saturate(i.light) * saturate(_SunLight);
+                half light = max(i.light.r * saturate(_SunLight), i.light.g);
+                col.rgb *= saturate(light);
                 return col;
             }
             ENDCG

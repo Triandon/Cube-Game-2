@@ -1096,7 +1096,8 @@ public static class ChunkMeshGeneratorThreaded
         }
 
         AddPrismFaceUV(indices.Length, atlasIndex, mesh);
-        AddVertexLight(mesh, indices.Length, VoxelLight.Max);
+        AddVertexLight(mesh, indices.Length, VoxelLight.Pack(
+            VoxelLight.Max, VoxelLight.Min));
     }
 
     private static ushort PackAtlasTileIndex(int textureID)
@@ -1658,14 +1659,15 @@ public static class ChunkMeshGeneratorThreaded
             block = getBlockLight != null ? getBlockLight(fallbackX, fallbackY, fallbackZ) : VoxelLight.Min;
         }
 
-        return VoxelLight.GetHighest(sky, block);
+        return VoxelLight.Pack(sky, block);
     }
 
     private static void AddVertexLight(MeshData mesh, int vertexCount, byte light)
     {
-        byte value = (byte)Mathf.Clamp(Mathf.RoundToInt(Mathf.Clamp(light, VoxelLight.Min, VoxelLight.Max) / 15f * 255f), 0, 255);
-        Color32 color = new Color32(value, value, value, 255);
-
+        byte sky = (byte)(VoxelLight.GetSky(light) * 17);
+        byte block = (byte)(VoxelLight.GetBlock(light) * 17);
+        Color32 color = new Color32(sky, block, 0, 255);
+        
         for (int i = 0; i < vertexCount; i++)
             mesh.colors.Add(color);
     }
