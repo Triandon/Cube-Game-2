@@ -1171,19 +1171,66 @@ namespace Core
                 return result;
             }
             
-            public IEnumerable<Vector3Int> GetLoadedVoxels()
+            public IEnumerable<Vector3Int> GetSkyLightSeeds()
+            {
+                int size = Chunk.CHUNK_SIZE;
+                foreach (Chunk chunk in manager.chunks.Values)
+                {
+                    if (chunk?.blocks == null)
+                        continue;
+
+                    int topY = chunk.coord.y * size + size - 1;
+                    Vector3Int aboveCoord = chunk.coord + Vector3Int.up;
+                    bool hasLoadedChunkAbove = manager.chunks.TryGetValue(aboveCoord, out Chunk above) &&
+                                               above?.blocks != null;
+
+                    for (int x = 0; x < size; x++)
+                    for (int z = 0; z < size; z++)
+                    {
+                        // A missing chunk is not automatically open sky. That was the
+                        // source of fully-lit caves when the chunks above the player
+                        // were outside the streaming radius. Procedural terrain gives
+                        // us a cheap, deterministic exposure test without loading it.
+                        if (hasLoadedChunkAbove || topY <= TerrainGeneration.SampleHeight(
+                                chunk.coord.x * size + x, chunk.coord.z * size + z))
+                            continue;
+
+                        yield return new Vector3Int(
+                            chunk.coord.x * size + x, topY, chunk.coord.z * size + z);
+                    }
+
+                }
+            }
+
+            public void ClearLight(LightPropagator.Channel channel)
             {
                 foreach (Chunk chunk in manager.chunks.Values)
                 {
                     if (chunk?.blocks == null)
                         continue;
 
-                    Vector3Int origin = chunk.coord * Chunk.CHUNK_SIZE;
-                    for (int x = 0; x < Chunk.CHUNK_SIZE; x++)
-                    for (int y = 0; y < Chunk.CHUNK_SIZE; y++)
-                    for (int z = 0; z < Chunk.CHUNK_SIZE; z++)
-                        yield return origin + new Vector3Int(x, y, z);
+                    byte[,,] map;
+                    if (channel == LightPropagator.Channel.Sky)
+                    {
+                        map = GetSkyMap(chunk);
+                        if (map == null)
+                        {
+                            map = new byte[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
+                            if (stagedSkyLight != null)
+                                stagedSkyLight[chunk] = map;
+                            else
+                                chunk.skyLight = map;
+                        }
+                    }
+                    else
+                    {
+                        chunk.blockLight ??= new byte[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
+                        map = chunk.blockLight;
+                    }
+
+                    Array.Clear(map, 0, map.Length);
                 }
+
             }
             
             public bool TryGetVoxel(Vector3Int position, out byte blockId)

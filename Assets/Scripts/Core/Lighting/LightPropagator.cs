@@ -16,7 +16,8 @@ public sealed class LightPropagator
 
     public interface ILightWorld
     {
-        IEnumerable<Vector3Int> GetLoadedVoxels();
+        IEnumerable<Vector3Int> GetSkyLightSeeds();
+        void ClearLight(Channel channel);
         bool TryGetVoxel(Vector3Int position, out byte blockId);
         byte GetLight(Vector3Int position, Channel channel);
         void SetLight(Vector3Int position, Channel channel, byte value);
@@ -50,24 +51,20 @@ public sealed class LightPropagator
         this.world = world ?? throw new ArgumentNullException(nameof(world));
     }
 
-    /// <summary>
-    /// Rebuilds sunlight for the complete loaded voxel domain. Missing space above a
-    /// loaded column is treated as open sky. Direct rays stay at level 15 while
-    /// indirect light attenuates by one voxel per step.
-    /// </summary>
+    /// Rebuilds sunlight for the complete loaded voxel domain. The world provides
+    /// terrain-exposed seed cells. Direct rays stay at level 15 while indirect light
+    /// attenuates by one voxel per step.
     public void RebuildSkyLight()
     {
-        List<Vector3Int> voxels = new List<Vector3Int>(world.GetLoadedVoxels());
         Queue<Vector3Int> propagation = new Queue<Vector3Int>();
 
-        foreach (Vector3Int position in voxels)
-            world.SetLight(position, Channel.Sky, VoxelLight.Min);
+        world.ClearLight(Channel.Sky);
 
-        // Every transparent voxel with unloaded space immediately above it starts
-        // a vertical, full-strength sunlight ray.
-        foreach (Vector3Int top in voxels)
+        // The world supplies only cells which are genuinely exposed to the sky;
+        // an unloaded chunk above a cave must not become an implicit light source.
+        foreach (Vector3Int top in world.GetSkyLightSeeds())
         {
-            if (!IsTransparent(top) || world.TryGetVoxel(top + Vector3Int.up, out _))
+            if (!IsTransparent(top))
                 continue;
 
             Vector3Int position = top;
@@ -162,9 +159,8 @@ public sealed class LightPropagator
     /// <summary>Rebuilds block light after voxel/chunk topology changes.</summary>
     public void RebuildBlockLight()
     {
-        foreach (Vector3Int position in world.GetLoadedVoxels())
-            world.SetLight(position, Channel.Block, VoxelLight.Min);
-
+        world.ClearLight(Channel.Block);
+        
         Queue<Vector3Int> propagation = new Queue<Vector3Int>();
         foreach (KeyValuePair<Vector3Int, byte> source in blockLightSources)
         {

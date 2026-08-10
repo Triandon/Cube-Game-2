@@ -99,7 +99,7 @@ public static class ThreadedChunkProcessor
         Func<int, int, int, byte> getSkyLight = (x, y, z) =>
         {
             if ((uint)x >= (uint)S || (uint)y >= (uint)S || (uint)z >= (uint)S)
-                return VoxelLight.Max;
+                return VoxelLight.Min;
 
             return skyLight[x, y, z];
         };
