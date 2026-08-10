@@ -28,6 +28,8 @@ namespace Core.Block
         public virtual bool HasScheduledTick => false;
         public virtual bool HasRandomTick => false;
 
+        public virtual byte LightLevel => VoxelLight.Min;
+
         public Block(byte id, string name, int top, int side, int bottom, int front = -1)
         {
             this.id = id;

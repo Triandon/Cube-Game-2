@@ -669,6 +669,11 @@ namespace Core
 
             byte oldId = chunk.blocks[local.x, local.y, local.z];
             Block.Block oldBlock = BlockRegistry.GetBlock(oldId);
+            byte oldEmission = oldBlock?.LightLevel ?? VoxelLight.Min;
+
+            byte newEmission = block?.LightLevel ?? VoxelLight.Min;
+            bool skyOpacityChanged = VoxelLight.BlocksSkyLight(oldId)
+                                     != VoxelLight.BlocksSkyLight(id);
             
 
             if (id != 0 && block != null)
@@ -691,9 +696,29 @@ namespace Core
             
             // Sets block at the local chunk
             chunk.SetBlockLocal(local, id, state);
-            lightingRebuildPending = true;
-            lightingRebuildUrgent = true;
-            FlushLightingRebuild();
+            
+            // Keep block-light sources in sync with voxel changes. Previously the
+            // public node-light API was never called by block placement/mining, so
+            // a mined lamp remained in the source dictionary and kept the room lit.
+            EnsureLightPropagator();
+            if (oldEmission > VoxelLight.Min)
+                lightPropagator.RemoveBlockLight(worldPos);
+            if (newEmission > VoxelLight.Min)
+                lightPropagator.AddBlockLight(worldPos, newEmission);
+
+            // Sky light only depends on transparency. Avoid rebuilding the entire
+            // loaded domain for changes between blocks with the same opacity.
+            if (skyOpacityChanged)
+            {
+                lightingRebuildPending = true;
+                lightingRebuildUrgent = true;
+                FlushLightingRebuild();
+            }
+            else if (oldEmission != newEmission)
+            {
+                EnqueueChangedLightMeshes();
+            }
+            
             tickCaller?.OnBlockChanged(worldPos, oldId, id);
             
             // Enqueue neighbors if block is on border

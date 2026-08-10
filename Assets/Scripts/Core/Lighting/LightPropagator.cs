@@ -189,9 +189,8 @@ public sealed class LightPropagator
                 if (!IsTransparent(neighbor))
                     continue;
 
-                byte nextLevel = preserveDownwardSun && direction == Vector3Int.down && level == VoxelLight.Max
-                    ? VoxelLight.Max
-                    : (byte)(level - 1);
+                byte nextLevel = preserveDownwardSun && direction == Vector3Int.down
+                    ? level : (byte)(level - 1);
 
                 if (nextLevel <= world.GetLight(neighbor, channel))
                     continue;

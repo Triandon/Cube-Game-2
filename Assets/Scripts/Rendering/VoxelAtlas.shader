@@ -75,8 +75,9 @@ Shader "Custom/VoxelAtlas"
                 float2 sampleUV = baseUV + tileLocal * tileSize;
 
                 fixed4 col = tex2D(_MainTex, sampleUV);
-                half light = max(i.light.r * saturate(_SunLight), i.light.g);
-                col.rgb *= saturate(light);
+                half skyLight = i.light.r * saturate(_SunLight);
+                half blockLight = i.light.g;
+                col.rgb *= max(skyLight, blockLight);
                 return col;
             }
             ENDCG
