@@ -17,6 +17,7 @@ public sealed class LightPropagator
     public interface ILightWorld
     {
         IEnumerable<Vector3Int> GetSkyLightSeeds();
+        bool IsSkyLightSeed(Vector3Int position);
         void ClearLight(Channel channel);
         bool TryGetVoxel(Vector3Int position, out byte blockId);
         byte GetLight(Vector3Int position, Channel channel);
@@ -83,6 +84,12 @@ public sealed class LightPropagator
         Propagate(propagation, Channel.Sky, true);
     }
 
+    public void UpdateAfterVoxelChange(Vector3Int position)
+    {
+        RepairLight(position, Channel.Sky, true);
+        RepairLight(position, Channel.Block, false);
+    }
+    
     /// <summary>Adds or strengthens a block-light source and propagates it.</summary>
     public void AddBlockLight(Vector3Int position, byte level = VoxelLight.Max)
     {
@@ -173,6 +180,18 @@ public sealed class LightPropagator
 
         Propagate(propagation, Channel.Block, false);
     }
+    
+    public void PropagateExistingSkyLight(IEnumerable<Vector3Int> positions)
+    {
+        Queue<Vector3Int> propagation = new Queue<Vector3Int>();
+        foreach (Vector3Int position in positions)
+        {
+            if (world.GetLight(position, Channel.Sky) > VoxelLight.Min)
+                propagation.Enqueue(position);
+        }
+
+        Propagate(propagation, Channel.Sky, true);
+    }
 
     private void Propagate(Queue<Vector3Int> queue, Channel channel, bool preserveDownwardSun)
     {
@@ -200,6 +219,93 @@ public sealed class LightPropagator
             }
         }
     }
+    
+    private void RepairLight(Vector3Int position, Channel channel, bool preserveDownwardSun)
+    {
+        byte oldLevel = world.GetLight(position, channel);
+        byte sourceLevel = GetSourceLevel(position, channel, preserveDownwardSun, true);
+        Queue<RemovalNode> removal = new Queue<RemovalNode>();
+        Queue<Vector3Int> propagation = new Queue<Vector3Int>();
+
+        if (oldLevel > sourceLevel)
+        {
+            world.SetLight(position, channel, sourceLevel);
+            removal.Enqueue(new RemovalNode(position, oldLevel));
+            while (removal.Count > 0)
+            {
+                RemovalNode node = removal.Dequeue();
+                foreach (Vector3Int direction in Directions)
+                {
+                    Vector3Int neighbor = node.Position + direction;
+                    if (!world.TryGetVoxel(neighbor, out _))
+                        continue;
+
+                    byte neighborLevel = world.GetLight(neighbor, channel);
+                    bool downwardSunDependency = preserveDownwardSun && direction == Vector3Int.down &&
+                                                 node.PreviousLight == VoxelLight.Max &&
+                                                 neighborLevel == VoxelLight.Max;
+                    if (neighborLevel != VoxelLight.Min &&
+                        (neighborLevel < node.PreviousLight || downwardSunDependency))
+                    {
+                        // Do not derive a replacement from other nodes that are also
+                        // waiting in the removal queue; only preserve real emitters
+                        // and direct-sky seeds during this pass.
+                        byte neighborSource = GetSourceLevel(neighbor, channel, preserveDownwardSun, false);
+                        world.SetLight(neighbor, channel, neighborSource);
+                        removal.Enqueue(new RemovalNode(neighbor, neighborLevel));
+                        if (neighborSource > VoxelLight.Min)
+                            propagation.Enqueue(neighbor);
+                    }
+                    else if (neighborLevel > VoxelLight.Min)
+                    {
+                        propagation.Enqueue(neighbor);
+                    }
+                }
+            }
+        }
+
+        sourceLevel = GetSourceLevel(position, channel, preserveDownwardSun, true);
+        if (sourceLevel > world.GetLight(position, channel))
+        {
+            world.SetLight(position, channel, sourceLevel);
+            propagation.Enqueue(position);
+        }
+
+        foreach (Vector3Int direction in Directions)
+        {
+            Vector3Int neighbor = position + direction;
+            if (world.GetLight(neighbor, channel) > VoxelLight.Min)
+                propagation.Enqueue(neighbor);
+        }
+
+        Propagate(propagation, channel, preserveDownwardSun);
+    }
+
+    private byte GetSourceLevel(Vector3Int position, Channel channel, bool preserveDownwardSun,
+        bool includeNeighborLight)
+    {
+        if (channel == Channel.Block && blockLightSources.TryGetValue(position, out byte emission))
+            return emission;
+        if (!IsTransparent(position))
+            return VoxelLight.Min;
+        if (preserveDownwardSun && world.IsSkyLightSeed(position))
+            return VoxelLight.Max;
+        if (!includeNeighborLight)
+            return VoxelLight.Min;
+
+        byte best = VoxelLight.Min;
+        foreach (Vector3Int direction in Directions)
+        {
+            byte neighbor = world.GetLight(position + direction, channel);
+            byte candidate = preserveDownwardSun && direction == Vector3Int.up && neighbor == VoxelLight.Max
+                ? VoxelLight.Max
+                : (neighbor > VoxelLight.Min ? (byte)(neighbor - 1) : VoxelLight.Min);
+            if (candidate > best)
+                best = candidate;
+        }
+        return best;
+    }
+    
 
     private bool IsTransparent(Vector3Int position)
     {

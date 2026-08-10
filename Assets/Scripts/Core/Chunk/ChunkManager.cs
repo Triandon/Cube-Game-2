@@ -48,8 +48,7 @@ namespace Core
         private int lodDistance;
         private LightPropagator lightPropagator;
         private ChunkLightWorld lightWorld;
-        private bool lightingRebuildPending;
-        private bool lightingRebuildUrgent;
+        private readonly Queue<Chunk> lightQueue = new Queue<Chunk>();
         
         //If a player moves (so the chunks also moves), then if the player increase render distance new chunks
         //gets generated and there forms a line where moved chunks arent getting re rendered :(
@@ -95,7 +94,7 @@ namespace Core
 
             // Pull worker results onto the main thread immediately
             ProcessWorkerResults();
-            FlushLightingRebuild();
+            ProcessLightingIntegration();
             
             if (HasMovedChunkDistance())
             {
@@ -191,7 +190,7 @@ namespace Core
             chunk.blockLight = res.blockLight ?? new byte[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
             
             chunk.RebuildSpecialMeshBlocks();
-            lightingRebuildPending = true;
+            lightQueue.Enqueue(chunk);
 
             //Rebuilds block entities  AFTER chunk is ready, the entity is a GO
             if (res.blockEntityLocals != null && res.blockEntityLocals.Count > 0)
@@ -568,11 +567,6 @@ namespace Core
                 chunks.Remove(key.coord);
                 chunkCount--;
             }
-
-            if (chunksToRemove.Count > 0)
-            {
-                lightingRebuildPending = true;
-            }
         }
 
         public Chunk GetChunk(Vector3Int coord)
@@ -710,9 +704,10 @@ namespace Core
             // loaded domain for changes between blocks with the same opacity.
             if (skyOpacityChanged)
             {
-                lightingRebuildPending = true;
-                lightingRebuildUrgent = true;
-                FlushLightingRebuild();
+                // Repair the local gradients instead of synchronously rebuilding
+                // every light voxel in every loaded chunk.
+                lightPropagator.UpdateAfterVoxelChange(worldPos);
+                EnqueueChangedLightMeshes();
             }
             else if (oldEmission != newEmission)
             {
@@ -1103,29 +1098,52 @@ namespace Core
             EnqueueChangedLightMeshes();
         }
 
-        private void FlushLightingRebuild()
+        private void ProcessLightingIntegration()
         {
-            if (!lightingRebuildPending)
-                return;
-            
-            // Chunk streaming can deliver many results over consecutive frames.
-            // Coalesce them into one rebuild after the current generation burst.
-            if (!lightingRebuildUrgent && (pendingRequests.Count > 0 || generationQue.Count > 0))
-                return;
-            
-            lightingRebuildPending = false;
-            lightingRebuildUrgent = false;
             EnsureLightPropagator();
-            lightWorld.BeginSkyRebuild();
-            lightPropagator.RebuildSkyLight();
-            lightWorld.EndSkyRebuild();
+            int lim = chunksPerFrame / 2;
+            int budget = Mathf.Max(1, lim);
+            while (budget-- > 0 && lightQueue.Count > 0)
+            {
+                Chunk chunk = lightQueue.Dequeue();
+                // A queued chunk may have been unloaded or its pooled shell reused
+                // before reaching the front of the lighting queue.
+                if (chunk?.blocks == null || GetChunk(chunk.coord) != chunk)
+                    continue;
 
-            // With no block-light sources there is nothing to propagate. Avoid a
-            // second complete traversal during normal chunk streaming.
-            if (lightPropagator.HasBlockLightSources)
-                lightPropagator.RebuildBlockLight();
+                lightPropagator.PropagateExistingSkyLight(GetSkyPropagationSeeds(chunk));
+                EnqueueChangedLightMeshes();
+            }
+        }
 
-            EnqueueChangedLightMeshes();
+        private static IEnumerable<Vector3Int> GetSkyPropagationSeeds(Chunk chunk)
+        {
+            int size = Chunk.CHUNK_SIZE;
+            Vector3Int origin = chunk.coord * size;
+            byte[,,] light = chunk.skyLight;
+            if (light == null)
+                yield break;
+
+            for (int x = 0; x < size; x++)
+            for (int y = 0; y < size; y++)
+            for (int z = 0; z < size; z++)
+            {
+                byte level = light[x, y, z];
+                if (level == VoxelLight.Min)
+                    continue;
+                
+                // Interior voxels surrounded by equal/brighter light cannot improve
+                // anything. Only queue the chunk boundary and actual light/dark
+                // frontiers, greatly shrinking the flood-fill's initial queue.
+                bool boundary = x == 0 || x == size - 1 || y == 0 || y == size - 1 ||
+                                z == 0 || z == size - 1;
+                bool hasDarkerNeighbor = !boundary &&
+                                         (light[x - 1, y, z] < level || light[x + 1, y, z] < level ||
+                                          light[x, y - 1, z] < level || light[x, y + 1, z] < level ||
+                                          light[x, y, z - 1] < level || light[x, y, z + 1] < level);
+                if (boundary || hasDarkerNeighbor)
+                    yield return origin + new Vector3Int(x, y, z);
+            }
         }
 
         private void EnsureLightPropagator()
@@ -1225,6 +1243,23 @@ namespace Core
                     }
 
                 }
+            }
+            
+            public bool IsSkyLightSeed(Vector3Int position)
+            {
+                Chunk chunk = manager.GetChunkFromWorldPos(position);
+                if (chunk?.blocks == null)
+                    return false;
+
+                int size = Chunk.CHUNK_SIZE;
+                Vector3Int local = chunk.WorldToLocal(position);
+                if (local.y != size - 1)
+                    return false;
+
+                bool hasLoadedChunkAbove = manager.chunks.TryGetValue(
+                    chunk.coord + Vector3Int.up, out Chunk above) && above?.blocks != null;
+                return !hasLoadedChunkAbove &&
+                       position.y > TerrainGeneration.SampleHeight(position.x, position.z);
             }
 
             public void ClearLight(LightPropagator.Channel channel)
