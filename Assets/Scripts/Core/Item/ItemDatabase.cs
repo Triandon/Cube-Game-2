@@ -20,6 +20,9 @@ namespace Core.Item
             //Stone item
             ItemRegistry.RegisterItem(new Item(id:3,itemName:"Stone_Item",isBlock:true,blockId:3,textureIndex:3,120));
             
+            //Sigma block
+            ItemRegistry.RegisterItem(new Item(id:4,itemName:"Sigma_Item",isBlock:true,blockId:4,textureIndex:16,999999));
+            
             //Chest Item
             ItemRegistry.RegisterItem(new Item(id:5, itemName:"Chest", isBlock:true, blockId:5, textureIndex:5,1));
             

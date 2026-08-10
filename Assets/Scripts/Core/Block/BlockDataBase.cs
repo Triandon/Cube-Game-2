@@ -48,6 +48,7 @@ namespace Core.Block
         
             //Sigma Block 
             Sigma = new Block(4, "Sigma_Block", top: 16, side: 16, bottom: 16);
+            Sigma.LightLevel = 15;
             BlockRegistry.RegisterBlock(Sigma);
             
             //Chest Block 
