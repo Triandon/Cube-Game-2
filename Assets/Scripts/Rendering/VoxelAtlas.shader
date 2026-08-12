@@ -22,6 +22,7 @@ Shader "Custom/VoxelAtlas"
             sampler2D _MainTex;
             float _AtlasTiles;
             float _SunLight;
+            float _LightingDebugMode;
             
             static const float VERTEX_POS_SCALE = 100.0;
 
@@ -72,6 +73,23 @@ Shader "Custom/VoxelAtlas"
                 float2 tileLocal = frac(i.uvLocal);
                 float2 baseUV = i.atlasMeta.xy;
                 float2 tileSize = i.atlasMeta.zw;
+                
+                if (_LightingDebugMode > 0.5)
+                {
+                    float lightLevel = round(saturate(max(i.light.r, i.light.g)) * 15.0);
+                    float debugTileIndex = 26.0 + lightLevel;
+                    float debugTileColumn = fmod(debugTileIndex, _AtlasTiles);
+                    float debugTileRow = floor(debugTileIndex / _AtlasTiles);
+                    baseUV = float2(
+                        debugTileColumn * tileSize.x,
+                        1.0 - (debugTileRow + 1.0) * tileSize.y
+                    );
+
+                    float2 debugTileLocal = float2(1.0 - tileLocal.x, tileLocal.y);
+                    float2 debugUV = baseUV + debugTileLocal * tileSize;
+                    return tex2D(_MainTex, debugUV);
+                }
+                
                 float2 sampleUV = baseUV + tileLocal * tileSize;
 
                 fixed4 col = tex2D(_MainTex, sampleUV);

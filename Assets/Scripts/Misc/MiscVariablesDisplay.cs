@@ -1,3 +1,4 @@
+using System;
 using Core;
 using TMPro;
 using UnityEngine;
@@ -25,10 +26,14 @@ public class MiscVariablesDisplay : MonoBehaviour
 
     [SerializeField] private PlayerInventoryHolder playerHolder;
     public TMP_InputField chatBox;
+
+    private static readonly int LightingDebugModeID = Shader.PropertyToID("_LightingDebugMode");
+    private bool lightingDebugMode;
     
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
     {
+        SetLightingDebugMode(false);
         chunkManager = FindAnyObjectByType<ChunkManager>();
         settings = Settings.Instance;
         if (settings != null)
@@ -132,6 +137,11 @@ public class MiscVariablesDisplay : MonoBehaviour
             {
                 HideCursor();
             }
+
+            if (Input.GetKeyDown(KeyCode.X))
+            {
+                SetLightingDebugMode(!lightingDebugMode);
+            }
         }
     }
 
@@ -175,5 +185,16 @@ public class MiscVariablesDisplay : MonoBehaviour
             Mathf.FloorToInt(player.position.y / Chunk.CHUNK_SIZE),
             Mathf.FloorToInt(player.position.z / Chunk.CHUNK_SIZE)
         );
+    }
+
+    private void OnDestroy()
+    {
+        SetLightingDebugMode(false);
+    }
+
+    private void SetLightingDebugMode(bool enable)
+    {
+        lightingDebugMode = enable;
+        Shader.SetGlobalFloat(LightingDebugModeID, enable ? 1f: 0f);
     }
 }
