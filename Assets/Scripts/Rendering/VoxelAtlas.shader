@@ -4,6 +4,7 @@ Shader "Custom/VoxelAtlas"
     {
         _MainTex("Texture Atlas", 2D) = "white" {}
         _AtlasTiles("Tiles Per Row", Float) = 16
+        [Range(1.0, 3.0)] _LightCurve("Light Curve", Float) = 1.5
     }
 
     SubShader
@@ -23,6 +24,7 @@ Shader "Custom/VoxelAtlas"
             float _AtlasTiles;
             float _SunLight;
             float _LightingDebugMode;
+            float _LightCurve;
             
             static const float VERTEX_POS_SCALE = 100.0;
 
@@ -95,7 +97,9 @@ Shader "Custom/VoxelAtlas"
                 fixed4 col = tex2D(_MainTex, sampleUV);
                 half skyLight = i.light.r * saturate(_SunLight);
                 half blockLight = i.light.g;
-                col.rgb *= max(skyLight, blockLight);
+                half light = saturate(max(skyLight, blockLight));
+                half curvedLight = pow(light, _LightCurve);
+                col.rgb *= curvedLight;
                 return col;
             }
             ENDCG
