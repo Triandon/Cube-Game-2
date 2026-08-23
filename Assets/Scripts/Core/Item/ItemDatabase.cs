@@ -66,6 +66,9 @@ namespace Core.Item
             
             // Inverted Corner Ramp block
             ItemRegistry.RegisterItem(new Item(19, itemName: "InvertedCornerRampBlock", isBlock: true, blockId: 19, textureIndex: 24, maxStackSize: 64));
+            
+            //Light Block
+            ItemRegistry.RegisterItem(new Item(20, "LightBlockItem", isBlock: true, blockId:20, 43, 64));
         }
     
         public static void Init(){}

@@ -26,6 +26,7 @@ namespace Core.Block
         public static Block CornerRampBlock;
         public static Block PyramidBlock;
         public static Block InvertedCornerTriangle;
+        public static Block LightBlock;
         
         static BlockDataBase()
         {
@@ -114,6 +115,10 @@ namespace Core.Block
             // Inverted Corner Ramp block
             InvertedCornerTriangle = new InvertedCornerTriangle(19, "InvertedCornerTriangle", top: 6, side: 6, bottom: 6);
             BlockRegistry.RegisterBlock(InvertedCornerTriangle);
+            
+            //Light block
+            LightBlock = new Block(20, "LightBlock", 43, 43, 43);
+            LightBlock.LightLevel = 15;
             
             Debug.Log("Blocks registered (static)");
         }
