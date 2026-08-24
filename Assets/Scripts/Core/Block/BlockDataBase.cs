@@ -119,6 +119,7 @@ namespace Core.Block
             //Light block
             LightBlock = new Block(20, "LightBlock", 43, 43, 43);
             LightBlock.LightLevel = 15;
+            BlockRegistry.RegisterBlock(LightBlock);
             
             Debug.Log("Blocks registered (static)");
         }

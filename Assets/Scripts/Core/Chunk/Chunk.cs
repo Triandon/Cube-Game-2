@@ -271,8 +271,6 @@ namespace Core
                 specialMeshBlocks.Add(localPos);
             }
         }
-
-
         
         private static bool NeedsSpecialMesh(byte id)
         {
@@ -333,7 +331,9 @@ namespace Core
             Vector3Int worldPos = coord * CHUNK_SIZE + new Vector3Int(x, y, z);
             Chunk neighbor = chunkManager != null ? chunkManager.GetChunkFromWorldPos(worldPos) : null;
             if (neighbor == null)
-                return VoxelLight.Min;
+                return chunkManager != null
+                    ? chunkManager.GetVirtualSkyLight(worldPos)
+                    : VoxelLight.Min;
 
             Vector3Int local = neighbor.WorldToLocal(worldPos);
             return neighbor.skyLight != null ? neighbor.skyLight[local.x, local.y, local.z] : VoxelLight.Max;

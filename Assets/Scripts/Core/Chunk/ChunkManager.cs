@@ -600,6 +600,34 @@ namespace Core
             chunks.TryGetValue(chunkCord, out Chunk chunk);
             return chunk;
         }
+        
+        internal byte GetVirtualSkyLight(Vector3Int worldPos)
+        {
+            int size = Chunk.CHUNK_SIZE;
+            Vector3Int chunkCoord = new Vector3Int(
+                Mathf.FloorToInt((float)worldPos.x / size),
+                Mathf.FloorToInt((float)worldPos.y / size),
+                Mathf.FloorToInt((float)worldPos.z / size));
+
+            World world = World.Instance;
+            if (world == null)
+                return VoxelLight.Min;
+
+            // There is no chunk above the world's ceiling, but mesh faces still
+            // sample that voxel and should see open sky.
+            if (chunkCoord.y >= world.worldSizeY)
+                return VoxelLight.Max;
+
+            // A generated all-air chunk is deliberately kept virtual. Treat it
+            // as transparent without doing the much more expensive operation of
+            // materializing a renderer just so a neighboring face can sample it.
+            if (!world.IsChunkInsideOfWorld(chunkCoord) || !knownAllAirChunks.Contains(chunkCoord))
+                return VoxelLight.Min;
+
+            return HasKnownSkyOccluderAbove(worldPos.x, worldPos.y, worldPos.z)
+                ? VoxelLight.Min
+                : VoxelLight.Max;
+        }
 
         private Chunk GetOrCreateChunkForWorld(Vector3Int worldPos, byte idToWrite)
         {
@@ -650,12 +678,47 @@ namespace Core
                     RebuildBlockEntities(chunk);
                 }
             }
+            
+            // All-air chunks normally stay virtual, so this shell did not pass
+            // through ThreadedChunkProcessor and its light arrays still contain
+            // zeroes. Seed its direct sunlight before applying the first placed
+            // block; otherwise the incremental repair has no lit neighbor to
+            // propagate from until that block is removed again.
+            InitializeSkyLight(chunk);
+            lightQueue.Enqueue(chunk);
 
             meshQue.Add(chunk);
             EnqueueNeighborRebuilds(chunkCord);
 
             return chunk;
         }
+        
+        private void InitializeSkyLight(Chunk chunk)
+        {
+            int size = Chunk.CHUNK_SIZE;
+            byte[,] incoming = BuildIncomingSkyLightFromAbove(chunk.coord);
+            chunk.skyLight = new byte[size, size, size];
+
+            for (int x = 0; x < size; x++)
+            for (int z = 0; z < size; z++)
+            {
+                byte current = incoming[x, z];
+                for (int y = size - 1; y >= 0; y--)
+                {
+                    byte blockId = chunk.blocks[x, y, z];
+                    if (VoxelLight.BlocksSkyLight(blockId))
+                    {
+                        chunk.skyLight[x, y, z] = VoxelLight.Min;
+                        current = VoxelLight.Min;
+                    }
+                    else
+                    {
+                        chunk.skyLight[x, y, z] = current;
+                    }
+                }
+            }
+        }
+
 
         public void SetBlockAtWorldPos(Vector3Int worldPos, byte id, Vector3Int? placementFace = null)
         {
