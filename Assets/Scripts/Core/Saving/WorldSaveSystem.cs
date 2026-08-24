@@ -10,6 +10,7 @@ namespace Core
     public static class WorldSaveSystem
     {
         private const int ChunkSaveVersion = 1;
+        private const int SkyOcclusionSaveVersion = 1;
     
         private static string persistentDataPath;
 
@@ -35,6 +36,78 @@ namespace Core
         public static string GetChunkDirectory()
         {
             return GetPersistentDataPath() + "/chunks_2_system_test";
+        }
+        
+        private static string GetSkyOcclusionPath()
+        {
+            return GetChunkDirectory() + "/sky_occlusion.dat";
+        }
+
+        public static void SaveSkyOcclusionMap(LightingSkyOcclusionMap map)
+        {
+            if (map == null)
+                return;
+
+            Directory.CreateDirectory(GetChunkDirectory());
+            string path = GetSkyOcclusionPath();
+            string temporaryPath = path + ".tmp";
+
+            using (FileStream stream = File.Create(temporaryPath))
+            using (BinaryWriter writer = new BinaryWriter(stream))
+            {
+                writer.Write(SkyOcclusionSaveVersion);
+                writer.Write(Chunk.CHUNK_SIZE);
+                writer.Write(map.ChunkColumns.Count);
+                foreach (KeyValuePair<Vector3Int, byte[]> entry in map.ChunkColumns)
+                {
+                    writer.Write(entry.Key.x);
+                    writer.Write(entry.Key.y);
+                    writer.Write(entry.Key.z);
+                    writer.Write(entry.Value);
+                }
+            }
+
+            if (File.Exists(path))
+                File.Delete(path);
+            File.Move(temporaryPath, path);
+        }
+
+        public static void LoadSkyOcclusionMap(LightingSkyOcclusionMap map)
+        {
+            if (map == null)
+                return;
+
+            string path = GetSkyOcclusionPath();
+            if (!File.Exists(path))
+                return;
+
+            try
+            {
+                using FileStream stream = File.OpenRead(path);
+                using BinaryReader reader = new BinaryReader(stream);
+                int version = reader.ReadInt32();
+                int chunkSize = reader.ReadInt32();
+                int count = reader.ReadInt32();
+                if (version != SkyOcclusionSaveVersion || chunkSize != Chunk.CHUNK_SIZE || count < 0)
+                    throw new InvalidDataException("Sky occlusion header is invalid.");
+
+                int columnCount = Chunk.CHUNK_SIZE * Chunk.CHUNK_SIZE;
+                var entries = new List<KeyValuePair<Vector3Int, byte[]>>(count);
+                for (int i = 0; i < count; i++)
+                {
+                    Vector3Int coord = new Vector3Int(reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt32());
+                    byte[] columns = reader.ReadBytes(columnCount);
+                    if (columns.Length != columnCount)
+                        throw new EndOfStreamException("Sky occlusion data ended unexpectedly.");
+                    entries.Add(new KeyValuePair<Vector3Int, byte[]>(coord, columns));
+                }
+
+                map.ReplaceWith(entries);
+            }
+            catch (Exception exception) when (exception is IOException || exception is InvalidDataException)
+            {
+                Debug.LogWarning($"Could not load sky occlusion data at {path}: {exception.Message}");
+            }
         }
 
         public static bool ChunkSaveExist(Vector3Int coord)

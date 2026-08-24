@@ -49,6 +49,13 @@ namespace Core
         private LightPropagator lightPropagator;
         private ChunkLightWorld lightWorld;
         private readonly Queue<Chunk> lightQueue = new Queue<Chunk>();
+        private readonly LightingSkyOcclusionMap skyOcclusionMap = new LightingSkyOcclusionMap();
+        private bool skyOcclusionDirty;
+        private float skyOcclusionDirtyTime;
+        private readonly Queue<Vector3Int> skyRepairQueue = new Queue<Vector3Int>();
+        private readonly HashSet<Vector3Int> queuedSkyRepairs = new HashSet<Vector3Int>();
+        private const float SkyOcclusionSaveDelay = 3f;
+
         
         //If a player moves (so the chunks also moves), then if the player increase render distance new chunks
         //gets generated and there forms a line where moved chunks arent getting re rendered :(
@@ -57,6 +64,7 @@ namespace Core
         {
             fpsCounter = FindAnyObjectByType<FPSCounter>();
             WorldSaveSystem.Initialize(Application.persistentDataPath);
+            WorldSaveSystem.LoadSkyOcclusionMap(skyOcclusionMap);
             Debug.Log("Save path: " + WorldSaveSystem.GetChunkDirectory() + "/");
 
             // Pre-create chunk pool
@@ -95,6 +103,7 @@ namespace Core
             // Pull worker results onto the main thread immediately
             ProcessWorkerResults();
             ProcessLightingIntegration();
+            SaveSkyOcclusionMapAfterDelay();
             
             if (HasMovedChunkDistance())
             {
@@ -109,6 +118,7 @@ namespace Core
 
         private void OnDestroy()
         {
+            SaveSkyOcclusionMapIfDirty();
             if (threadedWorker != null)
             {
                 try
@@ -161,6 +171,7 @@ namespace Core
             {
                 if (res.isAllAir)
                 {
+                    RecordSkyOcclusion(res.coord, res.blocks, true);
                     knownAllAirChunks.Add(res.coord);
                     pendingRequests.Remove(res.coord);
                     return;
@@ -188,6 +199,7 @@ namespace Core
                 Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
             chunk.skyLight = res.skyLight ?? new byte[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
             chunk.blockLight = res.blockLight ?? new byte[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
+            RecordSkyOcclusion(res.coord, chunk.blocks, true);
             
             chunk.RebuildSpecialMeshBlocks();
             lightQueue.Enqueue(chunk);
@@ -457,7 +469,10 @@ namespace Core
             {
                 for (int x = 0; x < S; x++)
                 for (int z = 0; z < S; z++)
-                    incoming[x, z] = VoxelLight.Max;
+                    incoming[x, z] = HasKnownSkyOccluderAbove(
+                        coord.x * S + x, coord.y * S + S - 1, coord.z * S + z)
+                        ? VoxelLight.Min
+                        : VoxelLight.Max;
             }
 
             return incoming;
@@ -690,6 +705,8 @@ namespace Core
             
             // Sets block at the local chunk
             chunk.SetBlockLocal(local, id, state);
+            if (skyOcclusionMap.UpdateColumn(chunk.coord, chunk.blocks, local.x, local.z, GetWorldHeight()))
+                MarkSkyOcclusionDirty();
             
             // Keep block-light sources in sync with voxel changes. Previously the
             // public node-light API was never called by block placement/mining, so
@@ -1052,7 +1069,59 @@ namespace Core
                     chunk.isDirty = false;
                 }
             }
+            SaveSkyOcclusionMapIfDirty();
         }
+        
+        private void RecordSkyOcclusion(Vector3Int coord, byte[,,] blocks, bool rebuildIfChanged)
+        {
+            var changedColumns = new List<Vector2Int>();
+            if (!skyOcclusionMap.UpdateChunk(coord, blocks, GetWorldHeight(), changedColumns))
+                return;
+
+            MarkSkyOcclusionDirty();
+            if (!rebuildIfChanged)
+                return;
+
+            int size = Chunk.CHUNK_SIZE;
+            foreach (Vector2Int local in changedColumns)
+            {
+                // Repair immediately below the changed chunk column. This removes
+                // stale level-15 rays without rebuilding every loaded light voxel.
+                Vector3Int repair = new Vector3Int(
+                    coord.x * size + local.x, coord.y * size - 1, coord.z * size + local.y);
+                if (GetChunkFromWorldPos(repair) != null && queuedSkyRepairs.Add(repair))
+                    skyRepairQueue.Enqueue(repair);
+            }
+        }
+
+        private bool HasKnownSkyOccluderAbove(int worldX, int worldY, int worldZ)
+        {
+            return skyOcclusionMap.HasOccluderAbove(worldX, worldY, worldZ);
+        }
+
+        private int GetWorldHeight() => World.Instance != null ? World.Instance.worldSizeY : 0;
+
+        private void MarkSkyOcclusionDirty()
+        {
+            skyOcclusionDirty = true;
+            skyOcclusionDirtyTime = Time.unscaledTime;
+        }
+
+        private void SaveSkyOcclusionMapAfterDelay()
+        {
+            if (skyOcclusionDirty && Time.unscaledTime - skyOcclusionDirtyTime >= SkyOcclusionSaveDelay)
+                SaveSkyOcclusionMapIfDirty();
+        }
+
+        private void SaveSkyOcclusionMapIfDirty()
+        {
+            if (!skyOcclusionDirty)
+                return;
+
+            WorldSaveSystem.SaveSkyOcclusionMap(skyOcclusionMap);
+            skyOcclusionDirty = false;
+        }
+
 
         private (Dictionary<Vector3Int, byte[,,]> blocks, Dictionary<Vector3Int, BlockStateContainer[,,]> states) CaptureNeighborSnapshots(Vector3Int coord)
         {
@@ -1076,31 +1145,25 @@ namespace Core
 
             return (blockDict, stateDict);
         }
-        
-        public void AddBlockLight(Vector3Int worldPos, byte level = VoxelLight.Max)
-        {
-            EnsureLightPropagator();
-            lightPropagator.AddBlockLight(worldPos, level);
-            EnqueueChangedLightMeshes();
-        }
-
-        public void RemoveBlockLight(Vector3Int worldPos)
-        {
-            EnsureLightPropagator();
-            lightPropagator.RemoveBlockLight(worldPos);
-            EnqueueChangedLightMeshes();
-        }
-
-        private void RebuildLoadedSkyLight()
-        {
-            EnsureLightPropagator();
-            lightPropagator.RebuildSkyLight();
-            EnqueueChangedLightMeshes();
-        }
 
         private void ProcessLightingIntegration()
         {
             EnsureLightPropagator();
+            int repairBudget = Mathf.Max(1, chunksPerFrame);
+            bool repairedSkyLight = false;
+            while (repairBudget-- > 0 && skyRepairQueue.Count > 0)
+            {
+                Vector3Int repair = skyRepairQueue.Dequeue();
+                queuedSkyRepairs.Remove(repair);
+                if (GetChunkFromWorldPos(repair) == null)
+                    continue;
+
+                lightPropagator.UpdateAfterVoxelChange(repair);
+                repairedSkyLight = true;
+            }
+            if (repairedSkyLight)
+                EnqueueChangedLightMeshes();
+
             int lim = chunksPerFrame / 2;
             int budget = Mathf.Max(1, lim);
             while (budget-- > 0 && lightQueue.Count > 0)
@@ -1230,12 +1293,8 @@ namespace Core
                     for (int x = 0; x < size; x++)
                     for (int z = 0; z < size; z++)
                     {
-                        // A missing chunk is not automatically open sky. That was the
-                        // source of fully-lit caves when the chunks above the player
-                        // were outside the streaming radius. Procedural terrain gives
-                        // us a cheap, deterministic exposure test without loading it.
-                        if (hasLoadedChunkAbove || topY <= TerrainGeneration.SampleHeight(
-                                chunk.coord.x * size + x, chunk.coord.z * size + z))
+                        if (hasLoadedChunkAbove || manager.HasKnownSkyOccluderAbove(
+                                chunk.coord.x * size + x, topY, chunk.coord.z * size + z))
                             continue;
 
                         yield return new Vector3Int(
@@ -1259,7 +1318,7 @@ namespace Core
                 bool hasLoadedChunkAbove = manager.chunks.TryGetValue(
                     chunk.coord + Vector3Int.up, out Chunk above) && above?.blocks != null;
                 return !hasLoadedChunkAbove &&
-                       position.y > TerrainGeneration.SampleHeight(position.x, position.z);
+                       !manager.HasKnownSkyOccluderAbove(position.x, position.y, position.z);
             }
 
             public void ClearLight(LightPropagator.Channel channel)
