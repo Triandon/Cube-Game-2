@@ -201,6 +201,12 @@ namespace Core
             chunk.blockLight = res.blockLight ?? new byte[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
             RecordSkyOcclusion(res.coord, chunk.blocks, true);
             
+            // Light maps are runtime data and the propagator's source registry is
+            // not serialized. Re-register emitters from the loaded block data so
+            // lamps work immediately after loading a world (and can react to later
+            // voxel changes without first being mined and placed again).
+            RegisterBlockLightSources(chunk);
+            
             chunk.RebuildSpecialMeshBlocks();
             lightQueue.Enqueue(chunk);
 
@@ -486,6 +492,8 @@ namespace Core
                 WorldSaveSystem.SaveChunk(coord, chunk);
                 chunk.isDirty = false;
             }
+            
+            UnregisterBlockLightSources(chunk);
 
             int C = Chunk.CHUNK_SIZE;
             
@@ -542,6 +550,7 @@ namespace Core
                 if (distanceX > viewDistance || distanceY > viewDistance || distanceZ > viewDistance)
                 {
                     tickCaller?.UnregisterChunk(chunk);
+                    UnregisterBlockLightSources(chunk);
                     if (chunk.isDirty)
                     {
                         // Save changes before removing
@@ -679,6 +688,8 @@ namespace Core
                 }
             }
             
+            RegisterBlockLightSources(chunk);
+            
             // All-air chunks normally stay virtual, so this shell did not pass
             // through ThreadedChunkProcessor and its light arrays still contain
             // zeroes. Seed its direct sunlight before applying the first placed
@@ -718,7 +729,44 @@ namespace Core
                 }
             }
         }
+        
+        private void RegisterBlockLightSources(Chunk chunk)
+        {
+            if (chunk?.blocks == null)
+                return;
 
+            EnsureLightPropagator();
+            Vector3Int origin = chunk.coord * Chunk.CHUNK_SIZE;
+            for (int x = 0; x < Chunk.CHUNK_SIZE; x++)
+            for (int y = 0; y < Chunk.CHUNK_SIZE; y++)
+            for (int z = 0; z < Chunk.CHUNK_SIZE; z++)
+            {
+                Block.Block block = BlockRegistry.GetBlock(chunk.blocks[x, y, z]);
+                byte emission = block?.LightLevel ?? VoxelLight.Min;
+                if (emission > VoxelLight.Min)
+                    lightPropagator.AddBlockLight(origin + new Vector3Int(x, y, z), emission);
+            }
+
+            EnqueueChangedLightMeshes();
+        }
+
+        private void UnregisterBlockLightSources(Chunk chunk)
+        {
+            if (chunk?.blocks == null || lightPropagator == null)
+                return;
+
+            Vector3Int origin = chunk.coord * Chunk.CHUNK_SIZE;
+            for (int x = 0; x < Chunk.CHUNK_SIZE; x++)
+            for (int y = 0; y < Chunk.CHUNK_SIZE; y++)
+            for (int z = 0; z < Chunk.CHUNK_SIZE; z++)
+            {
+                Block.Block block = BlockRegistry.GetBlock(chunk.blocks[x, y, z]);
+                if ((block?.LightLevel ?? VoxelLight.Min) > VoxelLight.Min)
+                    lightPropagator.RemoveBlockLight(origin + new Vector3Int(x, y, z));
+            }
+
+            EnqueueChangedLightMeshes();
+        }
 
         public void SetBlockAtWorldPos(Vector3Int worldPos, byte id, Vector3Int? placementFace = null)
         {
@@ -1238,6 +1286,7 @@ namespace Core
                     continue;
 
                 lightPropagator.PropagateExistingSkyLight(GetSkyPropagationSeeds(chunk));
+                lightPropagator.PropagateExistingBlockLight(GetBlockPropagationSeeds(chunk));
                 EnqueueChangedLightMeshes();
             }
         }
@@ -1272,6 +1321,36 @@ namespace Core
             }
         }
 
+        private IEnumerable<Vector3Int> GetBlockPropagationSeeds(Chunk chunk)
+        {
+            int size = Chunk.CHUNK_SIZE;
+            Vector3Int origin = chunk.coord * size;
+
+            // Include both sides of every chunk face. Light in an already-loaded
+            // neighbor can then enter this chunk, while light restored in this
+            // chunk can continue into its neighbors. Duplicate edge/corner seeds
+            // are harmless and keep this boundary-only pass small.
+            for (int a = 0; a < size; a++)
+            for (int b = 0; b < size; b++)
+            {
+                yield return origin + new Vector3Int(0, a, b);
+                yield return origin + new Vector3Int(-1, a, b);
+                yield return origin + new Vector3Int(size - 1, a, b);
+                yield return origin + new Vector3Int(size, a, b);
+
+                yield return origin + new Vector3Int(a, 0, b);
+                yield return origin + new Vector3Int(a, -1, b);
+                yield return origin + new Vector3Int(a, size - 1, b);
+                yield return origin + new Vector3Int(a, size, b);
+
+                yield return origin + new Vector3Int(a, b, 0);
+                yield return origin + new Vector3Int(a, b, -1);
+                yield return origin + new Vector3Int(a, b, size - 1);
+                yield return origin + new Vector3Int(a, b, size);
+            }
+        }
+
+        
         private void EnsureLightPropagator()
         {
             if (lightPropagator != null)

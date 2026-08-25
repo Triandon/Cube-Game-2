@@ -193,6 +193,18 @@ public sealed class LightPropagator
         Propagate(propagation, Channel.Sky, true);
     }
 
+    public void PropagateExistingBlockLight(IEnumerable<Vector3Int> positions)
+    {
+        Queue<Vector3Int> propagation = new Queue<Vector3Int>();
+        foreach (Vector3Int position in positions)
+        {
+            if (world.GetLight(position, Channel.Block) > VoxelLight.Min)
+                propagation.Enqueue(position);
+        }
+
+        Propagate(propagation, Channel.Block, false);
+    }
+    
     private void Propagate(Queue<Vector3Int> queue, Channel channel, bool preserveDownwardSun)
     {
         while (queue.Count > 0)
