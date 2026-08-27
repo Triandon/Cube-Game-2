@@ -440,7 +440,15 @@ public static class ChunkMeshGeneratorThreaded
                         {
                             mask[mu, mv].occluded = true;
                             mask[mu, mv].atlasIndex = atlasIdx;
-                            mask[mu, mv].light = SampleFaceLight(getSkyLight, getBlockLight, x + dir.x * lodScale, y + dir.y * lodScale, z + dir.z * lodScale, x, y, z);
+                            // Lod skirt, not real voxel. Cheap and takes light sample form neighboring
+                            //chunk. Treat the skirts as exposed to skylight and omits blocks
+                            //not using block lighting.
+                            mask[mu, mv].light = forceFace
+                                ? VoxelLight.Pack(VoxelLight.Max, VoxelLight.Min)
+                                : SampleFaceLight(getSkyLight, getBlockLight,
+                                    x + dir.x * lodScale, y + dir.y * lodScale, z + dir.z * lodScale,
+                                    x, y, z);
+
                         }
                         else
                         {
