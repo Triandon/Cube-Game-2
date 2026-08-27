@@ -12,6 +12,8 @@ public class ChunkGenResult
     public bool isAllAir;
     public byte[,,] skyLight;
     public byte[,,] blockLight;
+    public bool isMeshRebuild;
+    public int meshRevision;
     
     //Tick system
     public List<Vector3Int> instantTickLocals;

@@ -54,13 +54,22 @@ public static class ThreadedChunkProcessor
             out List<Vector3Int> instantTickLocals, out List<Vector3Int> scheduledTickLocals,
             out List<Vector3Int> randomTickLocals);
 
-        byte[,,] skyLight = BuildSkyLight(center, req.incomingSkyLightFromAbove);
-        byte[,,] blockLight = new byte[S, S, S];
-        
+        byte[,,] skyLight = req.isMeshRebuild && req.skyLight != null
+            ? req.skyLight
+            : BuildSkyLight(center, req.incomingSkyLightFromAbove);
+        byte[,,] blockLight = req.isMeshRebuild && req.blockLight != null
+            ? req.blockLight
+            : new byte[S, S, S];
+
         if (isAllAir)
-            return new ChunkGenResult(coord, center, req.states, new MeshData(), null,
+        {
+            ChunkGenResult emptyResult = new ChunkGenResult(coord, center, req.states, new MeshData(), null,
                 true, instantTickLocals, scheduledTickLocals, randomTickLocals,
                 skyLight, blockLight);
+            emptyResult.isMeshRebuild = req.isMeshRebuild;
+            emptyResult.meshRevision = req.meshRevision;
+            return emptyResult;
+        }
 
         // ------------------------------------
         // 3. THREAD-SAFE BLOCK QUERY
@@ -98,6 +107,15 @@ public static class ThreadedChunkProcessor
         
         Func<int, int, int, byte> getSkyLight = (x, y, z) =>
         {
+            if (req.paddedSkyLight != null)
+            {
+                int px = x + 1;
+                int py = y + 1;
+                int pz = z + 1;
+                if ((uint)px < (uint)(S + 2) && (uint)py < (uint)(S + 2) && (uint)pz < (uint)(S + 2))
+                    return req.paddedSkyLight[PaddedIndex(px, py, pz)];
+            }
+            
             if ((uint)x >= (uint)S || (uint)y >= (uint)S || (uint)z >= (uint)S)
                 return VoxelLight.Min;
 
@@ -106,6 +124,15 @@ public static class ThreadedChunkProcessor
 
         Func<int, int, int, byte> getBlockLight = (x, y, z) =>
         {
+            if (req.paddedBlockLight != null)
+            {
+                int px = x + 1;
+                int py = y + 1;
+                int pz = z + 1;
+                if ((uint)px < (uint)(S + 2) && (uint)py < (uint)(S + 2) && (uint)pz < (uint)(S + 2))
+                    return req.paddedBlockLight[PaddedIndex(px, py, pz)];
+            }
+            
             if ((uint)x >= (uint)S || (uint)y >= (uint)S || (uint)z >= (uint)S)
                 return VoxelLight.Min;
 
@@ -132,9 +159,12 @@ public static class ThreadedChunkProcessor
         // ------------------------------------
         // 5. RETURN RESULT
         // ------------------------------------
-        return new ChunkGenResult(coord, center, req.states ,meshData,blockEntities,
+        ChunkGenResult result = new ChunkGenResult(coord, center, req.states ,meshData,blockEntities,
             false,instantTickLocals, scheduledTickLocals, randomTickLocals,
             skyLight, blockLight);
+        result.isMeshRebuild = req.isMeshRebuild;
+        result.meshRevision = req.meshRevision;
+        return result;
     }
 
     private static byte[] BuildPaddedFromCenter(byte[,,] center, Vector3Int coord,

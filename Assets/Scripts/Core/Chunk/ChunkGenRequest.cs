@@ -17,6 +17,12 @@ public class ChunkGenRequest
     public bool allowDiskLoad;
     public string chunkSavePath;
     public byte[,] incomingSkyLightFromAbove;
+    public byte[,,] skyLight;
+    public byte[,,] blockLight;
+    public byte[] paddedSkyLight;
+    public byte[] paddedBlockLight;
+    public bool isMeshRebuild;
+    public int meshRevision;
 
     public ChunkGenRequest(Vector3Int coord, 
         int lodScale, ChunkMeshGeneratorThreaded.NeighborLODInfo neighborLods,

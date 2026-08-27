@@ -38,6 +38,9 @@ namespace Core
         public int initialPoolSize = 20; // pre-instantiate this many chunks
 
         private ThreadedChunkWorker threadedWorker;
+        private readonly Dictionary<Vector3Int, int> requestedMeshRevisions = new Dictionary<Vector3Int, int>();
+        private readonly Queue<ChunkGenResult> completedMeshRebuilds = new Queue<ChunkGenResult>();
+        private int nextMeshRevision;
         private TickCaller tickCaller;
 
         // --- new: track pending requests so we don't enqueue duplicates
@@ -151,9 +154,32 @@ namespace Core
 
             while (applyedResults < applyLimit && threadedWorker.TryDequeueResult(out var result))
             {
-                ApplyChunkResult(result);
+                if (result.isMeshRebuild)
+                    completedMeshRebuilds.Enqueue(result);
+                else
+                    ApplyChunkResult(result);
                 applyedResults++;
             }
+            
+            // Unity Mesh objects may only be updated on the main thread. Keep that
+            // unavoidable work bounded independently from worker result collection.
+            int meshApplyBudget = Mathf.Max(1, chunksPerFrame);
+            while (meshApplyBudget-- > 0 && completedMeshRebuilds.Count > 0)
+                ApplyMeshRebuildResult(completedMeshRebuilds.Dequeue());
+        }
+        
+        private void ApplyMeshRebuildResult(ChunkGenResult result)
+        {
+            if (!chunks.TryGetValue(result.coord, out Chunk chunk) || chunk?.renderer == null)
+                return;
+
+            if (!requestedMeshRevisions.TryGetValue(result.coord, out int currentRevision) ||
+                currentRevision != result.meshRevision)
+                return;
+
+            chunk.meshData = result.meshData;
+            chunk.renderer.ApplyMeshData(result.meshData);
+            chunk.isColliderDirty = false;
         }
 
         private void ApplyChunkResult(ChunkGenResult res)
@@ -519,6 +545,7 @@ namespace Core
 
             // Make sure to remove any pending request marker
             pendingRequests.Remove(coord);
+            requestedMeshRevisions.Remove(coord);
 
             chunks.Remove(coord);
             chunkCount--;
@@ -1228,16 +1255,18 @@ namespace Core
         }
 
 
-        private (Dictionary<Vector3Int, byte[,,]> blocks, Dictionary<Vector3Int, BlockStateContainer[,,]> states) CaptureNeighborSnapshots(Vector3Int coord)
+        private (Dictionary<Vector3Int, byte[,,]> blocks, Dictionary<Vector3Int, BlockStateContainer[,,]> states) 
+            CaptureNeighborSnapshots(Vector3Int coord)
         {
             var blockDict = new Dictionary<Vector3Int, byte[,,]>();
             var stateDict = new Dictionary<Vector3Int, BlockStateContainer[,,]>();
             
-            for (int ox = -1; ox <= 1; ox++)
-            for (int oy = -1; oy <= 1; oy++)
-            for (int oz = -1; oz <= 1; oz++)
+            // The padded mesher only consumes the six shared faces. Snapshotting
+            // the other 20 surrounding chunks adds allocations without supplying
+            // any data that CopyNeighborFaces can use.
+            foreach (Vector3Int direction in dirs)
             {
-                Vector3Int nc = coord + new Vector3Int(ox, oy, oz);
+                Vector3Int nc = coord + direction;
 
                 if (!chunks.TryGetValue(nc, out Chunk c) || c.blocks == null)
                     continue;
@@ -1590,11 +1619,46 @@ namespace Core
 
         private void BuildChunkMesh(Chunk chunk)
         {
-            if (chunk == null || chunk.renderer == null)
+            if (chunk == null || chunk.renderer == null || chunk.blocks == null)
                 return;
             
-            chunk.renderer.Rebuild();
-            chunk.isColliderDirty = false;
+            int revision = ++nextMeshRevision;
+            requestedMeshRevisions[chunk.coord] = revision;
+
+            var (neighbors, neighborStates) = CaptureNeighborSnapshots(chunk.coord);
+            var request = new ChunkGenRequest(
+                chunk.coord,
+                chunk.GetLodScale(),
+                GetNeighborLODInfo(chunk.coord),
+                (byte[,,])chunk.blocks.Clone(),
+                chunk.states != null ? (BlockStateContainer[,,])chunk.states.Clone() : null,
+                true,
+                neighbors,
+                neighborStates,
+                chunk.GetSpecialMeshBlocksSnapshot());
+            request.isMeshRebuild = true;
+            request.meshRevision = revision;
+            request.skyLight = chunk.skyLight != null ? (byte[,,])chunk.skyLight.Clone() : null;
+            request.blockLight = chunk.blockLight != null ? (byte[,,])chunk.blockLight.Clone() : null;
+            CapturePaddedLightSnapshot(chunk, out request.paddedSkyLight, out request.paddedBlockLight);
+            threadedWorker.EnqueueRequest(request);
+        }
+        
+        private static void CapturePaddedLightSnapshot(Chunk chunk, out byte[] skyLight, out byte[] blockLight)
+        {
+            int size = Chunk.CHUNK_SIZE;
+            int paddedSize = size + 2;
+            skyLight = new byte[paddedSize * paddedSize * paddedSize];
+            blockLight = new byte[paddedSize * paddedSize * paddedSize];
+
+            for (int x = -1; x <= size; x++)
+            for (int y = -1; y <= size; y++)
+            for (int z = -1; z <= size; z++)
+            {
+                int index = (x + 1) + paddedSize * ((y + 1) + paddedSize * (z + 1));
+                skyLight[index] = chunk.GetSkyLight(x, y, z);
+                blockLight[index] = chunk.GetBlockLight(x, y, z);
+            }
         }
         
         
