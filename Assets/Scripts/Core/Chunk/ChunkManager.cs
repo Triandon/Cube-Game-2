@@ -379,12 +379,6 @@ namespace Core
                 chunk.coord = coord;
                 chunk.chunkManager = this;
 
-                // Reset old data
-                chunk.blocks = new byte[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
-                chunk.states = new BlockStateContainer[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
-                chunk.skyLight = new byte[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
-                chunk.blockLight = new byte[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
-
                 chunk.isDirty = false;
 
                 go.SetActive(false);
@@ -495,13 +489,13 @@ namespace Core
             
             UnregisterBlockLightSources(chunk);
 
-            int C = Chunk.CHUNK_SIZE;
-            
-            // Reset chunk state before returning to pool
-            chunk.blocks = new byte[C, C, C];
-            chunk.states = new BlockStateContainer[C, C, C];
-            chunk.skyLight = new byte[C, C, C];
-            chunk.blockLight = new byte[C, C, C];
+            // The logical chunk is discarded below; do not allocate empty replacement
+            // arrays immediately before it becomes unreachable. The pooled object is
+            // only the renderer GameObject, and a new Chunk owns the next data set.
+            chunk.blocks = null;
+            chunk.states = null;
+            chunk.skyLight = null;
+            chunk.blockLight = null;
             chunk.specialMeshBlocks.Clear();
             chunk.chunkNumber = -1;
             
