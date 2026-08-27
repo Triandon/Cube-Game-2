@@ -999,7 +999,7 @@ GameObject:
   - component: {fileID: 1080483937}
   - component: {fileID: 1080483936}
   m_Layer: 5
-  m_Name: Title (1)
+  m_Name: SubTitle
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -1044,7 +1044,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: -The custom block shape update!
+  m_text: -Day & Night Cycle Update!
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: aa2a92d459153554da20d49a4ffbb346, type: 2}
   m_sharedMaterial: {fileID: -7796660016977698176, guid: aa2a92d459153554da20d49a4ffbb346, type: 2}
@@ -1071,7 +1071,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 36
+  m_fontSize: 40
   m_fontSizeBase: 72
   m_fontWeight: 400
   m_enableAutoSizing: 1

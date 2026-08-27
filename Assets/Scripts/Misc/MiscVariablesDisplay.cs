@@ -10,7 +10,8 @@ public class MiscVariablesDisplay : MonoBehaviour
     public TextMeshProUGUI RenderDistanceText;
     public TextMeshProUGUI chunkBuilding;
     public TextMeshProUGUI playerCordsText, usernameDisplayText, currentLodDistanceText;
-    public TextMeshProUGUI chunkClimateText, genQue, transQue, meshQue, loadQue;
+    public TextMeshProUGUI chunkClimateText, genQue, transQue, meshQue, loadQue,
+        clock, dayCounter;
 
     [SerializeField] private GameObject keyInfo, debugPanel, chatBoxGO, cursorGO;
     
@@ -19,6 +20,7 @@ public class MiscVariablesDisplay : MonoBehaviour
     private int renderDistance;
     private int chunksCurrentlyBuilding;
     private Vector3Int playerPos;
+    private World world;
 
     public Transform player;
 
@@ -29,12 +31,17 @@ public class MiscVariablesDisplay : MonoBehaviour
 
     private static readonly int LightingDebugModeID = Shader.PropertyToID("_LightingDebugMode");
     private bool lightingDebugMode;
-    
+
+    private void Awake()
+    {
+        chunkManager = FindAnyObjectByType<ChunkManager>();
+        world = FindAnyObjectByType<World>();
+    }
+
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
     {
         SetLightingDebugMode(false);
-        chunkManager = FindAnyObjectByType<ChunkManager>();
         settings = Settings.Instance;
         if (settings != null)
         {
@@ -71,6 +78,9 @@ public class MiscVariablesDisplay : MonoBehaviour
         
         chunkClimateText.text =
             $"Chunk Climate | T: {climate.temperature:F2} H: {climate.humidity:F2}";
+
+        clock.text = "" + world.worldTime;
+        dayCounter.text = "Day " + world.dayCounter;
 
         if (!chatBox.isFocused)
         {

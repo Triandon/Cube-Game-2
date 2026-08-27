@@ -13,6 +13,10 @@ namespace Core
 
         [Header("Lighting SunLight")] [Range(0f, 1f)]
         public float SunLight = 1f;
+        public int worldTime = 1200;
+        private float timer;
+        public int dayCounter = 0;
+        public AnimationCurve sunlightCurve;
         
         private static readonly int SunLightShaderId = Shader.PropertyToID("_SunLight");
 
@@ -41,6 +45,8 @@ namespace Core
         {
             ApplySunLight();
             tickCaller?.Tick(Time.deltaTime);
+            UpdateSunLight();
+            DayCycle();
         }
 
         private void OnValidate()
@@ -83,6 +89,51 @@ namespace Core
                 worldPos.x >= 0 && worldPos.x < worldSize * Chunk.CHUNK_SIZE &&
                 worldPos.z >= 0 && worldPos.z < worldSize * Chunk.CHUNK_SIZE &&
                 worldPos.y >= 0 && worldPos.y < worldSizeY * Chunk.CHUNK_SIZE;
+        }
+
+        private void DayCycle()
+        {
+            timer += Time.deltaTime;
+
+            // 1 sec = 1 in game minute
+            if (timer >= 1f)
+            {
+                timer -= 1f;
+
+                worldTime++;
+                int minutes = worldTime % 100;
+
+                if (minutes >= 60)
+                {
+                    worldTime += 40;
+                }
+
+                if (worldTime >= 2400)
+                {
+                    worldTime = 0;
+                    dayCounter++;
+                    Debug.Log("New Day, your at day " + dayCounter);
+                }
+
+                //Debug.Log("Time: " + worldTime);
+            }
+        }
+        
+        private void UpdateSunLight()
+        {
+            int hours = worldTime / 100;
+            int minutes = worldTime % 100;
+
+            // Convert the current clock into minutes since midnight.
+            float totalMinutes = (hours * 60) + minutes;
+
+            // Add the partial real second so the lighting moves smoothly.
+            totalMinutes += timer;
+
+            // Convert 0-1440 minutes into 0-1.
+            float dayProgress = totalMinutes / 1440f;
+
+            SunLight = sunlightCurve.Evaluate(dayProgress);
         }
     }
 }
