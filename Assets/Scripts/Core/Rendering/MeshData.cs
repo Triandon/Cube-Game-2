@@ -247,7 +247,7 @@ public static class ChunkMeshGeneratorThreaded
 
         if (hasSpecialMeshBlocks)
         {
-            AppendStateDrivenMeshes(getBlock, getState, mesh, specialMeshBlocks);
+            AppendStateDrivenMeshes(getBlock, getState, getSkyLight, getBlockLight, mesh, specialMeshBlocks);
         }
         return mesh;
     }
@@ -800,6 +800,8 @@ public static class ChunkMeshGeneratorThreaded
     private static void AppendStateDrivenMeshes(
         Func<int, int, int, byte> getBlock,
         Func<int, int, int, BlockStateContainer> getState,
+        Func<int, int, int, byte> getSkyLight,
+        Func<int, int, int, byte> getBlockLight,
         MeshData mesh, IReadOnlyCollection<Vector3Int> specialMeshBlocks)
     {
         Vector3Int[] dirs =
@@ -826,23 +828,23 @@ public static class ChunkMeshGeneratorThreaded
             Block block = GetBlockInfo(blockId);
             if (block != null && block.shapeIndex == (int)BlockShapes.Triangle)
             {
-                AddTrianglePrismMesh(getBlock, getState, x, y, z, blockId, state, mesh);
+                AddTrianglePrismMesh(getBlock, getState, getSkyLight, getBlockLight, x, y, z, blockId, state, mesh);
                 continue;
             }
             if (block != null && block.shapeIndex == (int)BlockShapes.Pyramid)
             {
-                AddPyramidMesh(getBlock, getState, x, y, z, blockId, state, mesh);
+                AddPyramidMesh(getBlock, getState, getSkyLight, getBlockLight, x, y, z, blockId, state, mesh);
                 continue;
             }
 
             if (block != null && block.shapeIndex == (int)BlockShapes.CornerTriangle)
             {
-                AddCornerRampMesh(getBlock, getState, x, y, z, blockId, state, mesh);
+                AddCornerRampMesh(getBlock, getState, getSkyLight, getBlockLight, x, y, z, blockId, state, mesh);
                 continue;
             }
             if (block != null && block.shapeIndex == (int)BlockShapes.InvertedCornerTriangle)
             {
-                AddInvertedCornerRampMesh(getBlock, getState, x, y, z, blockId, state, mesh);
+                AddInvertedCornerRampMesh(getBlock, getState, getSkyLight, getBlockLight, x, y, z, blockId, state, mesh);
                 continue;
             }
 
@@ -859,7 +861,8 @@ public static class ChunkMeshGeneratorThreaded
                 if (atlasIndex < 0)
                     continue;
 
-                AddStateDrivenQuad(new Vector3(x, y, z), min, max, dir, atlasIndex, mesh, blockId, state);
+                byte light = SampleCustomFaceLight(getSkyLight, getBlockLight, x, y, z, dir);
+                AddStateDrivenQuad(new Vector3(x, y, z), min, max, dir, atlasIndex, mesh, blockId, state, light);
             }
         }
 
@@ -869,6 +872,8 @@ public static class ChunkMeshGeneratorThreaded
     private static void AddCornerRampMesh(
         Func<int, int, int, byte> getBlock,
         Func<int, int, int, BlockStateContainer> getState,
+        Func<int, int, int, byte> getSkyLight,
+        Func<int, int, int, byte> getBlockLight,
         int x,
         int y,
         int z,
@@ -894,24 +899,26 @@ public static class ChunkMeshGeneratorThreaded
 
         if (ShouldRenderTrianglePrismBoundaryFace(getBlock, getState, x, y, z, Vector3Int.down))
         {
-            AddTrianglePrismFace(mesh, blockOffset, baseVertices, new[] { 0, 1, 3, 2 }, Vector3Int.down,
-                GetAtlasIndex(blockId, state, Vector3Int.down), blockId);
+            AddTrianglePrismFace(mesh, blockOffset, baseVertices, new[] { 0, 1, 3, 2 }, Vector3Int.down, 
+                GetAtlasIndex(blockId, state, Vector3Int.down), blockId, SampleCustomFaceLight(getSkyLight, getBlockLight, x, y, z, Vector3Int.down));
         }
 
         // Same layout as the working 3-corner variant, with one extra bottom corner.
         AddTrianglePrismFace(mesh, blockOffset, baseVertices, new[] { 0, 2, 4 }, Vector3Int.left,
-            GetAtlasIndex(blockId, state, Vector3Int.left), blockId);
+            GetAtlasIndex(blockId, state, Vector3Int.left), blockId, SampleCustomFaceLight(getSkyLight, getBlockLight, x, y, z, Vector3Int.left));
         AddTrianglePrismFace(mesh, blockOffset, baseVertices, new[] { 0, 4, 1 }, Vector3Int.up,
-            GetAtlasIndex(blockId, state, Vector3Int.up), blockId);
+            GetAtlasIndex(blockId, state, Vector3Int.up), blockId, SampleCustomFaceLight(getSkyLight, getBlockLight, x, y, z, Vector3Int.up));
         AddTrianglePrismFace(mesh, blockOffset, baseVertices, new[] { 1, 4, 3 }, Vector3Int.right,
-            GetAtlasIndex(blockId, state, Vector3Int.right), blockId);
+            GetAtlasIndex(blockId, state, Vector3Int.right), blockId, SampleCustomFaceLight(getSkyLight, getBlockLight, x, y, z, Vector3Int.right));
         AddTrianglePrismFace(mesh, blockOffset, baseVertices, new[] { 2, 3, 4 }, Vector3Int.forward,
-            GetAtlasIndex(blockId, state, Vector3Int.forward), blockId);
+            GetAtlasIndex(blockId, state, Vector3Int.forward), blockId, SampleCustomFaceLight(getSkyLight, getBlockLight, x, y, z, Vector3Int.forward));
     }
     
     private static void AddInvertedCornerRampMesh(
         Func<int, int, int, byte> getBlock,
         Func<int, int, int, BlockStateContainer> getState,
+        Func<int, int, int, byte> getSkyLight,
+        Func<int, int, int, byte> getBlockLight,
         int x,
         int y,
         int z,
@@ -941,31 +948,33 @@ public static class ChunkMeshGeneratorThreaded
         if (ShouldRenderTrianglePrismBoundaryFace(getBlock, getState, x, y, z, Vector3Int.down))
         {
             AddTrianglePrismFace(mesh, blockOffset, verts, new[] { 0, 1, 3, 2 }, Vector3Int.down,
-                GetAtlasIndex(blockId, state, Vector3Int.down), blockId);
+                GetAtlasIndex(blockId, state, Vector3Int.down), blockId, SampleCustomFaceLight(getSkyLight, getBlockLight, x, y, z, Vector3Int.down));
         }
 
         // Top with 3 corners
         AddTrianglePrismFace(mesh, blockOffset, verts, new[] { 5, 4, 6 }, Vector3Int.up,
-            GetAtlasIndex(blockId, state, Vector3Int.up), blockId);
+            GetAtlasIndex(blockId, state, Vector3Int.up), blockId, SampleCustomFaceLight(getSkyLight, getBlockLight, x, y, z, Vector3Int.up));
 
         // Two flat sides
         AddTrianglePrismFace(mesh, blockOffset, verts, new[] { 1, 5, 2, 6 }, Vector3Int.right,
-            GetAtlasIndex(blockId, state, Vector3Int.right), blockId);
+            GetAtlasIndex(blockId, state, Vector3Int.right), blockId, SampleCustomFaceLight(getSkyLight, getBlockLight, x, y, z, Vector3Int.right));
         AddTrianglePrismFace(mesh, blockOffset, verts, new[] { 3, 2, 4, 6 }, Vector3Int.forward,
-            GetAtlasIndex(blockId, state, Vector3Int.forward), blockId);
+            GetAtlasIndex(blockId, state, Vector3Int.forward), blockId, SampleCustomFaceLight(getSkyLight, getBlockLight, x, y, z, Vector3Int.forward));
 
         // Remaining ramped faces
         AddTrianglePrismFace(mesh, blockOffset, verts, new[] { 0, 5, 1 }, Vector3Int.back,
-            GetAtlasIndex(blockId, state, Vector3Int.back), blockId);
+            GetAtlasIndex(blockId, state, Vector3Int.back), blockId, SampleCustomFaceLight(getSkyLight, getBlockLight, x, y, z, Vector3Int.back));
         AddTrianglePrismFace(mesh, blockOffset, verts, new[] { 0, 3, 4 }, Vector3Int.left,
-            GetAtlasIndex(blockId, state, Vector3Int.left), blockId);
+            GetAtlasIndex(blockId, state, Vector3Int.left), blockId, SampleCustomFaceLight(getSkyLight, getBlockLight, x, y, z, Vector3Int.left));
         AddTrianglePrismFace(mesh, blockOffset, verts, new[] { 0, 4, 5 }, Vector3Int.up,
-            GetAtlasIndex(blockId, state, Vector3Int.up), blockId);
+            GetAtlasIndex(blockId, state, Vector3Int.up), blockId, SampleCustomFaceLight(getSkyLight, getBlockLight, x, y, z, Vector3Int.up));
     }
 
     private static void AddPyramidMesh(
         Func<int, int, int, byte> getBlock,
         Func<int, int, int, BlockStateContainer> getState,
+        Func<int, int, int, byte> getSkyLight,
+        Func<int, int, int, byte> getBlockLight,
         int x,
         int y,
         int z,
@@ -986,23 +995,25 @@ public static class ChunkMeshGeneratorThreaded
         if (ShouldRenderTrianglePrismBoundaryFace(getBlock, getState, x, y, z, Vector3Int.down))
         {
             AddTrianglePrismFace(mesh, blockOffset, pyramidVerts, new[] { 0, 1, 3, 2 }, Vector3Int.down,
-                GetAtlasIndex(blockId, state, Vector3Int.down), blockId);
+                GetAtlasIndex(blockId, state, Vector3Int.down), blockId, SampleCustomFaceLight(getSkyLight, getBlockLight, x, y, z, Vector3Int.down));
         }
 
         // Pyramid side faces are sloped and should always render, even with neighbors.
         AddTrianglePrismFace(mesh, blockOffset, pyramidVerts, new[] { 0, 4, 1 }, Vector3Int.back,
-            GetAtlasIndex(blockId, state, Vector3Int.back), blockId);
+            GetAtlasIndex(blockId, state, Vector3Int.back), blockId, SampleCustomFaceLight(getSkyLight, getBlockLight, x, y, z, Vector3Int.back));
         AddTrianglePrismFace(mesh, blockOffset, pyramidVerts, new[] { 1, 4, 2 }, Vector3Int.right,
-            GetAtlasIndex(blockId, state, Vector3Int.right), blockId);
+            GetAtlasIndex(blockId, state, Vector3Int.right), blockId, SampleCustomFaceLight(getSkyLight, getBlockLight, x, y, z, Vector3Int.right));
         AddTrianglePrismFace(mesh, blockOffset, pyramidVerts, new[] { 2, 4, 3 }, Vector3Int.forward,
-            GetAtlasIndex(blockId, state, Vector3Int.forward), blockId);
+            GetAtlasIndex(blockId, state, Vector3Int.forward), blockId, SampleCustomFaceLight(getSkyLight, getBlockLight, x, y, z, Vector3Int.forward));
         AddTrianglePrismFace(mesh, blockOffset, pyramidVerts, new[] { 3, 4, 0 }, Vector3Int.left,
-            GetAtlasIndex(blockId, state, Vector3Int.left), blockId);
+            GetAtlasIndex(blockId, state, Vector3Int.left), blockId, SampleCustomFaceLight(getSkyLight, getBlockLight, x, y, z, Vector3Int.left));
     }
 
     private static void AddTrianglePrismMesh(
         Func<int, int, int, byte> getBlock,
         Func<int, int, int, BlockStateContainer> getState,
+        Func<int, int, int, byte> getSkyLight,
+        Func<int, int, int, byte> getBlockLight,
         int x,
         int y,
         int z,
@@ -1031,7 +1042,7 @@ public static class ChunkMeshGeneratorThreaded
         if (ShouldRenderTrianglePrismBoundaryFace(getBlock, getState, x, y, z, Vector3Int.down))
         {
             AddTrianglePrismFace(mesh, blockOffset, baseVertices, new[] { 0, 1, 2, 3 }, Vector3Int.down,
-                GetAtlasIndex(blockId, state, Vector3Int.down), blockId);
+                GetAtlasIndex(blockId, state, Vector3Int.down), blockId, SampleCustomFaceLight(getSkyLight, getBlockLight, x, y, z, Vector3Int.down));
         }
 
         // vertical back face
@@ -1039,7 +1050,7 @@ public static class ChunkMeshGeneratorThreaded
         if (ShouldRenderTrianglePrismBoundaryFace(getBlock, getState, x, y, z, backDir))
         {
             AddTrianglePrismFace(mesh, blockOffset, baseVertices, new[] { 2, 3, 4, 5 }, backDir,
-                GetAtlasIndex(blockId, state, backDir), blockId);
+                GetAtlasIndex(blockId, state, backDir), blockId, SampleCustomFaceLight(getSkyLight, getBlockLight, x, y, z, backDir));
         }
 
         // side triangle faces
@@ -1047,19 +1058,19 @@ public static class ChunkMeshGeneratorThreaded
         if (ShouldRenderTrianglePrismBoundaryFace(getBlock, getState, x, y, z, leftDir))
         {
             AddTrianglePrismFace(mesh, blockOffset, baseVertices, new[] { 0, 2, 4 }, leftDir,
-                GetAtlasIndex(blockId, state, leftDir), blockId);
+                GetAtlasIndex(blockId, state, leftDir), blockId, SampleCustomFaceLight(getSkyLight, getBlockLight, x, y, z, leftDir));
         }
 
         Vector3Int rightDir = RotateDirClockwise(Vector3Int.right, turns);
         if (ShouldRenderTrianglePrismBoundaryFace(getBlock, getState, x, y, z, rightDir))
         {
             AddTrianglePrismFace(mesh, blockOffset, baseVertices, new[] { 1, 5, 3 }, rightDir,
-                GetAtlasIndex(blockId, state, rightDir), blockId);
+                GetAtlasIndex(blockId, state, rightDir), blockId, SampleCustomFaceLight(getSkyLight, getBlockLight, x, y, z, rightDir));
         }
 
         // sloped face is always rendered
         AddTrianglePrismFace(mesh, blockOffset, baseVertices, new[] { 0, 4, 1, 5 }, Vector3Int.up,
-            GetAtlasIndex(blockId, state, Vector3Int.up), blockId);
+            GetAtlasIndex(blockId, state, Vector3Int.up), blockId, SampleCustomFaceLight(getSkyLight, getBlockLight, x, y, z, Vector3Int.up));
     }
 
     private static bool ShouldRenderTrianglePrismBoundaryFace(
@@ -1081,7 +1092,8 @@ public static class ChunkMeshGeneratorThreaded
         int[] indices,
         Vector3Int fallbackNormal,
         int atlasIndex,
-        byte blockId)
+        byte blockId,
+        byte light)
     {
         if (atlasIndex < 0)
             return;
@@ -1104,8 +1116,7 @@ public static class ChunkMeshGeneratorThreaded
         }
 
         AddPrismFaceUV(indices.Length, atlasIndex, mesh);
-        AddVertexLight(mesh, indices.Length, VoxelLight.Pack(
-            VoxelLight.Max, VoxelLight.Min));
+        AddVertexLight(mesh, indices.Length, light);
     }
 
     private static ushort PackAtlasTileIndex(int textureID)
@@ -1284,7 +1295,8 @@ public static class ChunkMeshGeneratorThreaded
         Vector3 max,
         Vector3Int dir,
         int atlasIndex,
-        MeshData mesh, byte blockId, BlockStateContainer state)
+        MeshData mesh, byte blockId, BlockStateContainer state,
+        byte light)
     {
         Vector3[] quad =
         {
@@ -1368,6 +1380,7 @@ public static class ChunkMeshGeneratorThreaded
 
         bool stretchTexture = IsStretchy(blockId);
         AddStateDrivenFaceUV(dir, quad, atlasIndex, stretchTexture, GetFacing(state), mesh);
+        AddVertexLight(mesh, 4, light);
     }
 
     private static void AddStateDrivenFaceUV(
@@ -1668,6 +1681,21 @@ public static class ChunkMeshGeneratorThreaded
         }
 
         return VoxelLight.Pack(sky, block);
+    }
+    
+    // Custom faces are not necessarily located on a full voxel boundary. Sample
+    // the cell outside the face first, just like a cube face, and fall back to the
+    // custom block's own (transparent) light value for inset and sloped surfaces.
+    private static byte SampleCustomFaceLight(
+        Func<int, int, int, byte> getSkyLight,
+        Func<int, int, int, byte> getBlockLight,
+        int x, int y, int z,
+        Vector3Int outwardDirection)
+    {
+        return SampleFaceLight(
+            getSkyLight, getBlockLight,
+            x + outwardDirection.x, y + outwardDirection.y, z + outwardDirection.z,
+            x, y, z);
     }
 
     private static void AddVertexLight(MeshData mesh, int vertexCount, byte light)

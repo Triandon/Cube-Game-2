@@ -19,6 +19,7 @@ namespace Core
         public AnimationCurve sunlightCurve;
         
         private static readonly int SunLightShaderId = Shader.PropertyToID("_SunLight");
+        private static readonly int SkyboxExposureId = Shader.PropertyToID("_Exposure");
 
         private TickCaller tickCaller;
         
@@ -43,9 +44,9 @@ namespace Core
         
         void Update()
         {
-            ApplySunLight();
             tickCaller?.Tick(Time.deltaTime);
             UpdateSunLight();
+            ApplySunLight();
             DayCycle();
         }
 
@@ -57,7 +58,16 @@ namespace Core
 
         private void ApplySunLight()
         {
-            Shader.SetGlobalFloat(SunLightShaderId, Mathf.Clamp01(SunLight));
+            float lightLevel = Mathf.Clamp01(SunLight);
+            float a = Mathf.Pow(lightLevel, 2);
+            Shader.SetGlobalFloat(SunLightShaderId, lightLevel);
+
+            Material skyboxMaterial = RenderSettings.skybox;
+            if (skyboxMaterial != null && skyboxMaterial.HasProperty(SkyboxExposureId))
+            {
+                skyboxMaterial.SetFloat(SkyboxExposureId, a);
+            }
+
         }
 
         public TickCaller GetTickCaller()
