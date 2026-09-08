@@ -19,11 +19,12 @@ namespace Core
 
         private Dictionary<Vector3Int, Chunk> chunks = new Dictionary<Vector3Int, Chunk>();
         private Vector3Int playerChunkCord;
-        private Vector3 lastChunkUpdatePosition;
         public int chunkCount;
 
         public HashSet<Chunk> meshQue = new HashSet<Chunk>(); //mabye make private
         private Queue<GameObject> chunkPool = new Queue<GameObject>();
+        private readonly Queue<Vector3Int> chunkUnloadQueue = new Queue<Vector3Int>();
+        private readonly HashSet<Vector3Int> queuedChunkUnloads = new HashSet<Vector3Int>();
         public HashSet<Vector3Int> generationQue = new HashSet<Vector3Int>(); //p
         public Queue<(Chunk chunk, Vector3Int tragetPos)> transformQueue =
             new Queue<(Chunk chunk, Vector3Int tragetPos)>(); //p
@@ -94,7 +95,6 @@ namespace Core
             threadedWorker.Start();
 
             UpdatePlayerChunkCoord();
-            lastChunkUpdatePosition = player != null ? player.position : Vector3.zero;
             UpdateChunks();
         }
 
@@ -108,10 +108,9 @@ namespace Core
             ProcessLightingIntegration();
             SaveSkyOcclusionMapAfterDelay();
             
-            if (HasMovedChunkDistance())
+            if (HasEnteredAnotherChunk())
             {
                 playerChunkCord = GetPlayerChunkCoord();
-                lastChunkUpdatePosition = player.position;
                 UpdateChunks();
                 UpdateChunkLODs();
             }
@@ -325,15 +324,9 @@ namespace Core
             playerChunkCord = GetPlayerChunkCoord();
         }
         
-        private bool HasMovedChunkDistance()
+        private bool HasEnteredAnotherChunk()
         {
-            if (player == null)
-                return false;
-
-            Vector3 delta = player.position - lastChunkUpdatePosition;
-            return Mathf.Abs(delta.x) >= Chunk.CHUNK_SIZE ||
-                   Mathf.Abs(delta.y) >= Chunk.CHUNK_SIZE ||
-                   Mathf.Abs(delta.z) >= Chunk.CHUNK_SIZE;
+            return player != null && GetPlayerChunkCoord() != playerChunkCord;
         }
 
 
@@ -378,10 +371,19 @@ namespace Core
 
             foreach (var key in chunksToRemove)
             {
-                Chunk chunk = chunks[key];
-                RemoveChunk(chunk, key);
+                if (queuedChunkUnloads.Add(key))
+                    chunkUnloadQueue.Enqueue(key);
             }
         }
+        
+        private bool IsInsideCurrentView(Vector3Int coord)
+        {
+            Vector3Int offset = coord - playerChunkCord;
+            return Mathf.Abs(offset.x) <= viewDistance &&
+                   Mathf.Abs(offset.y) <= viewDistance &&
+                   Mathf.Abs(offset.z) <= viewDistance;
+        }
+        
         
         private static readonly Vector3Int[] dirs =
         {
@@ -548,6 +550,7 @@ namespace Core
             requestedMeshRevisions.Remove(coord);
 
             chunks.Remove(coord);
+            queuedChunkUnloads.Remove(coord);
             chunkCount--;
         }
 
@@ -1865,6 +1868,10 @@ namespace Core
         
         private void SortChunksLists()
         {
+            // Unloading performs tick/light cleanup and can save to disk. Spreading
+            // the outgoing slab over frames prevents a chunk-boundary main-thread hitch.
+            ProcessChunkUnloads();
+
             // Generation QUE and sorting!
             
             int generatingChunksThisFrame = Mathf.Min(chunksPerFrame, generationQue.Count) * 3 + 2;
@@ -1925,6 +1932,23 @@ namespace Core
             }
             //Debug.Log(generationQue.Count+ " " + meshQue.Count + " " + transformQueue.Count);
             //Debug.Log(meshQue);
+        }
+        
+        private void ProcessChunkUnloads()
+        {
+            int budget = Mathf.Min(1, Mathf.CeilToInt(chunksPerFrame/2));
+            while (budget-- > 0 && chunkUnloadQueue.Count > 0)
+            {
+                Vector3Int coord = chunkUnloadQueue.Dequeue();
+                queuedChunkUnloads.Remove(coord);
+
+                // The player can turn around before a deferred unload is reached.
+                if (IsInsideCurrentView(coord))
+                    continue;
+
+                if (chunks.TryGetValue(coord, out Chunk chunk))
+                    RemoveChunk(chunk, coord);
+            }
         }
 
         private void SetLodDistance()
