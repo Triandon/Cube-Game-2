@@ -29,6 +29,8 @@ namespace Core
         public Queue<(Chunk chunk, Vector3Int tragetPos)> transformQueue =
             new Queue<(Chunk chunk, Vector3Int tragetPos)>(); //p
 
+        private readonly HashSet<Chunk> queueChunkActivations = new HashSet<Chunk>();
+
         // How many chunks should be building at once.
         public int chunksPerFrame = 4;
         public int visualChunksPerFrame = 4;
@@ -179,6 +181,15 @@ namespace Core
             chunk.meshData = result.meshData;
             chunk.renderer.ApplyMeshData(result.meshData);
             chunk.isColliderDirty = false;
+            
+            // A pooled renderer stays inactive while its replacement mesh is built.
+            // Activating it earlier registers the old, potentially large mesh with
+            // Unity's renderer and causes the chunk-boundary Transform/SetActive spike.
+            if (!chunk.renderer.gameObject.activeSelf && queueChunkActivations.Add(chunk))
+            {
+                transformQueue.Enqueue((chunk, chunk.coord * Chunk.CHUNK_SIZE));
+            }
+
         }
 
         private void ApplyChunkResult(ChunkGenResult res)
@@ -410,15 +421,10 @@ namespace Core
                 chunk.isDirty = false;
 
                 go.SetActive(false);
-                //if (go.transform.position != worldPos)
-                //{
-                    //transformQueue.Enqueue((chunk, worldPos));
-                //}
-                
-                // Always enqueue pooled chunks so they become active again,
-                // even when reused at the same world position.
-                transformQueue.Enqueue((chunk,worldPos));
-                
+                // Moving an inactive transform is cheap. Keep it inactive until its
+                // new mesh has been applied; otherwise SetActive registers the stale
+                // pooled mesh and can monopolize this frame's main-thread time.
+                go.transform.position = worldPos;
             }
             else
             {
@@ -426,7 +432,7 @@ namespace Core
                 chunk.coord = coord;
                 chunk.chunkManager = this;
                 go.transform.position = worldPos;
-                go.SetActive(true);
+                go.SetActive(false);
             }
 
             chunk.chunkNumber = chunkNumber;
@@ -1889,12 +1895,13 @@ namespace Core
             
             if (transformQueue.Count > 0)
             {
-                int transformChunksThisFrame = Mathf.Min(chunksPerFrame, transformQueue.Count);
+                int transformChunksThisFrame = Mathf.Max(1, Mathf.CeilToInt(chunksPerFrame/3));
             
                 //Transform que
                 for (int i = 0; i < transformChunksThisFrame; i++)
                 {
                     var t = transformQueue.Dequeue();
+                    queueChunkActivations.Remove(t.chunk);
                     if (t.chunk != null && t.chunk.renderer != null
                         && t.chunk.renderer.gameObject != null && 
                         chunks.ContainsKey(t.chunk.coord))
@@ -1919,13 +1926,11 @@ namespace Core
                 for (int i = 0; i < sortedChunks.Count; i++)
                 {
                     Chunk chunkToBuild = sortedChunks[i];
-                    if (chunkToBuild != null && chunkToBuild.renderer.gameObject != null &&
-                        chunkToBuild.renderer.gameObject.activeInHierarchy)
+                    if (chunkToBuild != null && chunkToBuild.renderer.gameObject != null)
                     {
                         BuildChunkMesh(chunkToBuild);
                         
                         // Remove only when the chunk is scheduled for the rebuild.
-                        // If inactive, (still waiting in trans que) keep it que
                         meshQue.Remove(chunkToBuild);
                     }
                 }
@@ -1936,7 +1941,7 @@ namespace Core
         
         private void ProcessChunkUnloads()
         {
-            int budget = Mathf.Min(1, Mathf.CeilToInt(chunksPerFrame/2));
+            int budget = Mathf.Max(1, Mathf.CeilToInt(chunksPerFrame/3));
             while (budget-- > 0 && chunkUnloadQueue.Count > 0)
             {
                 Vector3Int coord = chunkUnloadQueue.Dequeue();
