@@ -7,6 +7,7 @@ public class Settings : MonoBehaviour
     
     public string userName;
     public int lodDistance = 32;
+    public int minTargetedFps = 32;
 
     private void Awake()
     {

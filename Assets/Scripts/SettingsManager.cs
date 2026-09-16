@@ -6,9 +6,9 @@ public class SettingsManager : MonoBehaviour
 {
     private Settings settings;
     
-    public TextMeshProUGUI userNameDisplayText, currentLodDistanceText;
+    public TextMeshProUGUI userNameDisplayText, currentLodDistanceText, currentMinTargetFPSText;
     public TMP_InputField userNameChatBox;
-    [SerializeField] private Slider slider;
+    [SerializeField] private Slider lodsSlider, minFpsSlider;
     
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
@@ -17,12 +17,22 @@ public class SettingsManager : MonoBehaviour
         
         UpdateUserNameDisplay();
 
-        slider.value = settings.lodDistance;
+        // Lods slider
+        lodsSlider.value = settings.lodDistance;
         
-        slider.onValueChanged.AddListener((v) =>
+        lodsSlider.onValueChanged.AddListener((v) =>
         {
             currentLodDistanceText.text = v.ToString();
             settings.lodDistance = (int)v;
+        });
+        
+        //min fps slider
+        minFpsSlider.value = settings.minTargetedFps;
+        
+        minFpsSlider.onValueChanged.AddListener((v) =>
+        {
+            currentMinTargetFPSText.text = v.ToString();
+            settings.minTargetedFps = (int)v;
         });
     }
 
@@ -39,6 +49,7 @@ public class SettingsManager : MonoBehaviour
         }
 
         currentLodDistanceText.text = settings.lodDistance.ToString();
+        currentMinTargetFPSText.text = settings.minTargetedFps.ToString();
     }
 
     public void SubmitUserNameChanges()
