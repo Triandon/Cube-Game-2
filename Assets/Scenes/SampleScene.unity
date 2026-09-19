@@ -7174,7 +7174,9 @@ MonoBehaviour:
   viewDistance: 6
   colliderDistance: 2
   chunkCount: 0
-  chunksPerFrame: 100
+  estimatedWorkItemMs: 0.5
+  maximumEstimatedGraceSeconds: 10
+  workerBacklogPerThread: 2
   visualChunksPerFrame: 4
   initialPoolSize: 20
 --- !u!4 &2008103919
@@ -7305,9 +7307,14 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 54904ee435bec764191e01209d942b09, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Core.FrameWorkBudget
-  maximumFrameBudgetFraction: 0.25
-  frameBudgetSafetyMarginMs: 1
-  minimumFrameBudgetMs: 0.25
+  frameTimeReserveFraction: 0.023
+  initialBudgetFraction: 0.25
+  minimumBudgetFraction: 0.01
+  budgetAdjustmentInterval: 0.25
+  budgetIncreaseMs: 0.5
+  budgetDecreaseMultiplier: 0.75
+  initialGraceSeconds: 15
+  graceBudgetMultiplier: 2
   dynamicChunkRendering: 1
 --- !u!1 &2023732279
 GameObject:

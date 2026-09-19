@@ -31,8 +31,10 @@ namespace Core
 
         private readonly HashSet<Chunk> queueChunkActivations = new HashSet<Chunk>();
 
-        // How many chunks should be building at once.
-        public int chunksPerFrame = 4;
+        [Header("Time Budgeting")]
+        [SerializeField, Min(0.01f)] private float estimatedWorkItemMs = 0.5f;
+        [SerializeField, Min(0.25f)] private float maximumEstimatedGraceSeconds = 10f;
+        [SerializeField, Min(1)] private int workerBacklogPerThread = 2;
         public int visualChunksPerFrame = 4;
 
         private FrameWorkBudget frameWorkBudget;
@@ -51,6 +53,7 @@ namespace Core
         
         private Settings settings;
         private int lodDistance;
+        private int lastObservedViewDistance;
         private LightPropagator lightPropagator;
         private ChunkLightWorld lightWorld;
         private readonly Queue<Chunk> lightQueue = new Queue<Chunk>();
@@ -85,6 +88,7 @@ namespace Core
         {
             settings = Settings.Instance;
             SetLodDistance();
+            lastObservedViewDistance = viewDistance;
             tickCaller = World.Instance != null ? World.Instance.GetTickCaller() : null;
             
             BlockRegistry.BuildThreadLookup();
@@ -103,6 +107,7 @@ namespace Core
         void Update()
         {
             UpdateFrameWorkBudget();
+            visualChunksPerFrame = 0;
 
             // Pull worker results onto the main thread immediately
             ProcessWorkerResults();
@@ -146,29 +151,26 @@ namespace Core
         private void ProcessWorkerResults()
         {
             if (threadedWorker == null) return;
-
-            //This limits the amount of chunks that gets applyed to the main thread from the sepperate thread.
-            int applyedResults = 0;
-            int a = chunksPerFrame * 5 + 1;
-            int applyLimit = Mathf.Max(0, a);
-
-            while (applyedResults < applyLimit &&
-                   frameWorkBudget.hasTimeRemaining &&
-                   threadedWorker.TryDequeueResult(out var result) )
+            
+            while (frameWorkBudget.HasTimeRemaining(0.20) &&
+                   threadedWorker.TryDequeueResult(out var result))
             {
                 if (result.isMeshRebuild)
                     completedMeshRebuilds.Enqueue(result);
                 else
                     ApplyChunkResult(result);
-                applyedResults++;
+                visualChunksPerFrame++;
             }
             
             // Unity Mesh objects may only be updated on the main thread. Keep that
             // unavoidable work bounded independently from worker result collection.
-            int meshApplyBudget = Mathf.Max(1, chunksPerFrame);
-            while (meshApplyBudget-- > 0 && completedMeshRebuilds.Count > 0 &&
-                   frameWorkBudget.hasTimeRemaining)
+            while (completedMeshRebuilds.Count > 0 &&
+                   frameWorkBudget.HasTimeRemaining(0.25))
+            {
                 ApplyMeshRebuildResult(completedMeshRebuilds.Dequeue());
+                visualChunksPerFrame++;
+            }
+                
         }
         
         private void ApplyMeshRebuildResult(ChunkGenResult result)
@@ -345,6 +347,8 @@ namespace Core
 
         public void UpdateChunks()
         {
+            int previousQueuedWork = GetQueuedWorkCount();
+            bool renderDistanceChanged = viewDistance != lastObservedViewDistance;
             HashSet<Vector3Int> neededChunks = new HashSet<Vector3Int>();
 
             // Determine which chunks should exist
@@ -387,6 +391,42 @@ namespace Core
                 if (queuedChunkUnloads.Add(key))
                     chunkUnloadQueue.Enqueue(key);
             }
+            
+            if (renderDistanceChanged)
+            {
+                int changedWork = Math.Max(1, Math.Abs(GetQueuedWorkCount() - previousQueuedWork));
+                float estimatedSeconds = EstimateGraceSeconds(changedWork);
+                frameWorkBudget.BeginGrace(estimatedSeconds);
+                lastObservedViewDistance = viewDistance;
+            }
+        }
+        
+        private int GetQueuedWorkCount()
+        {
+            return generationQue.Count + transformQueue.Count + meshQue.Count +
+                   chunkUnloadQueue.Count + lightQueue.Count + skyRepairQueue.Count +
+                   completedMeshRebuilds.Count;
+        }
+
+        private float EstimateGraceSeconds(int workItems)
+        {
+            int targetFps = settings != null ? Math.Max(1, settings.minTargetedFps) : 32;
+            double estimatedBudgetPerFrame = Math.Max(0.01, frameWorkBudget.BudgetMs * 2.0);
+            double estimatedFrames = workItems * estimatedWorkItemMs / estimatedBudgetPerFrame;
+            return Mathf.Clamp((float)(estimatedFrames / targetFps), 0.25f,
+                maximumEstimatedGraceSeconds);
+        }
+
+        private int EstimateAffordableItemCount(double cumulativeBudgetFraction, int availableItems)
+        {
+            if (double.IsPositiveInfinity(frameWorkBudget.BudgetMs))
+                return availableItems;
+
+            double sliceRemainingMs = frameWorkBudget.BudgetMs * cumulativeBudgetFraction -
+                                      frameWorkBudget.ElapsedMs;
+            int affordableItems = Mathf.Max(1,
+                Mathf.FloorToInt((float)(sliceRemainingMs / estimatedWorkItemMs)));
+            return Mathf.Min(affordableItems, availableItems);
         }
         
         private bool IsInsideCurrentView(Vector3Int coord)
@@ -1168,16 +1208,7 @@ namespace Core
 
         private void UpdateFrameWorkBudget()
         {
-            // Some old codes, mabye remove it later
-            if (!(meshQue.Count <= 0 && generationQue.Count <= 0 && transformQueue.Count <= 0))
-            {
-                visualChunksPerFrame = chunksPerFrame;
-            }
-            else
-            {
-                visualChunksPerFrame = 0;
-            }
-
+            frameWorkBudget.SetHasPendingWork(GetQueuedWorkCount() > 0 || pendingRequests.Count > 0);
         }
 
         public void SaveWorld()
@@ -1273,9 +1304,14 @@ namespace Core
         private void ProcessLightingIntegration()
         {
             EnsureLightPropagator();
-            int repairBudget = Mathf.Max(1, chunksPerFrame);
+            double lightingCutoff = 0.40 +
+                                    (chunkUnloadQueue.Count == 0 ? 0.10 : 0.0) +
+                                    (generationQue.Count == 0 ? 0.10 : 0.0) +
+                                    (transformQueue.Count == 0 ? 0.15 : 0.0) +
+                                    (meshQue.Count == 0 ? 0.25 : 0.0);
             bool repairedSkyLight = false;
-            while (repairBudget-- > 0 && skyRepairQueue.Count > 0 && frameWorkBudget.hasTimeRemaining)
+            while (skyRepairQueue.Count > 0 &&
+                   frameWorkBudget.HasTimeRemaining(0.32))
             {
                 Vector3Int repair = skyRepairQueue.Dequeue();
                 queuedSkyRepairs.Remove(repair);
@@ -1284,13 +1320,12 @@ namespace Core
 
                 lightPropagator.UpdateAfterVoxelChange(repair);
                 repairedSkyLight = true;
+                visualChunksPerFrame++;
             }
             if (repairedSkyLight)
                 EnqueueChangedLightMeshes();
-
-            int lim = chunksPerFrame / 2;
-            int budget = Mathf.Max(1, lim);
-            while (budget-- > 0 && lightQueue.Count > 0 && frameWorkBudget.hasTimeRemaining)
+            
+            while (lightQueue.Count > 0 && frameWorkBudget.HasTimeRemaining(lightingCutoff))
             {
                 Chunk chunk = lightQueue.Dequeue();
                 // A queued chunk may have been unloaded or its pooled shell reused
@@ -1301,6 +1336,7 @@ namespace Core
                 lightPropagator.PropagateExistingSkyLight(GetSkyPropagationSeeds(chunk));
                 lightPropagator.PropagateExistingBlockLight(GetBlockPropagationSeeds(chunk));
                 EnqueueChangedLightMeshes();
+                visualChunksPerFrame++;
             }
         }
 
@@ -1860,29 +1896,36 @@ namespace Core
             ProcessChunkUnloads();
 
             // Generation QUE and sorting!
-
-            if (generationQue.Count > 0 && frameWorkBudget.hasTimeRemaining)
+            
+            double generationCutoff = 0.60 +
+                                      (transformQueue.Count == 0 ? 0.15 : 0.0) +
+                                      (meshQue.Count == 0 ? 0.25 : 0.0);
+            
+            if (generationQue.Count > 0 && frameWorkBudget.HasTimeRemaining(generationCutoff))
             {
-                int generatingChunksThisFrame = Mathf.Min(chunksPerFrame, generationQue.Count) * 3 + 2;
-                
-                List<Vector3Int> orderedGeneration = TakeClosestGenerationCoords(generatingChunksThisFrame);
+                int desiredWorkerBacklog = threadedWorker.WorkerCount * workerBacklogPerThread;
+                int requestsNeeded = Math.Max(0,
+                    desiredWorkerBacklog - threadedWorker.OutstandingRequestCount);
+                List<Vector3Int> orderedGeneration = TakeClosestGenerationCoords(
+                    Math.Min(requestsNeeded, generationQue.Count));
                 
                 foreach (var coord in orderedGeneration)
                 {
-                    if (!frameWorkBudget.hasTimeRemaining)
+                    if (!frameWorkBudget.HasTimeRemaining(generationCutoff))
                         break;
                     
                     generationQue.Remove(coord);
                     EnqueueChunkDataRequest(coord);
+                    visualChunksPerFrame++;
                 }
             }
             
             if (transformQueue.Count > 0)
             {
-                int transformChunksThisFrame = Mathf.Max(1, Mathf.CeilToInt(chunksPerFrame/3));
+                double transformCutoff = meshQue.Count == 0 ? 1.0 : 0.75;
             
                 //Transform que
-                for (int i = 0; i < transformChunksThisFrame && transformQueue.Count > 0 && frameWorkBudget.hasTimeRemaining; i++)
+                while (transformQueue.Count > 0 && frameWorkBudget.HasTimeRemaining(transformCutoff))
                 {
                     var t = transformQueue.Dequeue();
                     queueChunkActivations.Remove(t.chunk);
@@ -1892,7 +1935,8 @@ namespace Core
                     {
                         t.chunk.renderer.transform.position = t.tragetPos;
                         t.chunk.renderer.gameObject.SetActive(true);
-                        
+                        visualChunksPerFrame++;
+
                         //EnqueueNeighborRebuilds(t.chunk.coord);
                         // The transform does not change the meshing of neighbor chunks
                         // was needed before ill think
@@ -1901,10 +1945,10 @@ namespace Core
             }
 
             // Build meshes from meshQue (distance prioritized)
-            if (meshQue.Count > 0 && chunksPerFrame > 0 && frameWorkBudget.hasTimeRemaining)
+            if (meshQue.Count > 0 && frameWorkBudget.hasTimeRemaining)
             {
-                int buildChunksThisFrame = Mathf.Min(chunksPerFrame, meshQue.Count);
-                List<Chunk> sortedChunks = TakeClosestMeshChunks(buildChunksThisFrame);
+                int affordableItems = EstimateAffordableItemCount(1.0, meshQue.Count);
+                List<Chunk> sortedChunks = TakeClosestMeshChunks(affordableItems);
 
                 // Build closest chunks first
                 for (int i = 0; i < sortedChunks.Count && frameWorkBudget.hasTimeRemaining; i++)
@@ -1916,6 +1960,7 @@ namespace Core
                         
                         // Remove only when the chunk is scheduled for the rebuild.
                         meshQue.Remove(chunkToBuild);
+                        visualChunksPerFrame++;
                     }
                 }
             }
@@ -1925,8 +1970,11 @@ namespace Core
         
         private void ProcessChunkUnloads()
         {
-            int budget = Mathf.Max(1, Mathf.CeilToInt(chunksPerFrame/3));
-            while (budget-- > 0 && chunkUnloadQueue.Count > 0 && frameWorkBudget.hasTimeRemaining)
+            double unloadCutoff = 0.50 +
+                                  (generationQue.Count == 0 ? 0.10 : 0.0) +
+                                  (transformQueue.Count == 0 ? 0.15 : 0.0) +
+                                  (meshQue.Count == 0 ? 0.25 : 0.0);
+            while (chunkUnloadQueue.Count > 0 && frameWorkBudget.HasTimeRemaining(unloadCutoff))
             {
                 Vector3Int coord = chunkUnloadQueue.Dequeue();
                 queuedChunkUnloads.Remove(coord);
@@ -1936,7 +1984,11 @@ namespace Core
                     continue;
 
                 if (chunks.TryGetValue(coord, out Chunk chunk))
+                {
                     RemoveChunk(chunk, coord);
+                    visualChunksPerFrame++;
+                }
+                    
             }
         }
 

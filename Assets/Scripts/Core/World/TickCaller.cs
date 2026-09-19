@@ -9,11 +9,6 @@ namespace Core
     {
         [Header("Scheduled Tick Tuning")]
         [SerializeField] private int minimumScheduledCallsPerFrame = 16;
-        [SerializeField] private int callsPerChunkBuildBudget = 6;
-        // Calls in the world = chunkmanager.chunksPrFrame * callsPrChunkBuild
-        // Additionaly a min value at minScheduledCallsPrFrame.
-        // ChunkPrFrame = 3, callsPrBuild = 8  => budget=3*8 = 24
-        // min = 32. The budget is 32.
         
         [Header("Random Tick Tuning")]
         [SerializeField] private float randomTickIntervalSeconds = 0.2f;
@@ -230,12 +225,7 @@ namespace Core
             if (scheduledQueue.Count == 0)
                 return;
 
-            int dynamicBudget = minimumScheduledCallsPerFrame;
-            
-            dynamicBudget = Math.Max(minimumScheduledCallsPerFrame,
-                chunkManager.chunksPerFrame * callsPerChunkBuildBudget);
-
-            int calls = Math.Min(dynamicBudget, scheduledQueue.Count);
+            int calls = Math.Min(minimumScheduledCallsPerFrame, scheduledQueue.Count);
 
             for (int i = 0; i < calls; i++)
             {

@@ -13,6 +13,17 @@ public class ThreadedChunkWorker
 
     private Thread[] workers;
     private volatile bool running = false;
+    private int activeWorkerCount;
+
+    public int WorkerCount => workers.Length;
+    public int OutstandingRequestCount
+    {
+        get
+        {
+            lock (reqLock)
+                return requestQueue.Count + Volatile.Read(ref activeWorkerCount);
+        }
+    }
 
     public ThreadedChunkWorker(int numThreads)
     {
@@ -87,7 +98,16 @@ public class ThreadedChunkWorker
             }
 
             // ---- Process job OUTSIDE the lock ----
-            ChunkGenResult res = ThreadedChunkProcessor.ProcessRequest(req);
+            Interlocked.Increment(ref activeWorkerCount);
+            ChunkGenResult res;
+            try
+            {
+                res = ThreadedChunkProcessor.ProcessRequest(req);
+            }
+            finally
+            {
+                Interlocked.Decrement(ref activeWorkerCount);
+            }
 
             // ---- Store result ----
             lock (resLock)
