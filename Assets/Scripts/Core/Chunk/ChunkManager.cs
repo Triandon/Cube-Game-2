@@ -34,17 +34,10 @@ namespace Core
         // How many chunks should be building at once.
         public int chunksPerFrame = 4;
         public int visualChunksPerFrame = 4;
-        public bool dynamicChunkRendering = true;
-        
-        //Budgeting by using delta ms from frames
-        [Header("Dynamic Frame Budgeting")]
-        [SerializeField, Min(0.05f)] private float maximumFrameBudgetFraction = 0.25f;
-        [SerializeField, Min(0f)] private float frameBudgetSafetyMarginMs = 1f;
-        [SerializeField, Min(0.05f)] private float minimumFrameBudgetMs = 0.25f;
 
-        private readonly FrameWorkBudget frameWorkBudget = new FrameWorkBudget();
+        private FrameWorkBudget frameWorkBudget;
 
-        public int initialPoolSize = 20; // pre-instantiate this many chunks
+        public int initialPoolSize = 30; // pre-instantiate this many chunks
 
         private ThreadedChunkWorker threadedWorker;
         private readonly Dictionary<Vector3Int, int> requestedMeshRevisions = new Dictionary<Vector3Int, int>();
@@ -74,6 +67,7 @@ namespace Core
 
         private void Awake()
         {
+            frameWorkBudget = GetComponent<FrameWorkBudget>();
             WorldSaveSystem.Initialize(Application.persistentDataPath);
             WorldSaveSystem.LoadSkyOcclusionMap(skyOcclusionMap);
             Debug.Log("Save path: " + WorldSaveSystem.GetChunkDirectory() + "/");
@@ -158,8 +152,9 @@ namespace Core
             int a = chunksPerFrame * 5 + 1;
             int applyLimit = Mathf.Max(0, a);
 
-            while (applyedResults < applyLimit && threadedWorker.TryDequeueResult(out var result) &&
-                   frameWorkBudget.hasTimeRemaining)
+            while (applyedResults < applyLimit &&
+                   frameWorkBudget.hasTimeRemaining &&
+                   threadedWorker.TryDequeueResult(out var result) )
             {
                 if (result.isMeshRebuild)
                     completedMeshRebuilds.Enqueue(result);
@@ -1173,11 +1168,6 @@ namespace Core
 
         private void UpdateFrameWorkBudget()
         {
-            int targetFps = settings != null ? settings.minTargetedFps : 32;
-            frameWorkBudget.BeginFrame(targetFps, Time.unscaledDeltaTime * 1000.0,
-                maximumFrameBudgetFraction, frameBudgetSafetyMarginMs, minimumFrameBudgetMs,
-                dynamicChunkRendering);
-            
             // Some old codes, mabye remove it later
             if (!(meshQue.Count <= 0 && generationQue.Count <= 0 && transformQueue.Count <= 0))
             {

@@ -1,10 +1,21 @@
 using System;
 using System.Diagnostics;
+using UnityEngine;
+using Debug = UnityEngine.Debug;
 
 namespace Core
 {
-    public sealed class FrameWorkBudget
+    [DefaultExecutionOrder(-100)]
+    public class FrameWorkBudget : MonoBehaviour
     {
+        //Budgeting by using delta ms from frames
+        [Header("Dynamic Frame Budgeting")]
+        [SerializeField, Min(0.05f)] private float maximumFrameBudgetFraction = 0.25f;
+        [SerializeField, Min(0f)] private float frameBudgetSafetyMarginMs = 1f;
+        [SerializeField, Min(0.05f)] private float minimumFrameBudgetMs = 0.25f;
+        [Header("Determs if the system should be on/off, on if its on, off means its off!")]
+        [SerializeField] private bool dynamicChunkRendering = true;
+        
         private long startTimeStamp;
         private double budgetMs;
         private bool unlimited;
@@ -15,6 +26,21 @@ namespace Core
             Math.Max(0.0, budgetMs - ElapsedMs);
 
         public bool hasTimeRemaining => unlimited || ElapsedMs < budgetMs;
+
+        private Settings settings;
+
+        void Awake()
+        {
+            settings = Settings.Instance;
+        }
+
+        void Update()
+        {
+            int targetFps = settings != null ? settings.minTargetedFps : 32;
+            double previousFrameMs = Time.unscaledDeltaTime * 1000.0;
+            BeginFrame(targetFps, previousFrameMs, maximumFrameBudgetFraction,
+                frameBudgetSafetyMarginMs, minimumFrameBudgetMs, dynamicChunkRendering);
+        }
 
         public void BeginFrame(int targetFps, double previousFrameMs, double maxBudgetFraction,
             double safteyMarginMs, double minBudgetMs, bool enabled)
