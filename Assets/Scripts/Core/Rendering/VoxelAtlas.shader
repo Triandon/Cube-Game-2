@@ -5,6 +5,10 @@ Shader "Custom/VoxelAtlas"
         _MainTex("Texture Atlas", 2D) = "white" {}
         _AtlasTiles("Tiles Per Row", Float) = 16
         [Range(1.0, 3.0)] _LightCurve("Light Curve", Float) = 1.5
+        [Range(0.0, 1.0)] _HemisphereStrength("Hemisphere Strength", Float) = 0.3
+        [Range(0.0, 1.0)] _GroundAmbient("Downward Face Brightness", Float) = 0.65
+        [Range(1.0, 1.25)] _TopAmbient("Upward Face Brightness", Float) = 1.08
+        
         [Toggle(_DEBUG_NORMALS)] _DebugNormals("Debug World-Space Normals", Float) = 0
     }
 
@@ -28,6 +32,9 @@ Shader "Custom/VoxelAtlas"
             float _LightingDebugMode;
             float _NormalsDebugMode;
             float _LightCurve;
+            float _HemisphereStrength;
+            float _GroundAmbient;
+            float _TopAmbient;
             
             static const float VERTEX_POS_SCALE = 100.0;
 
@@ -82,13 +89,14 @@ Shader "Custom/VoxelAtlas"
                 #else
                     bool debugNormals = _NormalsDebugMode > 0.5;
                 #endif
+                
+                // Voxel meshes do not carry normals, so derive one flat normal per
+                // rendered triangle. This is shared by normal debug and lighting.
+                float3 normalWS = cross(ddy(i.positionWS), ddx(i.positionWS));
+                float normalLengthSq = dot(normalWS, normalWS);
 
                 if (debugNormals)
                 {
-                    // Derive the flat normal from the rendered triangle. Data-driven
-                    // quads do not need to depend on a separate vertex-normal stream.
-                    float3 normalWS = cross(ddy(i.positionWS), ddx(i.positionWS));
-                    float normalLengthSq = dot(normalWS, normalWS);
                     if (normalLengthSq < 1e-12)
                     {
                         // Orange is reserved for missing or corrupt normals.
@@ -116,6 +124,8 @@ Shader "Custom/VoxelAtlas"
                         : fixed4(1.0, 1.0, 0.0, 1.0);      // -Z: yellow
                 }
                 
+                normalWS *= rsqrt(max(normalLengthSq, 1e-12));
+                
                 float2 tileLocal = frac(i.uvLocal);
                 float2 baseUV = i.atlasMeta.xy;
                 float2 tileSize = i.atlasMeta.zw;
@@ -139,9 +149,17 @@ Shader "Custom/VoxelAtlas"
                 float2 sampleUV = baseUV + tileLocal * tileSize;
 
                 fixed4 col = tex2D(_MainTex, sampleUV);
-                half skyLight = i.light.r * saturate(_SunLight);
+                // Bias propagated skylight by face direction. Upward faces can be
+                // slightly brighter than the old 100% value, sides stay close to
+                // neutral, and downward faces receive less sky illumination.
+                half hemisphere = (half)normalWS.y * 0.5h + 0.5h;
+                half hemisphereLight = lerp((half)_GroundAmbient, (half)_TopAmbient, hemisphere);
+                half faceBrightness = lerp(1.0h, hemisphereLight, (half)_HemisphereStrength);
+                half skyLight = i.light.r * saturate(_SunLight) * faceBrightness;
                 half blockLight = i.light.g;
-                half light = saturate(max(skyLight, blockLight));
+                // Do not clamp the combined value: the small >1 upward-face value
+                // is intentional. Block light itself remains direction-independent.
+                half light = max(skyLight, blockLight);
                 half curvedLight = pow(light, _LightCurve);
                 col.rgb *= curvedLight;
                 return col;

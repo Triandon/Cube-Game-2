@@ -114,6 +114,8 @@ Material:
     - _GlossMapScale: 0
     - _Glossiness: 0
     - _GlossyReflections: 0
+    - _GroundAmbient: 0.65
+    - _HemisphereStrength: 0.3
     - _LightCurve: 2.4
     - _Metallic: 0
     - _OcclusionStrength: 1
@@ -126,6 +128,7 @@ Material:
     - _SrcBlend: 1
     - _SrcBlendAlpha: 1
     - _Surface: 0
+    - _TopAmbient: 1.25
     - _WorkflowMode: 1
     - _XRMotionVectorsPass: 1
     - _ZWrite: 1

@@ -393,14 +393,8 @@ public static class ChunkMeshGeneratorThreaded
                     }
 
                     byte current = SampleBlock(getBlock, x, y, z, lodScale);
-                    byte neighbor = SampleBlock(
-                        getBlock,
-                        x + dir.x * lodScale,
-                        y + dir.y * lodScale,
-                        z + dir.z * lodScale,
-                        lodScale
-                    );
-
+                    byte neighbor = SampleLodFaceBlock(getBlock, x, y, z, dir, lodScale);
+                    
                     bool forceFace = isBorderSlice && neighborScale < lodScale;
                     Block currentBlock = null;
                     bool renderFace;
@@ -445,10 +439,8 @@ public static class ChunkMeshGeneratorThreaded
                             //not using block lighting.
                             mask[mu, mv].light = forceFace
                                 ? VoxelLight.Pack(VoxelLight.Max, VoxelLight.Min)
-                                : SampleFaceLight(getSkyLight, getBlockLight,
-                                    x + dir.x * lodScale, y + dir.y * lodScale, z + dir.z * lodScale,
-                                    x, y, z);
-
+                                : SampleLodFaceLight(getSkyLight, getBlockLight,
+                                    x, y, z, dir, lodScale);
                         }
                         else
                         {
@@ -1510,7 +1502,77 @@ public static class ChunkMeshGeneratorThreaded
         return 0;
     }
     
+    private static byte SampleLodFaceBlock(
+        Func<int, int, int, byte> getBlock,
+        int x, int y, int z,
+        Vector3Int dir,
+        int scale)
+    {
+        GetLodFaceSampleBounds(x, y, z, dir, scale,
+            out int startX, out int startY, out int startZ,
+            out int sizeX, out int sizeY, out int sizeZ);
 
+        for (int dx = 0; dx < sizeX; dx++)
+        for (int dy = sizeY - 1; dy >= 0; dy--)
+        for (int dz = 0; dz < sizeZ; dz++)
+        {
+            byte block = getBlock(startX + dx, startY + dy, startZ + dz);
+            if (block != 0)
+                return block;
+        }
+
+        return 0;
+    }
+
+    private static byte SampleLodFaceLight(
+        Func<int, int, int, byte> getSkyLight,
+        Func<int, int, int, byte> getBlockLight,
+        int x, int y, int z,
+        Vector3Int dir,
+        int scale)
+    {
+        GetLodFaceSampleBounds(x, y, z, dir, scale,
+            out int startX, out int startY, out int startZ,
+            out int sizeX, out int sizeY, out int sizeZ);
+
+        byte sky = VoxelLight.Min;
+        byte block = VoxelLight.Min;
+        for (int dx = 0; dx < sizeX; dx++)
+        for (int dy = 0; dy < sizeY; dy++)
+        for (int dz = 0; dz < sizeZ; dz++)
+        {
+            int sampleX = startX + dx;
+            int sampleY = startY + dy;
+            int sampleZ = startZ + dz;
+            if (getSkyLight != null)
+                sky = Math.Max(sky, getSkyLight(sampleX, sampleY, sampleZ));
+            if (getBlockLight != null)
+                block = Math.Max(block, getBlockLight(sampleX, sampleY, sampleZ));
+        }
+
+        if (getSkyLight == null)
+            sky = VoxelLight.Max;
+
+        return VoxelLight.Pack(sky, block);
+    }
+
+    private static void GetLodFaceSampleBounds(
+        int x, int y, int z,
+        Vector3Int dir,
+        int scale,
+        out int startX, out int startY, out int startZ,
+        out int sizeX, out int sizeY, out int sizeZ)
+    {
+        // Sample the single plane directly outside the coarse cell. Its tangential
+        // dimensions cover the entire LOD face, while its normal dimension stays
+        // within the mesher's one-voxel padded chunk border.
+        startX = x + (dir.x > 0 ? scale : dir.x < 0 ? -1 : 0);
+        startY = y + (dir.y > 0 ? scale : dir.y < 0 ? -1 : 0);
+        startZ = z + (dir.z > 0 ? scale : dir.z < 0 ? -1 : 0);
+        sizeX = dir.x == 0 ? scale : 1;
+        sizeY = dir.y == 0 ? scale : 1;
+        sizeZ = dir.z == 0 ? scale : 1;
+    }
     
     private static void AddQuadFromMask(int u, int v, int width, int height, int w, Vector3Int dir, int atlasIndex, MeshData mesh, int lodScale,
         byte light)
