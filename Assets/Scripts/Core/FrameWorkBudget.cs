@@ -15,6 +15,7 @@ namespace Core
         [SerializeField, Range(0f, 1f)] private float minimumBudgetFraction = 0.01f;
         [SerializeField, Min(0.1f)] private float budgetAdjustmentInterval = 0.25f;
         [SerializeField, Min(0.01f)] private float budgetIncreaseMs = 0.5f;
+        [SerializeField, Range(0f, 1f)] private float availableHeadroomUsage = 0.5f;
         [SerializeField, Range(0.1f, 0.99f)] private float budgetDecreaseMultiplier = 0.75f;
         [SerializeField, Min(0f)] private float initialGraceSeconds = 15f;
         [SerializeField, Min(1f)] private float graceBudgetMultiplier = 2f;
@@ -129,7 +130,12 @@ namespace Core
             if (!hasPendingWork || smoothedFrameMs > targetedFrameMs)
                 adaptiveBudgetMs *= budgetDecreaseMultiplier;
             else if (smoothedFrameMs < increaseThresholdMs)
-                adaptiveBudgetMs += budgetIncreaseMs;
+            {
+                double availableHeadroomMs = increaseThresholdMs - smoothedFrameMs;
+                double increaseMs = Math.Max(budgetIncreaseMs,
+                    availableHeadroomMs * Math.Max(0.0, Math.Min(1.0, availableHeadroomUsage)));
+                adaptiveBudgetMs += increaseMs;
+            }
             
             adaptiveBudgetMs = Math.Max(minimumBudgetMs,
                 Math.Min(maximumBudgetMs, adaptiveBudgetMs));
