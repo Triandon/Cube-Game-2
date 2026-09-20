@@ -30,7 +30,8 @@ public class MiscVariablesDisplay : MonoBehaviour
     public TMP_InputField chatBox;
 
     private static readonly int LightingDebugModeID = Shader.PropertyToID("_LightingDebugMode");
-    private bool lightingDebugMode;
+    private static readonly int NormalDebugModeID = Shader.PropertyToID("_NormalsDebugMode");
+    private bool lightingDebugMode, normalsDebugMode;
 
     private void Awake()
     {
@@ -42,6 +43,7 @@ public class MiscVariablesDisplay : MonoBehaviour
     void Start()
     {
         SetLightingDebugMode(false);
+        DebugNormalsToggle(false);
         settings = Settings.Instance;
         if (settings != null)
         {
@@ -148,6 +150,11 @@ public class MiscVariablesDisplay : MonoBehaviour
                 HideCursor();
             }
 
+            if (Input.GetKeyDown(KeyCode.F3))
+            {
+                DebugNormalsToggle(!normalsDebugMode);
+            }
+
             if (Input.GetKeyDown(KeyCode.X))
             {
                 SetLightingDebugMode(!lightingDebugMode);
@@ -200,11 +207,18 @@ public class MiscVariablesDisplay : MonoBehaviour
     private void OnDestroy()
     {
         SetLightingDebugMode(false);
+        DebugNormalsToggle(false);
     }
 
     private void SetLightingDebugMode(bool enable)
     {
         lightingDebugMode = enable;
         Shader.SetGlobalFloat(LightingDebugModeID, enable ? 1f: 0f);
+    }
+
+    private void DebugNormalsToggle(bool enable)
+    {
+        normalsDebugMode = enable;
+        Shader.SetGlobalFloat(NormalDebugModeID, enable ? 1f : 0f);
     }
 }

@@ -1350,7 +1350,6 @@ public static class ChunkMeshGeneratorThreaded
         for (int i = 0; i < 4; i++)
         {
             mesh.vertices.Add(blockOffset + quad[i]);
-            mesh.normals.Add(dir);
         }
 
         int i0 = baseIndex + 0;
@@ -1363,13 +1362,22 @@ public static class ChunkMeshGeneratorThreaded
 
         Vector3 A = mesh.vertices[t0b] - mesh.vertices[t0a];
         Vector3 B = mesh.vertices[t0c] - mesh.vertices[t0a];
-        if (Vector3.Dot(Vector3.Cross(A, B), (Vector3)dir) < 0f)
+        Vector3 faceNormal = Vector3.Cross(A, B).normalized;
+
+        if (faceNormal.sqrMagnitude <= 0f)
+            faceNormal = dir;
+        
+        if (Vector3.Dot(faceNormal, (Vector3)dir) < 0f)
         {
             t0b = i1;
             t0c = i2;
             t1b = i1;
             t1c = i3;
+            faceNormal = -faceNormal;
         }
+        
+        for (int i = 0; i < 4; i++)
+            mesh.normals.Add(faceNormal);
 
         mesh.triangles.Add(t0a);
         mesh.triangles.Add(t0b);

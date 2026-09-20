@@ -5,6 +5,7 @@ Shader "Custom/VoxelAtlas"
         _MainTex("Texture Atlas", 2D) = "white" {}
         _AtlasTiles("Tiles Per Row", Float) = 16
         [Range(1.0, 3.0)] _LightCurve("Light Curve", Float) = 1.5
+        [Toggle(_DEBUG_NORMALS)] _DebugNormals("Debug World-Space Normals", Float) = 0
     }
 
     SubShader
@@ -18,12 +19,14 @@ Shader "Custom/VoxelAtlas"
             #pragma  target 4.5
             #pragma vertex vert
             #pragma fragment frag
+            #pragma shader_feature_local_fragment _DEBUG_NORMALS
             #include "UnityCG.cginc"
 
             sampler2D _MainTex;
             float _AtlasTiles;
             float _SunLight;
             float _LightingDebugMode;
+            float _NormalsDebugMode;
             float _LightCurve;
             
             static const float VERTEX_POS_SCALE = 100.0;
@@ -42,6 +45,7 @@ Shader "Custom/VoxelAtlas"
                 float2 uvLocal : TEXCOORD0;
                 float4 atlasMeta : TEXCOORD1;
                 half2 light : TEXCOORD2;
+                float3 positionWS : TEXCOORD3;
             };
 
             v2f vert(appdata v)
@@ -51,6 +55,7 @@ Shader "Custom/VoxelAtlas"
                 // Packed chunk positions remain compatible with every LOD scale.
                 float3 positionOS = (float3)v.vertex.xyz / VERTEX_POS_SCALE;
                 o.posCS = UnityObjectToClipPos(float4(positionOS, 1.0));
+                o.positionWS = mul(unity_ObjectToWorld, float4(positionOS, 1.0)).xyz;
 
                 // Greedy quads store UVs in block units, so frac() in frag repeats
                 // the selected texture once per block regardless of merged size.
@@ -72,6 +77,45 @@ Shader "Custom/VoxelAtlas"
 
             fixed4 frag(v2f i) : SV_Target
             {
+                #if defined(_DEBUG_NORMALS)
+                    const bool debugNormals = true;
+                #else
+                    bool debugNormals = _NormalsDebugMode > 0.5;
+                #endif
+
+                if (debugNormals)
+                {
+                    // Derive the flat normal from the rendered triangle. Data-driven
+                    // quads do not need to depend on a separate vertex-normal stream.
+                    float3 normalWS = cross(ddy(i.positionWS), ddx(i.positionWS));
+                    float normalLengthSq = dot(normalWS, normalWS);
+                    if (normalLengthSq < 1e-12)
+                    {
+                        // Orange is reserved for missing or corrupt normals.
+                        return fixed4(1.0, 0.25, 0.0, 1.0);
+                    }
+
+                    normalWS *= rsqrt(normalLengthSq);
+                    float3 axis = abs(normalWS);
+
+                    // Voxel faces use cardinal normals. Give every signed axis a
+                    // distinct solid color instead of the hard-to-read gray tints
+                    // produced by the usual normal * 0.5 + 0.5 visualization.
+                    if (axis.x >= axis.y && axis.x >= axis.z)
+                        return normalWS.x >= 0.0
+                            ? fixed4(1.0, 0.0, 0.0, 1.0)   // +X: red
+                            : fixed4(0.0, 1.0, 1.0, 1.0);  // -X: cyan
+
+                    if (axis.y >= axis.z)
+                        return normalWS.y >= 0.0
+                            ? fixed4(0.0, 1.0, 0.0, 1.0)   // +Y: green
+                            : fixed4(1.0, 0.0, 1.0, 1.0);  // -Y: magenta
+
+                    return normalWS.z >= 0.0
+                        ? fixed4(0.0, 0.0, 1.0, 1.0)       // +Z: blue
+                        : fixed4(1.0, 1.0, 0.0, 1.0);      // -Z: yellow
+                }
+                
                 float2 tileLocal = frac(i.uvLocal);
                 float2 baseUV = i.atlasMeta.xy;
                 float2 tileSize = i.atlasMeta.zw;
