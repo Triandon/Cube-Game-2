@@ -10,13 +10,13 @@ namespace Core
     {
         //Budgeting by using delta ms from frames
         [Header("Dynamic Frame Budgeting")]
-        [SerializeField, Range(0f, 0.5f)] private float frameTimeReserveFraction = 0.06f;
-        [SerializeField, Range(0f, 1f)] private float initialBudgetFraction = 0.10f;
+        [SerializeField, Range(0f, 0.5f)] private float frameTimeReserveFraction = 0.023f;
+        [SerializeField, Range(0f, 1f)] private float initialBudgetFraction = 0.25f;
         [SerializeField, Range(0f, 1f)] private float minimumBudgetFraction = 0.01f;
         [SerializeField, Min(0.1f)] private float budgetAdjustmentInterval = 0.25f;
         [SerializeField, Min(0.01f)] private float budgetIncreaseMs = 0.5f;
         [SerializeField, Range(0.1f, 0.99f)] private float budgetDecreaseMultiplier = 0.75f;
-        [SerializeField, Min(0f)] private float initialGraceSeconds = 3f;
+        [SerializeField, Min(0f)] private float initialGraceSeconds = 15f;
         [SerializeField, Min(1f)] private float graceBudgetMultiplier = 2f;
         [Header("Determs if the system should be on/off, on if its on, off means its off!")]
         [SerializeField] private bool dynamicChunkRendering = true;
