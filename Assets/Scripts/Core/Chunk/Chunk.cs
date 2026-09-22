@@ -8,7 +8,7 @@ namespace Core
     public class Chunk
     {
         //Chunk
-        public const int CHUNK_SIZE = 16;
+        public const int CHUNK_SIZE = 32;
     
         public Vector3Int coord;
         public byte[,,] blocks;
