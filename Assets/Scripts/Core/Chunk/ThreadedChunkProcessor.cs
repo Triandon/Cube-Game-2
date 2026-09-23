@@ -37,13 +37,20 @@ public static class ThreadedChunkProcessor
         if (req.meshOnly)
         {
             center = req.blocks;
-            padded = BuildPaddedFromCenter(center, coord, req.neighborBlocks);
-            paddedStates = BuildPaddedStatesFromCenter(coord, req.states, req.neighborStates);
+            // Initial disk-load/data requests are installed into the lighting world
+            // before their first mesh is requested. Do not build their temporary
+            // padded inputs (or a mesh that the main thread cannot safely use yet).
+            padded = req.isMeshRebuild
+                ? BuildPaddedFromCenter(center, coord, req.neighborBlocks)
+                : null;
+            paddedStates = req.isMeshRebuild
+                ? BuildPaddedStatesFromCenter(coord, req.states, req.neighborStates)
+                : null;
         }
         else
         {
-            padded = GenerateTerrainPadded(coord, req.neighborBlocks);
-            center = ExtractCenter(padded);
+            center = GenerateTerrainCenter(coord);
+            padded = null;
             paddedStates = null;
         }
         
@@ -63,14 +70,25 @@ public static class ThreadedChunkProcessor
 
         if (isAllAir)
         {
-            ChunkGenResult emptyResult = new ChunkGenResult(coord, center, req.states, new MeshData(), null,
+            MeshData emptyMesh = req.isMeshRebuild ? new MeshData() : null;
+            ChunkGenResult emptyResult = new ChunkGenResult(coord, center, req.states, emptyMesh, null,
                 true, instantTickLocals, scheduledTickLocals, randomTickLocals,
                 skyLight, blockLight);
             emptyResult.isMeshRebuild = req.isMeshRebuild;
             emptyResult.meshRevision = req.meshRevision;
             return emptyResult;
         }
-
+        
+        // A data-generation result is integrated with cross-chunk lighting on the
+        // main thread, which then schedules the one authoritative mesh rebuild.
+        // Generating a mesh here would only be discarded by ApplyChunkResult.
+        if (!req.isMeshRebuild)
+        {
+            return new ChunkGenResult(coord, center, req.states, null, blockEntities,
+                false, instantTickLocals, scheduledTickLocals, randomTickLocals,
+                skyLight, blockLight);
+        }
+        
         // ------------------------------------
         // 3. THREAD-SAFE BLOCK QUERY
         // ------------------------------------
@@ -231,20 +249,45 @@ public static class ThreadedChunkProcessor
 
         return padded;
     }
-
-
-
-    private static byte[] ExtractCenter(byte[] padded)
+    private static byte[] GenerateTerrainCenter(Vector3Int coord)
     {
         int S = Chunk.CHUNK_SIZE;
-        // ------------------------------------
-        // 2. MAKE CENTER ARRAY (RETURNED TO CHUNK)
-        // ------------------------------------
         byte[] center = new byte[ArrayIndexing.Volume];
+
+        int[,] heightCache = new int[S, S];
+        byte[,] surfaceBlockCache = new byte[S, S];
+
+        for (int x = 0; x < S; x++)
+        for (int z = 0; z < S; z++)
+        {
+            int wx = coord.x * S + x;
+            int wz = coord.z * S + z;
+
+            int height = TerrainGeneration.SampleHeight(wx, wz);
+            ChunkClimate climate = BiomeManager.GetClimateAt(wx, wz);
+
+            heightCache[x, z] = height;
+            surfaceBlockCache[x, z] =
+                BiomeManager.ChooseSurfaceBlock(
+                    climate, wx, wz, height, coord);
+        }
+        
         for (int x = 0; x < S; x++)
         for (int y = 0; y < S; y++)
         for (int z = 0; z < S; z++)
-            center[ArrayIndexing.ToIndex(x, y, z)] = padded[PaddedIndex(x + 1, y + 1, z + 1)];
+        {
+            int wx = coord.x * S + x;
+            int wy = coord.y * S + y;
+            int wz = coord.z * S + z;
+            
+            int height = heightCache[x, z];
+            byte surface = surfaceBlockCache[x, z];
+            
+            center[ArrayIndexing.ToIndex(x, y, z)] =
+                TerrainGeneration.SampleBlock(
+                    wx, wy, wz, height, surface);
+
+        }
 
         return center;
     }

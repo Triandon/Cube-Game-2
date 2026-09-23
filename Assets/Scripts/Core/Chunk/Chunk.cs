@@ -220,15 +220,6 @@ namespace Core
             
             isDirty = true;
             isColliderDirty = true;
-
-            if (chunkManager != null)
-            {
-                // Mesh updates
-                chunkManager.meshQue.Add(this);
-                
-                //ask chunk manager to also add neighbto chunks if it was on the border change
-                chunkManager.EnqueueNeighborUpdates(coord,localPos);
-            }
         }
 
         public void RebuildSpecialMeshBlocks()

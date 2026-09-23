@@ -43,6 +43,7 @@ namespace Core
 
         private ThreadedChunkWorker threadedWorker;
         private readonly Dictionary<Vector3Int, int> requestedMeshRevisions = new Dictionary<Vector3Int, int>();
+        private readonly Dictionary<Vector3Int, int> meshRebuildsInFlight = new Dictionary<Vector3Int, int>();
         private readonly Queue<ChunkGenResult> completedMeshRebuilds = new Queue<ChunkGenResult>();
         private int nextMeshRevision;
         private TickCaller tickCaller;
@@ -175,11 +176,23 @@ namespace Core
         
         private void ApplyMeshRebuildResult(ChunkGenResult result)
         {
+            if (meshRebuildsInFlight.TryGetValue(result.coord, out int inFlightRevision) &&
+                inFlightRevision == result.meshRevision)
+            {
+                meshRebuildsInFlight.Remove(result.coord);
+            }
+
             if (!chunks.TryGetValue(result.coord, out Chunk chunk) || chunk?.renderer == null)
                 return;
 
             if (!requestedMeshRevisions.TryGetValue(result.coord, out int currentRevision) ||
                 currentRevision != result.meshRevision)
+                return;
+            
+            // An invalidation added the chunk back to the set after this request
+            // started. The completed mesh is stale, so keep the queued dirty entry
+            // and let the scheduler submit exactly one up-to-date follow-up build.
+            if (meshQue.Contains(chunk))
                 return;
 
             chunk.meshData = result.meshData;
@@ -276,16 +289,12 @@ namespace Core
                 }
             }
 
-            // Apply the worker mesh data to the chunk's ChunkRendering (main thread only)
-            var chunkRender = chunk.renderer;
-            if (chunkRender != null)
+            // Lighting and loaded-neighbor state are authoritative only after the
+            // chunk is installed. The generation worker intentionally returns data
+            // without a throwaway mesh; schedule its first mesh from that final state.
+            if (chunk.renderer != null)
                 //&& res.meshData != null
             {
-                //chunk.meshData = res.meshData;
-                //chunkRender.ApplyMeshData(res.meshData);
-                // REMOVE meshQue.Add
-                //todo Place to fix!!!
-                
                 meshQue.Add(chunk);
                 EnqueueNeighborRebuilds(chunk.coord);
             }
@@ -505,13 +514,6 @@ namespace Core
                     posZ = GetNeighborLod(coord + Vector3Int.forward, lodScale),
                     negZ = GetNeighborLod(coord + Vector3Int.back, lodScale),
                 };
-
-            HashSet<Vector3Int> specialMeshBlocks =
-                existingChunk != null
-                    ? existingChunk.GetSpecialMeshBlocksSnapshot()
-                    : new HashSet<Vector3Int>();
-            
-            var (neighbors, neighborStates) = CaptureNeighborSnapshots(coord);
             var req = new ChunkGenRequest(
                 coord,
                 lodScale,
@@ -519,9 +521,9 @@ namespace Core
                 existingChunk?.blocks,
                 existingChunk?.states,
                 existingChunk != null,
-                neighbors,
-                neighborStates,
-                specialMeshBlocks,
+                null,
+                null,
+                null,
                 allowDiskLoad: existingChunk == null,
                 chunkSavePath: existingChunk == null ? WorldSaveSystem.GetChunkPath(coord) : null,
                 incomingSkyLightFromAbove: BuildIncomingSkyLightFromAbove(coord));
@@ -596,6 +598,7 @@ namespace Core
             // Make sure to remove any pending request marker
             pendingRequests.Remove(coord);
             requestedMeshRevisions.Remove(coord);
+            meshRebuildsInFlight.Remove(coord);
 
             chunks.Remove(coord);
             queuedChunkUnloads.Remove(coord);
@@ -651,6 +654,8 @@ namespace Core
                     meshQue.Remove(chunk);
                     generationQue.Remove(coord);
                     pendingRequests.Remove(coord);
+                    requestedMeshRevisions.Remove(coord);
+                    meshRebuildsInFlight.Remove(coord);
                     
                     // Chunk is outside the new view distance
                     chunksToRemove.Add((coord,chunk));
@@ -888,6 +893,9 @@ namespace Core
             
             // Sets block at the local chunk
             chunk.SetBlockLocal(local, id, state);
+            meshQue.Add(chunk);
+            EnqueueNeighborUpdates(chunk.coord, local);
+            
             if (skyOcclusionMap.UpdateColumn(chunk.coord, chunk.blocks, local.x, local.z, GetWorldHeight()))
                 MarkSkyOcclusionDirty();
             
@@ -915,14 +923,6 @@ namespace Core
             }
             
             tickCaller?.OnBlockChanged(worldPos, oldId, id);
-            
-            // Enqueue neighbors if block is on border
-            if (local.x == 0 || local.x == Chunk.CHUNK_SIZE - 1 ||
-                local.y == 0 || local.y == Chunk.CHUNK_SIZE - 1 ||
-                local.z == 0 || local.z == Chunk.CHUNK_SIZE - 1)
-            {
-                EnqueueNeighborUpdates(chunk.coord, local);
-            }
         }
 
         private void SpawnBlockEntityAtWorldPos(Block.Block block, Vector3Int worldPos)
@@ -1645,13 +1645,20 @@ namespace Core
             return transformQueue.Any(t => t.chunk == chunk);
         }
 
-        private void BuildChunkMesh(Chunk chunk)
+        private bool BuildChunkMesh(Chunk chunk)
         {
             if (chunk == null || chunk.renderer == null || chunk.blocks == null)
-                return;
+                return false;
+            
+            // Keep at most one expensive worker rebuild active for a coordinate.
+            // If it was dirtied while running, its HashSet entry remains queued and
+            // ApplyMeshRebuildResult will discard the stale result before retrying.
+            if (meshRebuildsInFlight.ContainsKey(chunk.coord))
+                return false;
             
             int revision = ++nextMeshRevision;
             requestedMeshRevisions[chunk.coord] = revision;
+            meshRebuildsInFlight[chunk.coord] = revision;
 
             var (neighbors, neighborStates) = CaptureNeighborSnapshots(chunk.coord);
             var request = new ChunkGenRequest(
@@ -1670,6 +1677,7 @@ namespace Core
             request.blockLight = chunk.blockLight != null ? (byte[])chunk.blockLight.Clone() : null;
             CapturePaddedLightSnapshot(chunk, out request.paddedSkyLight, out request.paddedBlockLight);
             threadedWorker.EnqueueRequest(request);
+            return true;
         }
         
         private static void CapturePaddedLightSnapshot(Chunk chunk, out byte[] skyLight, out byte[] blockLight)
@@ -1853,6 +1861,11 @@ namespace Core
                     toRemove.Add(chunk);
                     continue;
                 }
+                
+                // A dirty in-flight chunk must remain queued for its follow-up,
+                // but it must not consume a scheduling slot until that job returns.
+                if (meshRebuildsInFlight.ContainsKey(chunk.coord))
+                    continue;
 
                 float dx = player.position.x - chunk.coord.x * Chunk.CHUNK_SIZE;
                 float dy = player.position.y - chunk.coord.y * Chunk.CHUNK_SIZE;
@@ -1958,11 +1971,12 @@ namespace Core
                     Chunk chunkToBuild = sortedChunks[i];
                     if (chunkToBuild != null && chunkToBuild.renderer.gameObject != null)
                     {
-                        BuildChunkMesh(chunkToBuild);
-                        
-                        // Remove only when the chunk is scheduled for the rebuild.
-                        meshQue.Remove(chunkToBuild);
-                        visualChunksPerFrame++;
+                        if (BuildChunkMesh(chunkToBuild))
+                        {
+                            // Remove only when the chunk is scheduled for the rebuild.
+                            meshQue.Remove(chunkToBuild);
+                            visualChunksPerFrame++;
+                        }
                     }
                 }
             }

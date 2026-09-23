@@ -3865,7 +3865,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Settings
   userName: 
-  lodDistance: 32
+  lodDistance: 16
   minTargetedFps: 32
 --- !u!4 &2142310585
 Transform:
