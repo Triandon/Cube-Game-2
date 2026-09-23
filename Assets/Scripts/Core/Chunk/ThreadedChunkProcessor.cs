@@ -29,9 +29,9 @@ public static class ThreadedChunkProcessor
             }
         }
         
-        byte[,,] center;
+        byte[] center;
         byte[] padded;
-        BlockStateContainer[,,] paddedStates;
+        BlockStateContainer[] paddedStates;
 
         //1 Builds block data
         if (req.meshOnly)
@@ -54,12 +54,12 @@ public static class ThreadedChunkProcessor
             out List<Vector3Int> instantTickLocals, out List<Vector3Int> scheduledTickLocals,
             out List<Vector3Int> randomTickLocals);
 
-        byte[,,] skyLight = req.isMeshRebuild && req.skyLight != null
+        byte[] skyLight = req.isMeshRebuild && req.skyLight != null
             ? req.skyLight
             : BuildSkyLight(center, req.incomingSkyLightFromAbove);
-        byte[,,] blockLight = req.isMeshRebuild && req.blockLight != null
+        byte[] blockLight = req.isMeshRebuild && req.blockLight != null
             ? req.blockLight
-            : new byte[S, S, S];
+            : new byte[ArrayIndexing.Volume];
 
         if (isAllAir)
         {
@@ -102,7 +102,7 @@ public static class ThreadedChunkProcessor
             if ((uint)px >= (uint)(S + 2) || (uint)py >= (uint)(S + 2) || (uint)pz >= (uint)(S + 2))
                 return null;
             
-            return states[px, py, pz];
+            return states[PaddedIndex(px, py, pz)];
         };
         
         Func<int, int, int, byte> getSkyLight = (x, y, z) =>
@@ -119,7 +119,7 @@ public static class ThreadedChunkProcessor
             if ((uint)x >= (uint)S || (uint)y >= (uint)S || (uint)z >= (uint)S)
                 return VoxelLight.Min;
 
-            return skyLight[x, y, z];
+            return skyLight[ArrayIndexing.ToIndex(x, y, z)];
         };
 
         Func<int, int, int, byte> getBlockLight = (x, y, z) =>
@@ -136,7 +136,7 @@ public static class ThreadedChunkProcessor
             if ((uint)x >= (uint)S || (uint)y >= (uint)S || (uint)z >= (uint)S)
                 return VoxelLight.Min;
 
-            return blockLight[x, y, z];
+            return blockLight[ArrayIndexing.ToIndex(x, y, z)];
         };
         
 
@@ -167,8 +167,8 @@ public static class ThreadedChunkProcessor
         return result;
     }
 
-    private static byte[] BuildPaddedFromCenter(byte[,,] center, Vector3Int coord,
-        Dictionary<Vector3Int, byte[,,]> neighbors)
+    private static byte[] BuildPaddedFromCenter(byte[] center, Vector3Int coord,
+        Dictionary<Vector3Int, byte[]> neighbors)
     {
         int S = Chunk.CHUNK_SIZE;
         int P = S + 2;
@@ -177,31 +177,32 @@ public static class ThreadedChunkProcessor
         for (int x = 0; x < S; x++)
         for (int y = 0; y < S; y++)
         for (int z = 0; z < S; z++)
-            padded[PaddedIndex(x + 1, y + 1, z + 1)] = center[x, y, z];
+            padded[PaddedIndex(x + 1, y + 1, z + 1)] = center[ArrayIndexing.ToIndex(x, y, z)];
 
         CopyNeighborFaces(coord, neighbors, padded);
         
         return padded;
     }
     
-    private static BlockStateContainer[,,] BuildPaddedStatesFromCenter(
+    private static BlockStateContainer[] BuildPaddedStatesFromCenter(
         Vector3Int coord,
-        BlockStateContainer[,,] centerStates,
-        Dictionary<Vector3Int, BlockStateContainer[,,]> neighbors)
+        BlockStateContainer[] centerStates,
+        Dictionary<Vector3Int, BlockStateContainer[]> neighbors)
     {
         int S = Chunk.CHUNK_SIZE;
 
         if (centerStates == null && (neighbors == null || neighbors.Count == 0))
             return null;
 
-        BlockStateContainer[,,] padded = new BlockStateContainer[S + 2, S + 2, S + 2];
+        int paddedSize = S + 2;
+        BlockStateContainer[] padded = new BlockStateContainer[paddedSize * paddedSize * paddedSize];
 
         if (centerStates != null)
         {
             for (int x = 0; x < S; x++)
             for (int y = 0; y < S; y++)
             for (int z = 0; z < S; z++)
-                padded[x + 1, y + 1, z + 1] = centerStates[x, y, z];
+                padded[PaddedIndex(x + 1, y + 1, z + 1)] = centerStates[ArrayIndexing.ToIndex(x, y, z)];
         }
 
         if (neighbors != null)
@@ -209,7 +210,7 @@ public static class ThreadedChunkProcessor
             foreach (var kv in neighbors)
             {
                 Vector3Int delta = kv.Key - coord;
-                BlockStateContainer[,,] n = kv.Value;
+                BlockStateContainer[] n = kv.Value;
                 if (n == null)
                     continue;
 
@@ -233,22 +234,22 @@ public static class ThreadedChunkProcessor
 
 
 
-    private static byte[,,] ExtractCenter(byte[] padded)
+    private static byte[] ExtractCenter(byte[] padded)
     {
         int S = Chunk.CHUNK_SIZE;
         // ------------------------------------
         // 2. MAKE CENTER ARRAY (RETURNED TO CHUNK)
         // ------------------------------------
-        byte[,,] center = new byte[S, S, S];
+        byte[] center = new byte[ArrayIndexing.Volume];
         for (int x = 0; x < S; x++)
         for (int y = 0; y < S; y++)
         for (int z = 0; z < S; z++)
-            center[x, y, z] = padded[PaddedIndex(x + 1, y + 1, z + 1)];
+            center[ArrayIndexing.ToIndex(x, y, z)] = padded[PaddedIndex(x + 1, y + 1, z + 1)];
 
         return center;
     }
 
-    private static byte[] GenerateTerrainPadded(Vector3Int coord, Dictionary<Vector3Int, byte[,,]> neighbors)
+    private static byte[] GenerateTerrainPadded(Vector3Int coord, Dictionary<Vector3Int, byte[]> neighbors)
     {
         int S = Chunk.CHUNK_SIZE;
         int S2 = S + 2;
@@ -310,7 +311,7 @@ public static class ThreadedChunkProcessor
         return x + P * (y + P * z);
     }
 
-    private static void CopyNeighborFaces(Vector3Int coord, Dictionary<Vector3Int, byte[,,]> neighbors, byte[] padded)
+    private static void CopyNeighborFaces(Vector3Int coord, Dictionary<Vector3Int, byte[]> neighbors, byte[] padded)
     {
         if (neighbors == null)
             return;
@@ -320,7 +321,7 @@ public static class ThreadedChunkProcessor
         foreach (var kv in neighbors)
         {
             Vector3Int delta = kv.Key - coord;
-            byte[,,] n = kv.Value;
+            byte[] n = kv.Value;
             
             if (n == null)
                 continue;
@@ -342,7 +343,7 @@ public static class ThreadedChunkProcessor
     
     
     private static void CopyBlockFace(
-        byte[,,] src,
+        byte[] src,
         byte[] dst,
         int srcX = -1, int dstX = -1,
         int srcY = -1, int dstY = -1,
@@ -356,7 +357,7 @@ public static class ThreadedChunkProcessor
             for (int z = 0; z < S; z++)
             {
                 dst[PaddedIndex(dstX, y + 1, z + 1)] =
-                    src[srcX, y, z];
+                    src[ArrayIndexing.ToIndex(srcX, y, z)];
             }
             return;
         }
@@ -366,7 +367,7 @@ public static class ThreadedChunkProcessor
             for (int x = 0; x < S; x++)
             for (int z = 0; z < S; z++)
             {
-                dst[PaddedIndex(x + 1, dstY, z + 1)] = src[x, srcY, z];
+                dst[PaddedIndex(x + 1, dstY, z + 1)] = src[ArrayIndexing.ToIndex(x, srcY, z)];
             }
             return;
         }
@@ -376,7 +377,7 @@ public static class ThreadedChunkProcessor
             for (int x = 0; x < S; x++)
             for (int y = 0; y < S; y++)
             {
-                dst[PaddedIndex(x + 1, y + 1, dstZ)] = src[x, y, srcZ];
+                dst[PaddedIndex(x + 1, y + 1, dstZ)] = src[ArrayIndexing.ToIndex(x, y, srcZ)];
             }
         }
 
@@ -384,8 +385,8 @@ public static class ThreadedChunkProcessor
     }
     
     private static void CopyFace<T>(
-        T[,,] src,
-        T[,,] dst,
+        T[] src,
+        T[] dst,
         int srcX = -1, int dstX = -1,
         int srcY = -1, int dstY = -1,
         int srcZ = -1, int dstZ = -1)
@@ -397,7 +398,7 @@ public static class ThreadedChunkProcessor
             for (int y = 0; y < S; y++)
             for (int z = 0; z < S; z++)
             {
-                dst[dstX, y + 1, z + 1] = src[srcX, y, z];
+                dst[PaddedIndex(dstX, y + 1, z + 1)] = src[ArrayIndexing.ToIndex(srcX, y, z)];
             }
             return;
         }
@@ -407,7 +408,7 @@ public static class ThreadedChunkProcessor
             for (int x = 0; x < S; x++)
             for (int z = 0; z < S; z++)
             {
-                dst[x + 1, dstY, z + 1] = src[x, srcY, z];
+                dst[PaddedIndex(x + 1, dstY, z + 1)] = src[ArrayIndexing.ToIndex(x, srcY, z)];
             }
             return;
         }
@@ -417,12 +418,12 @@ public static class ThreadedChunkProcessor
             for (int x = 0; x < S; x++)
             for (int y = 0; y < S; y++)
             {
-                dst[x + 1, y + 1, dstZ] = src[x, y, srcZ];
+                dst[PaddedIndex(x + 1, y + 1, dstZ)] = src[ArrayIndexing.ToIndex(x, y, srcZ)];
             }
         }
     }
     
-    private static List<Vector3Int> DetectBlockEntities(byte[,,] center)
+    private static List<Vector3Int> DetectBlockEntities(byte[] center)
     {
         int S = Chunk.CHUNK_SIZE;
         
@@ -432,7 +433,7 @@ public static class ThreadedChunkProcessor
         for (int y = 0; y < S; y++)
         for (int z = 0; z < S; z++)
         {
-            byte id = center[x, y, z];
+            byte id = center[ArrayIndexing.ToIndex(x, y, z)];
             if (id == 0) continue;
 
             Block block = BlockRegistry.GetBlock(id);
@@ -446,7 +447,7 @@ public static class ThreadedChunkProcessor
         return result;
     }
 
-    private static bool AnalyzeBlocks(byte[,,] center, out List<Vector3Int> blockEntities,
+    private static bool AnalyzeBlocks(byte[] center, out List<Vector3Int> blockEntities,
         out List<Vector3Int> instantTickLocals, out List<Vector3Int> scheduledTickLocals,
         out List<Vector3Int> randomTickLocals)
     {
@@ -462,7 +463,7 @@ public static class ThreadedChunkProcessor
         for (int y = 0; y < S; y++)
         for (int z = 0; z < S; z++)
         {
-            byte id = center[x, y, z];
+            byte id = center[ArrayIndexing.ToIndex(x, y, z)];
             if (id == 0) continue;
 
             isAllAir = false;
@@ -501,10 +502,10 @@ public static class ThreadedChunkProcessor
         return isAllAir;
     }
     
-    private static byte[,,] BuildSkyLight(byte[,,] blocks, byte[,] incomingSkyLightFromAbove)
+    private static byte[] BuildSkyLight(byte[] blocks, byte[,] incomingSkyLightFromAbove)
     {
         int S = Chunk.CHUNK_SIZE;
-        byte[,,] skyLight = new byte[S, S, S];
+        byte[] skyLight = new byte[ArrayIndexing.Volume];
 
         for (int x = 0; x < S; x++)
         for (int z = 0; z < S; z++)
@@ -515,8 +516,8 @@ public static class ThreadedChunkProcessor
 
             for (int y = S - 1; y >= 0; y--)
             {
-                byte blockId = blocks[x, y, z];
-                skyLight[x, y, z] = VoxelLight.BlocksSkyLight(blockId) ? VoxelLight.Min : currentSkyLight;
+                byte blockId = blocks[ArrayIndexing.ToIndex(x, y, z)];
+                skyLight[ArrayIndexing.ToIndex(x, y, z)] = VoxelLight.BlocksSkyLight(blockId) ? VoxelLight.Min : currentSkyLight;
 
                 if (VoxelLight.BlocksSkyLight(blockId))
                     currentSkyLight = VoxelLight.Min;

@@ -8,9 +8,9 @@ namespace Core
     {
         public const int CHUNK_SIZE = Chunk.CHUNK_SIZE;
     
-        public static byte[,,] GenerateChunkBlocks(Vector3Int coord)
+        public static byte[] GenerateChunkBlocks(Vector3Int coord)
         {
-            byte[,,] blocks = new byte[CHUNK_SIZE, CHUNK_SIZE, CHUNK_SIZE];
+            byte[] blocks = new byte[ArrayIndexing.Volume];
 
             for (int x = 0; x < CHUNK_SIZE; x++)
             for (int y = 0; y < CHUNK_SIZE; y++)

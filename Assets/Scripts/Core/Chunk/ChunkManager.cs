@@ -234,11 +234,11 @@ namespace Core
             bool hasSavedBefore = WasChunkLoadedFromDisk(res.coord);
 
             // Apply block data
-            chunk.blocks = res.blocks ?? new byte[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
-            chunk.states = res.states ?? new BlockStateContainer[Chunk.CHUNK_SIZE,
-                Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
-            chunk.skyLight = res.skyLight ?? new byte[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
-            chunk.blockLight = res.blockLight ?? new byte[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
+            chunk.blocks = res.blocks ?? new byte[ArrayIndexing.Volume];
+            chunk.states = res.states ?? new BlockStateContainer[ArrayIndexing.Volume];
+            chunk.skyLight = res.skyLight ?? new byte[ArrayIndexing.Volume];
+            chunk.blockLight = res.blockLight ?? new byte[ArrayIndexing.Volume];
+            
             RecordSkyOcclusion(res.coord, chunk.blocks, true);
             
             // Light maps are runtime data and the propagator's source registry is
@@ -266,7 +266,7 @@ namespace Core
                     Vector3Int worldPos =
                         chunk.coord * Chunk.CHUNK_SIZE + local;
 
-                    byte id = chunk.blocks[local.x, local.y, local.z];
+                    byte id = chunk.blocks[ArrayIndexing.ToIndex(local.x, local.y, local.z)];
                     Block.Block block = BlockRegistry.GetBlock(id);
 
                     if (block != null)
@@ -539,7 +539,7 @@ namespace Core
             {
                 for (int x = 0; x < S; x++)
                 for (int z = 0; z < S; z++)
-                    incoming[x, z] = above.skyLight[x, 0, z];
+                    incoming[x, z] = above.skyLight[ArrayIndexing.ToIndex(x, 0, z)];
             }
             else
             {
@@ -634,8 +634,8 @@ namespace Core
                         Destroy(chunk.renderer.gameObject);
                     }
 
-                    chunk.blocks = new byte[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
-                    chunk.states = new BlockStateContainer[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
+                    chunk.blocks = new byte[ArrayIndexing.Volume];
+                    chunk.states = new BlockStateContainer[ArrayIndexing.Volume];
                     chunk.chunkNumber = -1;
                     
                     //Removes old BE
@@ -748,8 +748,8 @@ namespace Core
 
             chunkCount++;
             Chunk chunk = GenerateChunkShell(chunkCord, chunkCount);
-            chunk.blocks = new byte[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
-            chunk.states = new BlockStateContainer[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
+            chunk.blocks = new byte[ArrayIndexing.Volume];
+            chunk.states = new BlockStateContainer[ArrayIndexing.Volume];
 
             if (WorldSaveSystem.ChunkSaveExist(chunkCord))
             {
@@ -780,7 +780,7 @@ namespace Core
         {
             int size = Chunk.CHUNK_SIZE;
             byte[,] incoming = BuildIncomingSkyLightFromAbove(chunk.coord);
-            chunk.skyLight = new byte[size, size, size];
+            chunk.skyLight = new byte[ArrayIndexing.Volume];
 
             for (int x = 0; x < size; x++)
             for (int z = 0; z < size; z++)
@@ -788,15 +788,15 @@ namespace Core
                 byte current = incoming[x, z];
                 for (int y = size - 1; y >= 0; y--)
                 {
-                    byte blockId = chunk.blocks[x, y, z];
+                    byte blockId = chunk.blocks[ArrayIndexing.ToIndex(x, y, z)];
                     if (VoxelLight.BlocksSkyLight(blockId))
                     {
-                        chunk.skyLight[x, y, z] = VoxelLight.Min;
+                        chunk.skyLight[ArrayIndexing.ToIndex(x, y, z)] = VoxelLight.Min;
                         current = VoxelLight.Min;
                     }
                     else
                     {
-                        chunk.skyLight[x, y, z] = current;
+                        chunk.skyLight[ArrayIndexing.ToIndex(x, y, z)] = current;
                     }
                 }
             }
@@ -813,7 +813,7 @@ namespace Core
             for (int y = 0; y < Chunk.CHUNK_SIZE; y++)
             for (int z = 0; z < Chunk.CHUNK_SIZE; z++)
             {
-                Block.Block block = BlockRegistry.GetBlock(chunk.blocks[x, y, z]);
+                Block.Block block = BlockRegistry.GetBlock(chunk.blocks[ArrayIndexing.ToIndex(x, y, z)]);
                 byte emission = block?.LightLevel ?? VoxelLight.Min;
                 if (emission > VoxelLight.Min)
                     lightPropagator.AddBlockLight(origin + new Vector3Int(x, y, z), emission);
@@ -832,7 +832,7 @@ namespace Core
             for (int y = 0; y < Chunk.CHUNK_SIZE; y++)
             for (int z = 0; z < Chunk.CHUNK_SIZE; z++)
             {
-                Block.Block block = BlockRegistry.GetBlock(chunk.blocks[x, y, z]);
+                Block.Block block = BlockRegistry.GetBlock(chunk.blocks[ArrayIndexing.ToIndex(x, y, z)]);
                 if ((block?.LightLevel ?? VoxelLight.Min) > VoxelLight.Min)
                     lightPropagator.RemoveBlockLight(origin + new Vector3Int(x, y, z));
             }
@@ -859,7 +859,7 @@ namespace Core
             Block.Block block = BlockRegistry.GetBlock(id);
             BlockStateContainer state = null;
 
-            byte oldId = chunk.blocks[local.x, local.y, local.z];
+            byte oldId = chunk.blocks[ArrayIndexing.ToIndex(local.x, local.y, local.z)];
             Block.Block oldBlock = BlockRegistry.GetBlock(oldId);
             byte oldEmission = oldBlock?.LightLevel ?? VoxelLight.Min;
 
@@ -972,7 +972,7 @@ namespace Core
             for (int y = 0; y < Chunk.CHUNK_SIZE; y++)
             for (int z = 0; z < Chunk.CHUNK_SIZE; z++)
             {
-                byte id = chunk.blocks[x, y, z];
+                byte id = chunk.blocks[ArrayIndexing.ToIndex(x, y, z)];
                 
                 if(id == 0) continue;
 
@@ -1004,7 +1004,7 @@ namespace Core
                 return 0;
             }
 
-            return chunk.blocks[local.x, local.y, local.z];
+            return chunk.blocks[ArrayIndexing.ToIndex(local.x, local.y, local.z)];
         }
 
         public BlockStateContainer GetBlockStateAtWorldPos(Vector3Int worldPos)
@@ -1019,7 +1019,7 @@ namespace Core
                 local.z < 0 || local.z >= Chunk.CHUNK_SIZE)
                 return null;
 
-            return chunk.states[local.x, local.y, local.z];
+            return chunk.states[ArrayIndexing.ToIndex(local.x, local.y, local.z)];
         }
 
         public bool CheckForVoxel(float _x, float _y, float _z)
@@ -1068,7 +1068,7 @@ namespace Core
                 local.z < 0 || local.z >= Chunk.CHUNK_SIZE)
                 return false;
 
-            blockId = chunk.blocks[local.x, local.y, local.z];
+            blockId = chunk.blocks[ArrayIndexing.ToIndex(local.x, local.y, local.z)];
             if (blockId == 0)
                 return false;
 
@@ -1077,7 +1077,8 @@ namespace Core
             if (!block.isTransparent)
                 return true;
             
-            BlockStateContainer state = chunk.states[local.x, local.y, local.z];
+            BlockStateContainer state = chunk.states[ArrayIndexing.ToIndex(local.x, 
+                local.y, local.z)];
             bool hasCollisionState = state != null &&
                                      (state.HasState(BlockStateKeys.HeightState) ||
                                       state.HasState(BlockStateKeys.WidthState));
@@ -1091,7 +1092,8 @@ namespace Core
             min = Vector3.zero;
             max = Vector3.one;
 
-            BlockStateContainer state = chunk.states[local.x, local.y, local.z];
+            BlockStateContainer state = chunk.states[ArrayIndexing.ToIndex(local.x, 
+                local.y, local.z)];
             if (state == null || state.IsStateless())
                 return true;
 
@@ -1225,7 +1227,7 @@ namespace Core
             SaveSkyOcclusionMapIfDirty();
         }
         
-        private void RecordSkyOcclusion(Vector3Int coord, byte[,,] blocks, bool rebuildIfChanged)
+        private void RecordSkyOcclusion(Vector3Int coord, byte[] blocks, bool rebuildIfChanged)
         {
             var changedColumns = new List<Vector2Int>();
             if (!skyOcclusionMap.UpdateChunk(coord, blocks, GetWorldHeight(), changedColumns))
@@ -1276,11 +1278,11 @@ namespace Core
         }
 
 
-        private (Dictionary<Vector3Int, byte[,,]> blocks, Dictionary<Vector3Int, BlockStateContainer[,,]> states) 
+        private (Dictionary<Vector3Int, byte[]> blocks, Dictionary<Vector3Int, BlockStateContainer[]> states) 
             CaptureNeighborSnapshots(Vector3Int coord)
         {
-            var blockDict = new Dictionary<Vector3Int, byte[,,]>();
-            var stateDict = new Dictionary<Vector3Int, BlockStateContainer[,,]>();
+            var blockDict = new Dictionary<Vector3Int, byte[]>();
+            var stateDict = new Dictionary<Vector3Int, BlockStateContainer[]>();
             
             // The padded mesher only consumes the six shared faces. Snapshotting
             // the other 20 surrounding chunks adds allocations without supplying
@@ -1293,9 +1295,9 @@ namespace Core
                     continue;
 
                 // SNAPSHOT (important!)
-                blockDict[nc] = (byte[,,])c.blocks.Clone();
+                blockDict[nc] = (byte[])c.blocks.Clone();
                 if (c.states != null)
-                    stateDict[nc] = (BlockStateContainer[,,])c.states.Clone();
+                    stateDict[nc] = (BlockStateContainer[])c.states.Clone();
             }
 
             return (blockDict, stateDict);
@@ -1344,7 +1346,7 @@ namespace Core
         {
             int size = Chunk.CHUNK_SIZE;
             Vector3Int origin = chunk.coord * size;
-            byte[,,] light = chunk.skyLight;
+            byte[] light = chunk.skyLight;
             if (light == null)
                 yield break;
 
@@ -1352,7 +1354,7 @@ namespace Core
             for (int y = 0; y < size; y++)
             for (int z = 0; z < size; z++)
             {
-                byte level = light[x, y, z];
+                byte level = light[ArrayIndexing.ToIndex(x, y, z)];
                 if (level == VoxelLight.Min)
                     continue;
                 
@@ -1362,9 +1364,9 @@ namespace Core
                 bool boundary = x == 0 || x == size - 1 || y == 0 || y == size - 1 ||
                                 z == 0 || z == size - 1;
                 bool hasDarkerNeighbor = !boundary &&
-                                         (light[x - 1, y, z] < level || light[x + 1, y, z] < level ||
-                                          light[x, y - 1, z] < level || light[x, y + 1, z] < level ||
-                                          light[x, y, z - 1] < level || light[x, y, z + 1] < level);
+                                         (light[ArrayIndexing.ToIndex(x - 1, y, z)] < level || light[ArrayIndexing.ToIndex(x + 1, y, z)] < level ||
+                                          light[ArrayIndexing.ToIndex(x, y - 1, z)] < level || light[ArrayIndexing.ToIndex(x, y + 1, z)] < level ||
+                                          light[ArrayIndexing.ToIndex(x, y, z - 1)] < level || light[ArrayIndexing.ToIndex(x, y, z + 1)] < level);
                 if (boundary || hasDarkerNeighbor)
                     yield return origin + new Vector3Int(x, y, z);
             }
@@ -1430,7 +1432,7 @@ namespace Core
         {
             private readonly ChunkManager manager;
             private readonly HashSet<Chunk> touchedChunks = new HashSet<Chunk>();
-            private Dictionary<Chunk, byte[,,]> stagedSkyLight;
+            private Dictionary<Chunk, byte[]> stagedSkyLight;
 
             public ChunkLightWorld(ChunkManager manager)
             {
@@ -1439,17 +1441,17 @@ namespace Core
 
             public void BeginSkyRebuild()
             {
-                stagedSkyLight = new Dictionary<Chunk, byte[,,]>(manager.chunks.Count);
+                stagedSkyLight = new Dictionary<Chunk, byte[]>(manager.chunks.Count);
                 foreach (Chunk chunk in manager.chunks.Values)
                 {
                     if (chunk?.blocks != null)
-                        stagedSkyLight[chunk] = new byte[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
+                        stagedSkyLight[chunk] = new byte[ArrayIndexing.Volume];
                 }
             }
 
             public void EndSkyRebuild()
             {
-                foreach (KeyValuePair<Chunk, byte[,,]> entry in stagedSkyLight)
+                foreach (KeyValuePair<Chunk, byte[]> entry in stagedSkyLight)
                 {
                     if (!LightMapsEqual(entry.Key.skyLight, entry.Value))
                     {
@@ -1519,13 +1521,13 @@ namespace Core
                     if (chunk?.blocks == null)
                         continue;
 
-                    byte[,,] map;
+                    byte[] map;
                     if (channel == LightPropagator.Channel.Sky)
                     {
                         map = GetSkyMap(chunk);
                         if (map == null)
                         {
-                            map = new byte[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
+                            map = new byte[ArrayIndexing.Volume];
                             if (stagedSkyLight != null)
                                 stagedSkyLight[chunk] = map;
                             else
@@ -1534,7 +1536,7 @@ namespace Core
                     }
                     else
                     {
-                        chunk.blockLight ??= new byte[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
+                        chunk.blockLight ??= new byte[ArrayIndexing.Volume];
                         map = chunk.blockLight;
                     }
 
@@ -1553,7 +1555,7 @@ namespace Core
                 }
 
                 Vector3Int local = chunk.WorldToLocal(position);
-                blockId = chunk.blocks[local.x, local.y, local.z];
+                blockId = chunk.blocks[ArrayIndexing.ToIndex(local.x, local.y, local.z)];
                 return true;
             }
 
@@ -1564,10 +1566,10 @@ namespace Core
                     return VoxelLight.Min;
 
                 Vector3Int local = chunk.WorldToLocal(position);
-                byte[,,] map = channel == LightPropagator.Channel.Sky
+                byte[] map = channel == LightPropagator.Channel.Sky
                     ? GetSkyMap(chunk)
                     : chunk.blockLight;
-                return map?[local.x, local.y, local.z] ?? VoxelLight.Min;
+                return map?[ArrayIndexing.ToIndex(local.x, local.y, local.z)] ?? VoxelLight.Min;
             }
             
             public void SetLight(Vector3Int position, LightPropagator.Channel channel, byte value)
@@ -1579,40 +1581,40 @@ namespace Core
                 Vector3Int local = chunk.WorldToLocal(position);
                 if (channel == LightPropagator.Channel.Sky)
                 {
-                    byte[,,] map = GetSkyMap(chunk);
+                    byte[] map = GetSkyMap(chunk);
                     if (map == null)
                     {
-                        chunk.skyLight = new byte[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
+                        chunk.skyLight = new byte[ArrayIndexing.Volume];
                         map = chunk.skyLight;
                     }
                     
-                    if (map[local.x, local.y, local.z] != value)
+                    if (map[ArrayIndexing.ToIndex(local.x, local.y, local.z)] != value)
                     {
-                        map[local.x, local.y, local.z] = value;
+                        map[ArrayIndexing.ToIndex(local.x, local.y, local.z)] = value;
                         if (stagedSkyLight == null)
                             touchedChunks.Add(chunk);
                     }
                 }
                 else
                 {
-                    chunk.blockLight ??= new byte[Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE, Chunk.CHUNK_SIZE];
-                    if (chunk.blockLight[local.x, local.y, local.z] != value)
+                    chunk.blockLight ??= new byte[ArrayIndexing.Volume];
+                    if (chunk.blockLight[ArrayIndexing.ToIndex(local.x, local.y, local.z)] != value)
                     {
-                        chunk.blockLight[local.x, local.y, local.z] = value;
+                        chunk.blockLight[ArrayIndexing.ToIndex(local.x, local.y, local.z)] = value;
                         touchedChunks.Add(chunk);
                     }
                 }
             }
             
-            private byte[,,] GetSkyMap(Chunk chunk)
+            private byte[] GetSkyMap(Chunk chunk)
             {
-                if (stagedSkyLight != null && stagedSkyLight.TryGetValue(chunk, out byte[,,] staged))
+                if (stagedSkyLight != null && stagedSkyLight.TryGetValue(chunk, out byte[] staged))
                     return staged;
 
                 return chunk.skyLight;
             }
 
-            private static bool LightMapsEqual(byte[,,] left, byte[,,] right)
+            private static bool LightMapsEqual(byte[] left, byte[] right)
             {
                 if (left == null)
                     return false;
@@ -1621,7 +1623,7 @@ namespace Core
                 for (int y = 0; y < Chunk.CHUNK_SIZE; y++)
                 for (int z = 0; z < Chunk.CHUNK_SIZE; z++)
                 {
-                    if (left[x, y, z] != right[x, y, z])
+                    if (left[ArrayIndexing.ToIndex(x, y, z)] != right[ArrayIndexing.ToIndex(x, y, z)])
                         return false;
                 }
 
@@ -1656,16 +1658,16 @@ namespace Core
                 chunk.coord,
                 chunk.GetLodScale(),
                 GetNeighborLODInfo(chunk.coord),
-                (byte[,,])chunk.blocks.Clone(),
-                chunk.states != null ? (BlockStateContainer[,,])chunk.states.Clone() : null,
+                (byte[])chunk.blocks.Clone(),
+                chunk.states != null ? (BlockStateContainer[])chunk.states.Clone() : null,
                 true,
                 neighbors,
                 neighborStates,
                 chunk.GetSpecialMeshBlocksSnapshot());
             request.isMeshRebuild = true;
             request.meshRevision = revision;
-            request.skyLight = chunk.skyLight != null ? (byte[,,])chunk.skyLight.Clone() : null;
-            request.blockLight = chunk.blockLight != null ? (byte[,,])chunk.blockLight.Clone() : null;
+            request.skyLight = chunk.skyLight != null ? (byte[])chunk.skyLight.Clone() : null;
+            request.blockLight = chunk.blockLight != null ? (byte[])chunk.blockLight.Clone() : null;
             CapturePaddedLightSnapshot(chunk, out request.paddedSkyLight, out request.paddedBlockLight);
             threadedWorker.EnqueueRequest(request);
         }

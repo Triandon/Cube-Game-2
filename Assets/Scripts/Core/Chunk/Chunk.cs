@@ -11,14 +11,14 @@ namespace Core
         public const int CHUNK_SIZE = 32;
     
         public Vector3Int coord;
-        public byte[,,] blocks;
-        public BlockStateContainer[,,] states;
+        public byte[] blocks;
+        public BlockStateContainer[] states;
         public Dictionary<Vector3Int, InventoryHolder> blockEntities = new Dictionary<Vector3Int, InventoryHolder>();
         public HashSet<Vector3Int> specialMeshBlocks = new HashSet<Vector3Int>();
         
         //Lightning data
-        public byte[,,] skyLight;
-        public byte[,,] blockLight;
+        public byte[] skyLight;
+        public byte[] blockLight;
         
         public bool isDirty = false;
         public bool isColliderDirty = false;
@@ -32,11 +32,11 @@ namespace Core
         public Chunk(Vector3Int coord)
         {
             this.coord = coord;
-            blocks = new byte[CHUNK_SIZE, CHUNK_SIZE, CHUNK_SIZE];
-            states = new BlockStateContainer[CHUNK_SIZE, CHUNK_SIZE, CHUNK_SIZE];
+            blocks = new byte[ArrayIndexing.Volume];
+            states = new BlockStateContainer[ArrayIndexing.Volume];
 
-            skyLight = new byte[CHUNK_SIZE, CHUNK_SIZE, CHUNK_SIZE];
-            blockLight = new byte[CHUNK_SIZE, CHUNK_SIZE, CHUNK_SIZE];
+            skyLight = new byte[ArrayIndexing.Volume];
+            blockLight = new byte[ArrayIndexing.Volume];
         }
 
         
@@ -48,7 +48,7 @@ namespace Core
                 y >= 0 && y < CHUNK_SIZE &&
                 z >= 0 && z < CHUNK_SIZE)
             {
-                return blocks[x,y,z];
+                return blocks[ArrayIndexing.ToIndex(x, y, z)];
             }
 
             //Outside this chunks -> request from neightboor chunk
@@ -92,7 +92,7 @@ namespace Core
 
             if (neighborCoord == coord)
             {
-                return blocks[localX, localY, localZ];
+                return blocks[ArrayIndexing.ToIndex(localX, localY, localZ)];
             }
 
             if (!World.Instance.IsChunkInsideOfWorld(neighborCoord)) return 0;
@@ -116,7 +116,7 @@ namespace Core
                 y >= 0 && y < CHUNK_SIZE &&
                 z >= 0 && z < CHUNK_SIZE)
             {
-                return states[x, y, z];
+                return states[ArrayIndexing.ToIndex(x, y, z)];
             }
 
             // Outside this chunk -> request from neighbor chunk
@@ -160,7 +160,7 @@ namespace Core
 
             if (neighborCoord == coord)
             {
-                return states[localX, localY, localZ];
+                return states[ArrayIndexing.ToIndex(localX, localY, localZ)];
             }
 
             if (chunkManager == null || World.Instance == null)
@@ -205,18 +205,18 @@ namespace Core
             int y = localPos.y;
             int z = localPos.z;
 
-            blocks[x, y, z] = id;
+            blocks[ArrayIndexing.ToIndex(x, y, z)] = id;
 
             if (state != null && !state.IsStateless())
             {
-                states[x, y, z] = state;
+                states[ArrayIndexing.ToIndex(x, y, z)] = state;
             }
             else
             {
-                states[x, y, z] = null;
+                states[ArrayIndexing.ToIndex(x, y, z)] = null;
             }
 
-            UpdateSpecialMeshBlock(localPos, id, states[x, y, z]);
+            UpdateSpecialMeshBlock(localPos, id, states[ArrayIndexing.ToIndex(x, y, z)]);
             
             isDirty = true;
             isColliderDirty = true;
@@ -239,8 +239,8 @@ namespace Core
             for (int y = 0; y < CHUNK_SIZE; y++)
             for (int z = 0; z < CHUNK_SIZE; z++)
             {
-                byte id = blocks[x, y, z];
-                BlockStateContainer state = states?[x, y, z];
+                byte id = blocks[ArrayIndexing.ToIndex(x, y, z)];
+                BlockStateContainer state = states?[ArrayIndexing.ToIndex(x, y, z)];
                 Vector3Int localPos = new Vector3Int(x, y, z);
 
                 if (NeedsSpecialMesh(id))
@@ -326,7 +326,7 @@ namespace Core
         public byte GetSkyLight(int x, int y, int z)
         {
             if (x >= 0 && x < CHUNK_SIZE && y >= 0 && y < CHUNK_SIZE && z >= 0 && z < CHUNK_SIZE)
-                return skyLight != null ? skyLight[x, y, z] : VoxelLight.Max;
+                return skyLight != null ? skyLight[ArrayIndexing.ToIndex(x, y, z)] : VoxelLight.Max;
 
             Vector3Int worldPos = coord * CHUNK_SIZE + new Vector3Int(x, y, z);
             Chunk neighbor = chunkManager != null ? chunkManager.GetChunkFromWorldPos(worldPos) : null;
@@ -336,13 +336,13 @@ namespace Core
                     : VoxelLight.Min;
 
             Vector3Int local = neighbor.WorldToLocal(worldPos);
-            return neighbor.skyLight != null ? neighbor.skyLight[local.x, local.y, local.z] : VoxelLight.Max;
+            return neighbor.skyLight != null ? neighbor.skyLight[ArrayIndexing.ToIndex(local.x, local.y, local.z)] : VoxelLight.Max;
         }
 
         public byte GetBlockLight(int x, int y, int z)
         {
             if (x >= 0 && x < CHUNK_SIZE && y >= 0 && y < CHUNK_SIZE && z >= 0 && z < CHUNK_SIZE)
-                return blockLight != null ? blockLight[x, y, z] : VoxelLight.Min;
+                return blockLight != null ? blockLight[ArrayIndexing.ToIndex(x, y, z)] : VoxelLight.Min;
 
             Vector3Int worldPos = coord * CHUNK_SIZE + new Vector3Int(x, y, z);
             Chunk neighbor = chunkManager != null ? chunkManager.GetChunkFromWorldPos(worldPos) : null;
@@ -350,7 +350,7 @@ namespace Core
                 return VoxelLight.Min;
 
             Vector3Int local = neighbor.WorldToLocal(worldPos);
-            return neighbor.blockLight != null ? neighbor.blockLight[local.x, local.y, local.z] : VoxelLight.Min;
+            return neighbor.blockLight != null ? neighbor.blockLight[ArrayIndexing.ToIndex(local.x, local.y, local.z)] : VoxelLight.Min;
         }
 
 

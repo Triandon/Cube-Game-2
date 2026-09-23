@@ -11,7 +11,7 @@ public sealed class LightingSkyOcclusionMap
 
         public IReadOnlyDictionary<Vector3Int, byte[]> ChunkColumns => chunkColumns;
 
-        public bool UpdateChunk(Vector3Int coord, byte[,,] blocks, int worldHeightInChunks,
+        public bool UpdateChunk(Vector3Int coord, byte[] blocks, int worldHeightInChunks,
             ICollection<Vector2Int> changedColumns = null)
         {
             int size = Chunk.CHUNK_SIZE;
@@ -54,7 +54,7 @@ public sealed class LightingSkyOcclusionMap
             return true;
         }
 
-        public bool UpdateColumn(Vector3Int coord, byte[,,] blocks, int localX, int localZ,
+        public bool UpdateColumn(Vector3Int coord, byte[] blocks, int localX, int localZ,
             int worldHeightInChunks)
         {
             byte height = FindHighestOccluder(blocks, localX, localZ);
@@ -149,14 +149,14 @@ public sealed class LightingSkyOcclusionMap
                 highestOccluders[key] = highest;
         }
 
-        private static byte FindHighestOccluder(byte[,,] blocks, int x, int z)
+        private static byte FindHighestOccluder(byte[] blocks, int x, int z)
         {
             if (blocks == null)
                 return 0;
 
             for (int y = Chunk.CHUNK_SIZE - 1; y >= 0; y--)
             {
-                if (VoxelLight.BlocksSkyLight(blocks[x, y, z]))
+                if (VoxelLight.BlocksSkyLight(blocks[ArrayIndexing.ToIndex(x, y, z)]))
                     return (byte)(y + 1);
             }
 

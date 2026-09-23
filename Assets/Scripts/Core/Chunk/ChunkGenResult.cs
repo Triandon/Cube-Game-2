@@ -5,13 +5,13 @@ using UnityEngine;
 public class ChunkGenResult
 {
     public Vector3Int coord;
-    public byte[,,] blocks; //Chunk_Size^3
-    public BlockStateContainer[,,] states;
+    public byte[] blocks; //Chunk_Size^3
+    public BlockStateContainer[] states;
     public MeshData meshData;
     public List<Vector3Int> blockEntityLocals;
     public bool isAllAir;
-    public byte[,,] skyLight;
-    public byte[,,] blockLight;
+    public byte[] skyLight;
+    public byte[] blockLight;
     public bool isMeshRebuild;
     public int meshRevision;
     
@@ -20,10 +20,10 @@ public class ChunkGenResult
     public List<Vector3Int> scheduledTickLocals;
     public List<Vector3Int> randomTickLocals;
 
-    public ChunkGenResult(Vector3Int coord, byte[,,] blocks, BlockStateContainer[,,] states,MeshData meshData,
+    public ChunkGenResult(Vector3Int coord, byte[] blocks, BlockStateContainer[] states,MeshData meshData,
         List<Vector3Int> blockEntityLocals, bool isAllAir,List<Vector3Int> instantTickLocals = null,
         List<Vector3Int> scheduledTickLocals = null, List<Vector3Int> randomTickLocals = null,
-        byte[,,] skyLight = null, byte[,,] blockLight = null)
+        byte[] skyLight = null, byte[] blockLight = null)
     {
         this.coord = coord;
         this.blocks = blocks;

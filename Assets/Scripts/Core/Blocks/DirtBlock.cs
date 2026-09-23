@@ -104,12 +104,12 @@ namespace Core.Blocks
                 return null;
             }
 
-            BlockStateContainer state = chunk.states[local.x, local.y, local.z];
+            BlockStateContainer state = chunk.states[ArrayIndexing.ToIndex(local.x, local.y, local.z)];
             if (state != null)
                 return state;
 
             state = new BlockStateContainer();
-            chunk.states[local.x, local.y, local.z] = state;
+            chunk.states[ArrayIndexing.ToIndex(local.x, local.y, local.z)] = state;
             return state;
         }
 

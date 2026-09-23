@@ -162,7 +162,7 @@ namespace Core
             for (int y = 0; y < S; y++)
             for (int z = 0; z < S; z++)
             {
-                BlockStateContainer state = chunk.states[x, y, z];
+                BlockStateContainer state = chunk.states[ArrayIndexing.ToIndex(x,y,z)];
                 if (state == null || state.IsStateless())
                     continue;
 
@@ -244,7 +244,7 @@ namespace Core
 
             int S = Chunk.CHUNK_SIZE;
             chunk.blocks = DecodeRLE(baseBlocks, coord, path);
-            chunk.states = new BlockStateContainer[S, S, S];
+            chunk.states = new BlockStateContainer[ArrayIndexing.Volume];
 
             int blockStateCount = reader.ReadInt32();
             if (blockStateCount < 0)
@@ -280,7 +280,7 @@ namespace Core
                     container.SetState(name, value);
                 }
 
-                chunk.states[pos.x, pos.y, pos.z] = container;
+                chunk.states[ArrayIndexing.ToIndex(pos.x, pos.y, pos.z)] = container;
             }
 
             chunk.isDirty = false;
@@ -343,19 +343,19 @@ namespace Core
             Debug.Log($"Inventory for {ownerName} loaded!");
         }
         
-        public static List<RLEBlockRun> EncodeRLE(byte[,,] blocks)
+        public static List<RLEBlockRun> EncodeRLE(byte[] blocks)
         {
             int S = Chunk.CHUNK_SIZE;
             var runs = new List<RLEBlockRun>();
 
-            byte current = blocks[0,0,0];
+            byte current = blocks[ArrayIndexing.ToIndex(0, 0, 0)];
             int count = 0;
 
             for (int y = 0; y < S; y++)
             for (int z = 0; z < S; z++)
             for (int x = 0; x < S; x++)
             {
-                byte id = blocks[x,y,z];
+                byte id = blocks[ArrayIndexing.ToIndex(x, y, z)];
 
                 if (id == current)
                 {
@@ -373,15 +373,15 @@ namespace Core
             return runs;
         }
 
-        public static byte[,,] DecodeRLE(List<RLEBlockRun> runs, Vector3Int coord)
+        public static byte[] DecodeRLE(List<RLEBlockRun> runs, Vector3Int coord)
         {
             return DecodeRLE(runs, coord, GetChunkPath(coord));
         }
         
-        public static byte[,,] DecodeRLE(List<RLEBlockRun> runs, Vector3Int coord, string path)
+        public static byte[] DecodeRLE(List<RLEBlockRun> runs, Vector3Int coord, string path)
         {
             int S = Chunk.CHUNK_SIZE;
-            var blocks = new byte[S,S,S];
+            var blocks = new byte[ArrayIndexing.Volume];
             int max = S * S * S;
             int index = 0;
 
@@ -408,7 +408,7 @@ namespace Core
                     int z = (index / S) % S;
                     int y = index / (S * S);
 
-                    blocks[x,y,z] = run.id;
+                    blocks[ArrayIndexing.ToIndex(x, y, z)] = run.id;
                     index++;
                 }
             }

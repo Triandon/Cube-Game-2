@@ -8,17 +8,17 @@ public class ChunkGenRequest
     public readonly int lodScale;
     public ChunkMeshGeneratorThreaded.NeighborLODInfo neighborLods;
 
-    public byte[,,] blocks;
-    public BlockStateContainer[,,] states;
+    public byte[] blocks;
+    public BlockStateContainer[] states;
     public bool meshOnly; // true = skips terrain gen
-    public Dictionary<Vector3Int, byte[,,]> neighborBlocks;
-    public Dictionary<Vector3Int, BlockStateContainer[,,]> neighborStates;
+    public Dictionary<Vector3Int, byte[]> neighborBlocks;
+    public Dictionary<Vector3Int, BlockStateContainer[]> neighborStates;
     public HashSet<Vector3Int> specialMeshBlocks;
     public bool allowDiskLoad;
     public string chunkSavePath;
     public byte[,] incomingSkyLightFromAbove;
-    public byte[,,] skyLight;
-    public byte[,,] blockLight;
+    public byte[] skyLight;
+    public byte[] blockLight;
     public byte[] paddedSkyLight;
     public byte[] paddedBlockLight;
     public bool isMeshRebuild;
@@ -26,8 +26,8 @@ public class ChunkGenRequest
 
     public ChunkGenRequest(Vector3Int coord, 
         int lodScale, ChunkMeshGeneratorThreaded.NeighborLODInfo neighborLods,
-        byte[,,] blocks, BlockStateContainer[,,] states, bool meshOnly, Dictionary<Vector3Int, byte[,,]> neighborBlocks,
-        Dictionary<Vector3Int, BlockStateContainer[,,]> neighborStates, HashSet<Vector3Int> specialMeshBlocks,
+        byte[] blocks, BlockStateContainer[] states, bool meshOnly, Dictionary<Vector3Int, byte[]> neighborBlocks,
+        Dictionary<Vector3Int, BlockStateContainer[]> neighborStates, HashSet<Vector3Int> specialMeshBlocks,
         bool allowDiskLoad = false, string chunkSavePath = null, byte[,] incomingSkyLightFromAbove = null)
     {
         this.coord = coord;
