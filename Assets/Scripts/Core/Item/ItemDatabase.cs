@@ -38,6 +38,7 @@ namespace Core.Item
             //DeadGrass Item
             ItemRegistry.RegisterItem(new Item(id: 9, itemName:"DeadGrassBlock_Item", isBlock:true, blockId:9, textureIndex: 9, 64));
             
+            // Crafting Table
             ItemRegistry.RegisterItem(new Item(10, itemName:"CraftingTable", isBlock:true, blockId:10, textureIndex:10, 1));
             
             //Crusher
@@ -69,6 +70,9 @@ namespace Core.Item
             
             //Light Block
             ItemRegistry.RegisterItem(new Item(20, "LightBlockItem", isBlock: true, blockId:20, 43, 64));
+            
+            //Roating Chest Item
+            ItemRegistry.RegisterItem(new Item(id:21, itemName:"RotatingChestItem", isBlock:true, blockId:21, textureIndex:5,67));
         }
     
         public static void Init(){}

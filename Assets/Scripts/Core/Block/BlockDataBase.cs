@@ -27,6 +27,7 @@ namespace Core.Block
         public static Block PyramidBlock;
         public static Block InvertedCornerTriangle;
         public static Block LightBlock;
+        public static Block RotatingChestBlock;
         
         static BlockDataBase()
         {
@@ -120,6 +121,11 @@ namespace Core.Block
             LightBlock = new Block(20, "LightBlock", 43, 43, 43);
             LightBlock.LightLevel = 15;
             BlockRegistry.RegisterBlock(LightBlock);
+            
+            //Rotating Chest Block
+            RotatingChestBlock = new RotatingChest(21, "Rotating_Chest_Block", top: 4, side: 4, bottom: 4);
+            RotatingChestBlock.frontIndex = 5;
+            BlockRegistry.RegisterBlock(RotatingChestBlock);
             
             Debug.Log("Blocks registered (static)");
         }

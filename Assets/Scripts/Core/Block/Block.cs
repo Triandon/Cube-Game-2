@@ -16,6 +16,7 @@ namespace Core.Block
         public int frontIndex;
     
         public List<BlockState> states = new List<BlockState>();
+        private BlockStateContainer deufaltState = new BlockStateContainer();
 
         public float hardness = 1f;
         public bool isTransparent = false;
@@ -40,6 +41,7 @@ namespace Core.Block
             this.frontIndex = front;
         }
 
+        //Legacy now use SetDeufaltState
         public void AddState(string stateName, string value)
         {
             var existing = states.Find(s => s.stateName == stateName);
@@ -47,6 +49,26 @@ namespace Core.Block
                 existing.value = value;
             else
                 states.Add(new BlockState(stateName, value));
+            
+            deufaltState.SetState(stateName, value);
+        }
+
+        // Stores the template once the block is registered
+        protected void SetDefaultState(BlockStateContainer state)
+        {
+            deufaltState = state?.Copy() ?? new BlockStateContainer();
+
+            states.Clear();
+            foreach (KeyValuePair<string, BlockState> entry in deufaltState.GetAllStates)
+            {
+                states.Add(new BlockState(entry.Key, entry.Value.value));   
+            }
+        }
+
+        // Copies the SetDefaultSate template, every time the block is placed/modified
+        public BlockStateContainer CreateDefaultState()
+        {
+            return deufaltState.Copy();
         }
     
         public string GetState(string stateName)
@@ -59,7 +81,7 @@ namespace Core.Block
 
         public bool HasDefinedState(string stateName)
         {
-            return states.Exists(s => s.stateName == stateName);
+            return deufaltState.HasState(stateName);
         }
         
         //Events
@@ -74,16 +96,25 @@ namespace Core.Block
         public virtual void OnPlaced(
             Vector3Int position, BlockStateContainer state, Transform player, Vector3Int? placementFace)
         {
-            if (state == null)
-                return;
-             
-            if (frontIndex < 0)
-                return;
             
-            if (!HasDefinedState(BlockStateKeys.DirectionalFacing))
-                return;
-            
-            state.SetState(BlockStateKeys.DirectionalFacing, GetHorizontalFacingTowardPlayer(player));
+        }
+        
+        public virtual BlockStateContainer GetStateForPlacement(BlockPlacementContext context)
+        {
+            if (!HasStates)
+            {
+                return null;
+            }
+            BlockStateContainer state = CreateDefaultState();
+
+            if (frontIndex >= 0 && state.HasState(BlockStateKeys.DirectionalFacing))
+            {
+                state.SetState(
+                    BlockStateKeys.DirectionalFacing,
+                    GetHorizontalFacingTowardPlayer(context.Player));
+            }
+
+            return state;
         }
         
         protected static string GetHorizontalFacingTowardPlayer(Transform player)
@@ -141,5 +172,19 @@ namespace Core.Block
             
         }
     
+    }
+
+    public readonly struct BlockPlacementContext
+    {
+        public Vector3Int Pos { get; }
+        public Transform Player { get; }
+        public Vector3Int? PlacementFace { get; }
+        
+        public BlockPlacementContext(Vector3Int position, Transform player, Vector3Int? placementFace)
+        {
+            Pos = position;
+            Player = player;
+            PlacementFace = placementFace;
+        }
     }
 }

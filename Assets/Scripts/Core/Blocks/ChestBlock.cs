@@ -9,8 +9,16 @@ public class ChestBlock : Block
 
     public ChestBlock(byte id, string name, int top, int side, int bottom, int front = -1) : base(id, name, top, side, bottom, front)
     {
-        AddState(BlockStateKeys.DirectionalFacing, DirectionalFacing.North);
+        SetDefaultState(new BlockStateContainer().With(BlockStateKeys.DirectionalFacing,
+            DirectionalFacing.North));
     }
+
+    public override BlockStateContainer GetStateForPlacement(BlockPlacementContext context)
+    {
+        return CreateDefaultState().With(BlockStateKeys.DirectionalFacing,
+            GetHorizontalFacingTowardPlayer(context.Player));
+    }
+
     public override bool OnActivated(Vector3Int position, BlockStateContainer state, Block block, Transform player)
     {
         ChunkManager cm = Object.FindAnyObjectByType<ChunkManager>();

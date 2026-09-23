@@ -866,6 +866,8 @@ namespace Core
 
             byte oldId = chunk.blocks[ArrayIndexing.ToIndex(local.x, local.y, local.z)];
             Block.Block oldBlock = BlockRegistry.GetBlock(oldId);
+            BlockStateContainer oldState = chunk.states[ArrayIndexing.ToIndex(local.x,
+                local.y, local.z)];
             byte oldEmission = oldBlock?.LightLevel ?? VoxelLight.Min;
 
             byte newEmission = block?.LightLevel ?? VoxelLight.Min;
@@ -875,8 +877,10 @@ namespace Core
 
             if (id != 0 && block != null)
             {
-                state = new BlockStateContainer();
-                block?.OnPlaced(
+                BlockPlacementContext placementContext = new BlockPlacementContext(
+                    worldPos, player, placementFace);
+                state = block.GetStateForPlacement(placementContext);
+                block.OnPlaced(
                     position: worldPos, state: state, player: player, placementFace: placementFace);
             }
 
@@ -887,7 +891,7 @@ namespace Core
 
             if (id == 0 && oldBlock != null && oldId != 0)
             {
-                oldBlock?.OnMined(worldPos,state,player);
+                oldBlock.OnMined(worldPos,oldState,player);
                 RemoveBlockEntityAtWorldPos(worldPos);
             }
             
@@ -960,6 +964,80 @@ namespace Core
             
             Destroy(holder.gameObject);
             chunk.blockEntities.Remove(local);
+        }
+        
+        public bool SetBlockState(
+            Vector3Int worldPos,
+            string stateName,
+            string value)
+        {
+            if (string.IsNullOrEmpty(stateName))
+                return false;
+            
+            Chunk chunk = GetChunkFromWorldPos(worldPos);
+            if (chunk == null || chunk.blocks == null || chunk.states == null)
+                return false;
+
+            Vector3Int local = chunk.WorldToLocal(worldPos);
+
+            if (local.x < 0 || local.x >= Chunk.CHUNK_SIZE ||
+                local.y < 0 || local.y >= Chunk.CHUNK_SIZE ||
+                local.z < 0 || local.z >= Chunk.CHUNK_SIZE)
+            {
+                return false;
+            }
+
+            int index = ArrayIndexing.ToIndex(
+                local.x,
+                local.y,
+                local.z
+            );
+            
+            byte blockId = chunk.blocks[index];
+
+            // AIR SHOULD NOT HAVE ANY STATES!!!
+            if (blockId == 0)
+                return false;
+
+            Block.Block block = BlockRegistry.GetBlock(blockId);
+            if (block == null)
+                return false;
+
+            BlockStateContainer state = chunk.states[index];
+
+            // This can happen with old saves, generated blocks, or blocks
+            // that were created before the state system was introduced
+            if (state == null)
+            {
+                state = block.CreateDefaultState();
+            }
+
+            bool alreadyHasState = state.HasState(stateName);
+            string previousValue = state.GetState(stateName);
+            
+            // Avoid unnecessary saving and mesh rebuilding.
+            if (alreadyHasState && previousValue == value)
+                return false;
+
+            // Modify this placed block's state container.
+            state.SetState(stateName, value);
+            
+            // Store the block again with the same ID and updated state.
+            // SetBlockLocal also:
+            // - stores the state container
+            // - updates special-mesh tracking
+            // - marks the chunk dirty for saving
+            // - marks the collider dirty
+            chunk.SetBlockLocal(local, blockId, state);
+                
+            // Rebuild this chunk so rendering reflects the state change.
+            meshQue.Add(chunk);
+
+            // If this block is on a chunk boundary, the neighboring chunk
+            // may also need to rebuild its border geometry.
+            EnqueueNeighborUpdates(chunk.coord, local);
+            
+            return true;
         }
 
         private void RebuildBlockEntities(Chunk chunk)

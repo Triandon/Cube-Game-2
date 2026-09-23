@@ -4,7 +4,7 @@ namespace Core.Block
 {
     public class BlockStateContainer
     {
-        private Dictionary<string, BlockState> states = new();
+        private readonly Dictionary<string, BlockState> states = new();
 
         public int StateCount => states.Count;
 
@@ -13,6 +13,22 @@ namespace Core.Block
             states[name] = new BlockState(name, value);
         }
 
+        public BlockStateContainer With(string name, string value)
+        {
+            SetState(name, value);
+            return this;
+        }
+        
+        public BlockStateContainer Copy()
+        {
+            BlockStateContainer copy = new BlockStateContainer();
+
+            foreach (KeyValuePair<string, BlockState> entry in states)
+                copy.SetState(entry.Key, entry.Value.value);
+
+            return copy;
+        }
+        
         public string GetState(string name)
         {
             return states.TryGetValue(name, out var state)

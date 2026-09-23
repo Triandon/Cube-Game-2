@@ -3,7 +3,6 @@ using UnityEngine;
 
 public class SlabBlock : Block
 {
-    public const string HeightState = BlockStateKeys.HeightState;
     public const string OrientationState = BlockStateKeys.DirectionalFacing;
     public static bool PlaceVertical { get; private set; }
 
@@ -13,36 +12,34 @@ public class SlabBlock : Block
     {
         slabHeight = 0.5f;
         isTransparent = true;
-        AddState(HeightState, slabHeight.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture));
-        AddState(OrientationState, "up");
+        SetDefaultState(new BlockStateContainer().With(BlockStateKeys.HeightState,
+                slabHeight.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)).
+            With(BlockStateKeys.DirectionalFacing, "up"));
     }
     
     public static void SetPlacementMode(bool placementMode)
     {
         PlaceVertical = placementMode;
     }
-    
-    public override void OnPlaced(Vector3Int position, BlockStateContainer state, Transform player, Vector3Int? placementFace)
+
+    public override BlockStateContainer GetStateForPlacement(BlockPlacementContext context)
     {
-        base.OnPlaced(position, state, player, placementFace);
-        
-        if (state == null)
-            return;
+        string directionalFacing =
+            context.PlacementFace == Vector3Int.down ? 
+                DirectionalFacing.Down : 
+                DirectionalFacing.Up;
 
-        string directionalFacing = placementFace == Vector3Int.down ? "down" : "up";
-
-        if (PlaceVertical && player != null)
+        if (PlaceVertical && context.Player != null)
         {
-            Vector3 forward = -player.transform.forward;
+            Vector3 forward = -context.Player.transform.forward;
             
             if (Mathf.Abs(forward.x) > Mathf.Abs(forward.z))
                 directionalFacing = forward.x > 0 ? "east" : "west";
             else
                 directionalFacing = forward.z > 0 ? "north" : "south";
         }
-        
-        state.SetState(BlockStateKeys.DirectionalFacing, directionalFacing);
-        state.SetState(HeightState, slabHeight.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture));
+
+        return CreateDefaultState().With(BlockStateKeys.DirectionalFacing, directionalFacing);
     }
 
     public override bool OnActivated(Vector3Int position, BlockStateContainer state, Block block, Transform player)
