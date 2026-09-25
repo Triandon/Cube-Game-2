@@ -75,6 +75,14 @@ public class ChunkRendering : MonoBehaviour
         if (meshData == null)
             return;
 
+        ApplyMeshData(MeshUtilityCustom.BuildUploadData(meshData));
+    }
+    
+    public void ApplyMeshData(MeshUtilityCustom.ChunkMeshUploadData meshData)
+    {
+        if (meshData == null)
+            return;
+
         // Render mesh
         if (shearedRenderMesh == null)
         {
@@ -110,9 +118,6 @@ public class ChunkRendering : MonoBehaviour
             chunk.specialMeshBlocks, (x,y,z) => chunk.GetSkyLight(x, y, z),
             (x, y, z) => chunk.GetBlockLight(x, y, z)
         );
-
-        // Store it
-        chunk.meshData = md;
 
         // Apply render mesh
         ApplyMeshData(md);

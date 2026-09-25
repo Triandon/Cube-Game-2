@@ -17,7 +17,7 @@ public static class MeshUtilityCustom
     private static readonly Color32 DefaultVertexColor = new Color32(255, 255, 255, 255);
     
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
-    private struct ChunkVertex
+    public struct ChunkVertex
     {
         public PackedVertexPosition position;
         public int normal;
@@ -35,11 +35,24 @@ public static class MeshUtilityCustom
             this.uv1 = uv1;
         }
     }
+    
+    public sealed class ChunkMeshUploadData
+    {
+        public readonly ChunkVertex[] vertices;
+        public readonly int[] indices;
+        public readonly Bounds bounds;
 
-    public static void ApplyChunkMesh(Mesh mesh, MeshData meshData)
+        public ChunkMeshUploadData(ChunkVertex[] vertices, int[] indices, Bounds bounds)
+        {
+            this.vertices = vertices;
+            this.indices = indices;
+            this.bounds = bounds;
+        }
+    }
+
+    public static ChunkMeshUploadData BuildUploadData(MeshData meshData)
     {
         int vertexCount = meshData.vertices.Count;
-        int indexCount = meshData.triangles.Count;
         ChunkVertex[] vertices = new ChunkVertex[vertexCount];
 
         for (int i = 0; i < vertexCount; i++)
@@ -50,20 +63,33 @@ public static class MeshUtilityCustom
                 ? new PackedAtlasTile(meshData.atlasTileIndexes[i])
                 : default(PackedAtlasTile);
             vertices[i] = new ChunkVertex(meshData.vertices.packedPositions[i], normal, uv0, tile);
-            
+
             if (i < meshData.colors.Count)
                 vertices[i].color = meshData.colors[i];
         }
 
+        return new ChunkMeshUploadData(vertices, meshData.triangles.ToArray(),
+            CalculateDecodedBounds(meshData));
+    }
+    public static void ApplyChunkMesh(Mesh mesh, MeshData meshData)
+    {
+        ApplyChunkMesh(mesh, BuildUploadData(meshData));
+    }
+
+    public static void ApplyChunkMesh(Mesh mesh, ChunkMeshUploadData meshData)
+    {
+        int vertexCount = meshData.vertices.Length;
+        int indexCount = meshData.indices.Length;
+
         mesh.Clear();
         mesh.indexFormat = IndexFormat.UInt32;
         mesh.SetVertexBufferParams(vertexCount, ChunkVertexLayout);
-        mesh.SetVertexBufferData(vertices, 0, 0, vertexCount, 0, MeshUpdateFlags.DontRecalculateBounds);
+        mesh.SetVertexBufferData(meshData.vertices, 0, 0, vertexCount, 0, MeshUpdateFlags.DontRecalculateBounds);
         mesh.SetIndexBufferParams(indexCount, IndexFormat.UInt32);
-        mesh.SetIndexBufferData(meshData.triangles, 0, 0, indexCount, MeshUpdateFlags.DontRecalculateBounds);
+        mesh.SetIndexBufferData(meshData.indices, 0, 0, indexCount, MeshUpdateFlags.DontRecalculateBounds);
         mesh.subMeshCount = 1;
         mesh.SetSubMesh(0, new SubMeshDescriptor(0, indexCount, MeshTopology.Triangles), MeshUpdateFlags.DontRecalculateBounds);
-        mesh.bounds = CalculateDecodedBounds(meshData);
+        mesh.bounds = meshData.bounds;
     }
     
     private static Bounds CalculateDecodedBounds(MeshData meshData)

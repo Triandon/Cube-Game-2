@@ -97,7 +97,7 @@ namespace Core
             lightPropagator = new LightPropagator(lightWorld);
 
             // start worker threads (use processorCount -1 or 1 minimum)
-            threadedWorker = new ThreadedChunkWorker(Math.Max(1, SystemInfo.processorCount - 1));
+            threadedWorker = new ThreadedChunkWorker(Math.Max(1, SystemInfo.processorCount - 2));
             threadedWorker.Start();
 
             UpdatePlayerChunkCoord();
@@ -195,8 +195,7 @@ namespace Core
             if (meshQue.Contains(chunk))
                 return;
 
-            chunk.meshData = result.meshData;
-            chunk.renderer.ApplyMeshData(result.meshData);
+            chunk.renderer.ApplyMeshData(result.meshUploadData);
             chunk.isColliderDirty = false;
             
             // A pooled renderer stays inactive while its replacement mesh is built.
@@ -1356,15 +1355,13 @@ namespace Core
         }
 
 
-        private (Dictionary<Vector3Int, byte[]> blocks, Dictionary<Vector3Int, BlockStateContainer[]> states) 
+        private (ChunkBoundarySnapshot<byte> blocks, ChunkBoundarySnapshot<BlockStateContainer> states) 
             CaptureNeighborSnapshots(Vector3Int coord)
         {
-            var blockDict = new Dictionary<Vector3Int, byte[]>();
-            var stateDict = new Dictionary<Vector3Int, BlockStateContainer[]>();
             
-            // The padded mesher only consumes the six shared faces. Snapshotting
-            // the other 20 surrounding chunks adds allocations without supplying
-            // any data that CopyNeighborFaces can use.
+            var blockFaces = new ChunkBoundarySnapshot<byte>();
+            var stateFaces = new ChunkBoundarySnapshot<BlockStateContainer>();
+            
             foreach (Vector3Int direction in dirs)
             {
                 Vector3Int nc = coord + direction;
@@ -1372,13 +1369,65 @@ namespace Core
                 if (!chunks.TryGetValue(nc, out Chunk c) || c.blocks == null)
                     continue;
 
-                // SNAPSHOT (important!)
-                blockDict[nc] = (byte[])c.blocks.Clone();
+                AssignBoundaryFace(blockFaces, direction,
+                    CaptureNeighborFace(c.blocks, direction));
+
                 if (c.states != null)
-                    stateDict[nc] = (BlockStateContainer[])c.states.Clone();
+                {
+                    AssignBoundaryFace(stateFaces, direction,
+                        CaptureNeighborFace(c.states, direction));
+                }
             }
 
-            return (blockDict, stateDict);
+            return (blockFaces, stateFaces.IsEmpty ? null : stateFaces);
+        }
+
+        private static T[] CaptureNeighborFace<T>(T[] source, Vector3Int direction)
+        {
+            int size = Chunk.CHUNK_SIZE;
+            T[] face = new T[size * size];
+
+            for (int a = 0; a < size; a++)
+            for (int b = 0; b < size; b++)
+            {
+                int x;
+                int y;
+                int z;
+
+                if (direction == Vector3Int.right || direction == Vector3Int.left)
+                {
+                    x = direction == Vector3Int.right ? 0 : size - 1;
+                    y = a;
+                    z = b;
+                }
+                else if (direction == Vector3Int.up || direction == Vector3Int.down)
+                {
+                    x = a;
+                    y = direction == Vector3Int.up ? 0 : size - 1;
+                    z = b;
+                }
+                else
+                {
+                    x = a;
+                    y = b;
+                    z = direction == Vector3Int.forward ? 0 : size - 1;
+                }
+
+                face[a + size * b] = source[ArrayIndexing.ToIndex(x, y, z)];
+            }
+
+            return face;
+        }
+        
+        private static void AssignBoundaryFace<T>(ChunkBoundarySnapshot<T> snapshot,
+            Vector3Int direction, T[] face)
+        {
+            if (direction == Vector3Int.right) snapshot.PositiveX = face;
+            else if (direction == Vector3Int.left) snapshot.NegativeX = face;
+            else if (direction == Vector3Int.up) snapshot.PositiveY = face;
+            else if (direction == Vector3Int.down) snapshot.NegativeY = face;
+            else if (direction == Vector3Int.forward) snapshot.PositiveZ = face;
+            else if (direction == Vector3Int.back) snapshot.NegativeZ = face;
         }
 
         private void ProcessLightingIntegration()

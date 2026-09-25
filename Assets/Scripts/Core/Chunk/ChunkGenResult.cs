@@ -8,6 +8,7 @@ public class ChunkGenResult
     public byte[] blocks; //Chunk_Size^3
     public BlockStateContainer[] states;
     public MeshData meshData;
+    public MeshUtilityCustom.ChunkMeshUploadData meshUploadData;
     public List<Vector3Int> blockEntityLocals;
     public bool isAllAir;
     public byte[] skyLight;

@@ -41,10 +41,10 @@ public static class ThreadedChunkProcessor
             // before their first mesh is requested. Do not build their temporary
             // padded inputs (or a mesh that the main thread cannot safely use yet).
             padded = req.isMeshRebuild
-                ? BuildPaddedFromCenter(center, coord, req.neighborBlocks)
+                ? BuildPaddedFromCenter(center, req.neighborBlocks)
                 : null;
             paddedStates = req.isMeshRebuild
-                ? BuildPaddedStatesFromCenter(coord, req.states, req.neighborStates)
+                ? BuildPaddedStatesFromCenter(req.states, req.neighborStates)
                 : null;
         }
         else
@@ -71,11 +71,21 @@ public static class ThreadedChunkProcessor
         if (isAllAir)
         {
             MeshData emptyMesh = req.isMeshRebuild ? new MeshData() : null;
-            ChunkGenResult emptyResult = new ChunkGenResult(coord, center, req.states, emptyMesh, null,
+            ChunkGenResult emptyResult = new ChunkGenResult(coord,
+                req.isMeshRebuild ? null : center,
+                req.isMeshRebuild ? null : req.states,
+                emptyMesh, null,
                 true, instantTickLocals, scheduledTickLocals, randomTickLocals,
                 skyLight, blockLight);
             emptyResult.isMeshRebuild = req.isMeshRebuild;
             emptyResult.meshRevision = req.meshRevision;
+
+            if (req.isMeshRebuild)
+            {
+                emptyResult.meshUploadData = MeshUtilityCustom.BuildUploadData(emptyMesh);
+                emptyResult.meshData = null;
+            }
+            
             return emptyResult;
         }
         
@@ -177,16 +187,21 @@ public static class ThreadedChunkProcessor
         // ------------------------------------
         // 5. RETURN RESULT
         // ------------------------------------
-        ChunkGenResult result = new ChunkGenResult(coord, center, req.states ,meshData,blockEntities,
+        ChunkGenResult result = new ChunkGenResult(coord,
+            req.isMeshRebuild ? null : center,
+            req.isMeshRebuild ? null : req.states,
+            meshData, blockEntities,
             false,instantTickLocals, scheduledTickLocals, randomTickLocals,
             skyLight, blockLight);
         result.isMeshRebuild = req.isMeshRebuild;
         result.meshRevision = req.meshRevision;
+        result.meshUploadData = MeshUtilityCustom.BuildUploadData(meshData);
+        result.meshData = null;
         return result;
     }
 
-    private static byte[] BuildPaddedFromCenter(byte[] center, Vector3Int coord,
-        Dictionary<Vector3Int, byte[]> neighbors)
+    private static byte[] BuildPaddedFromCenter(byte[] center,
+        ChunkBoundarySnapshot<byte> neighbors)
     {
         int S = Chunk.CHUNK_SIZE;
         int P = S + 2;
@@ -197,19 +212,18 @@ public static class ThreadedChunkProcessor
         for (int z = 0; z < S; z++)
             padded[PaddedIndex(x + 1, y + 1, z + 1)] = center[ArrayIndexing.ToIndex(x, y, z)];
 
-        CopyNeighborFaces(coord, neighbors, padded);
+        CopyNeighborFaces(neighbors, padded);
         
         return padded;
     }
     
     private static BlockStateContainer[] BuildPaddedStatesFromCenter(
-        Vector3Int coord,
         BlockStateContainer[] centerStates,
-        Dictionary<Vector3Int, BlockStateContainer[]> neighbors)
+        ChunkBoundarySnapshot<BlockStateContainer> neighbors)
     {
         int S = Chunk.CHUNK_SIZE;
 
-        if (centerStates == null && (neighbors == null || neighbors.Count == 0))
+        if (centerStates == null && (neighbors == null || neighbors.IsEmpty))
             return null;
 
         int paddedSize = S + 2;
@@ -223,29 +237,7 @@ public static class ThreadedChunkProcessor
                 padded[PaddedIndex(x + 1, y + 1, z + 1)] = centerStates[ArrayIndexing.ToIndex(x, y, z)];
         }
 
-        if (neighbors != null)
-        {
-            foreach (var kv in neighbors)
-            {
-                Vector3Int delta = kv.Key - coord;
-                BlockStateContainer[] n = kv.Value;
-                if (n == null)
-                    continue;
-
-                if (delta == Vector3Int.right)
-                    CopyFace(n, padded, srcX: 0, dstX: S + 1);
-                else if (delta == Vector3Int.left)
-                    CopyFace(n, padded, srcX: S - 1, dstX: 0);
-                else if (delta == Vector3Int.forward)
-                    CopyFace(n, padded, srcZ: 0, dstZ: S + 1);
-                else if (delta == Vector3Int.back)
-                    CopyFace(n, padded, srcZ: S - 1, dstZ: 0);
-                else if (delta == Vector3Int.up)
-                    CopyFace(n, padded, srcY: 0, dstY: S + 1);
-                else if (delta == Vector3Int.down)
-                    CopyFace(n, padded, srcY: S - 1, dstY: 0);
-            }
-        }
+        CopyNeighborFaces(neighbors, padded);
 
         return padded;
     }
@@ -292,7 +284,7 @@ public static class ThreadedChunkProcessor
         return center;
     }
 
-    private static byte[] GenerateTerrainPadded(Vector3Int coord, Dictionary<Vector3Int, byte[]> neighbors)
+    private static byte[] GenerateTerrainPadded(Vector3Int coord, ChunkBoundarySnapshot<byte> neighbors)
     {
         int S = Chunk.CHUNK_SIZE;
         int S2 = S + 2;
@@ -343,7 +335,7 @@ public static class ThreadedChunkProcessor
 
         //2 Override borders ONLY if neighbor exists
         // ----------------------------
-        CopyNeighborFaces(coord, neighbors, padded);
+        CopyNeighborFaces(neighbors, padded);
 
         return padded;
     }
@@ -354,115 +346,35 @@ public static class ThreadedChunkProcessor
         return x + P * (y + P * z);
     }
 
-    private static void CopyNeighborFaces(Vector3Int coord, Dictionary<Vector3Int, byte[]> neighbors, byte[] padded)
+    private static void CopyNeighborFaces<T>(ChunkBoundarySnapshot<T> neighbors, T[] padded)
     {
         if (neighbors == null)
             return;
 
         int S = Chunk.CHUNK_SIZE;
         
-        foreach (var kv in neighbors)
-        {
-            Vector3Int delta = kv.Key - coord;
-            byte[] n = kv.Value;
-            
-            if (n == null)
-                continue;
-
-            if (delta == Vector3Int.right)
-                CopyBlockFace(n, padded, srcX: 0, dstX: S + 1);
-            else if (delta == Vector3Int.left)
-                CopyBlockFace(n, padded, srcX: S - 1, dstX: 0);
-            else if (delta == Vector3Int.forward)
-                CopyBlockFace(n, padded, srcZ: 0, dstZ: S + 1);
-            else if (delta == Vector3Int.back)
-                CopyBlockFace(n, padded, srcZ: S - 1, dstZ: 0);
-            else if (delta == Vector3Int.up)
-                CopyBlockFace(n, padded, srcY: 0, dstY: S + 1);
-            else if (delta == Vector3Int.down)
-                CopyBlockFace(n, padded, srcY: S - 1, dstY: 0);
-        }
-    }
-    
-    
-    private static void CopyBlockFace(
-        byte[] src,
-        byte[] dst,
-        int srcX = -1, int dstX = -1,
-        int srcY = -1, int dstY = -1,
-        int srcZ = -1, int dstZ = -1)
-    {
-        int S = Chunk.CHUNK_SIZE;
-        
-        if (srcX >= 0 || dstX >= 0)
-        {
-            for (int y = 0; y < S; y++)
-            for (int z = 0; z < S; z++)
-            {
-                dst[PaddedIndex(dstX, y + 1, z + 1)] =
-                    src[ArrayIndexing.ToIndex(srcX, y, z)];
-            }
-            return;
-        }
-        
-        if (srcY >= 0 || dstY >= 0)
-        {
-            for (int x = 0; x < S; x++)
-            for (int z = 0; z < S; z++)
-            {
-                dst[PaddedIndex(x + 1, dstY, z + 1)] = src[ArrayIndexing.ToIndex(x, srcY, z)];
-            }
-            return;
-        }
-        
-        if (srcZ >= 0 || dstZ >= 0)
-        {
-            for (int x = 0; x < S; x++)
-            for (int y = 0; y < S; y++)
-            {
-                dst[PaddedIndex(x + 1, y + 1, dstZ)] = src[ArrayIndexing.ToIndex(x, y, srcZ)];
-            }
-        }
-
+        CopyBoundaryFace(neighbors.PositiveX, padded, axis: 0, destination: S + 1);
+        CopyBoundaryFace(neighbors.NegativeX, padded, axis: 0, destination: 0);
+        CopyBoundaryFace(neighbors.PositiveY, padded, axis: 1, destination: S + 1);
+        CopyBoundaryFace(neighbors.NegativeY, padded, axis: 1, destination: 0);
+        CopyBoundaryFace(neighbors.PositiveZ, padded, axis: 2, destination: S + 1);
+        CopyBoundaryFace(neighbors.NegativeZ, padded, axis: 2, destination: 0);
 
     }
-    
-    private static void CopyFace<T>(
-        T[] src,
-        T[] dst,
-        int srcX = -1, int dstX = -1,
-        int srcY = -1, int dstY = -1,
-        int srcZ = -1, int dstZ = -1)
+
+    private static void CopyBoundaryFace<T>(T[] source, T[] padded, int axis, int destination)
     {
-        int S = Chunk.CHUNK_SIZE;
-
-        if (srcX >= 0 || dstX >= 0)
-        {
-            for (int y = 0; y < S; y++)
-            for (int z = 0; z < S; z++)
-            {
-                dst[PaddedIndex(dstX, y + 1, z + 1)] = src[ArrayIndexing.ToIndex(srcX, y, z)];
-            }
+        if (source == null)
             return;
-        }
         
-        if (srcY >= 0 || dstY >= 0)
+        int size = Chunk.CHUNK_SIZE;
+        for (int a = 0; a < size; a++)
+        for (int b = 0; b < size; b++)
         {
-            for (int x = 0; x < S; x++)
-            for (int z = 0; z < S; z++)
-            {
-                dst[PaddedIndex(x + 1, dstY, z + 1)] = src[ArrayIndexing.ToIndex(x, srcY, z)];
-            }
-            return;
-        }
-
-        if (srcZ >= 0 || dstZ >= 0)
-        {
-            for (int x = 0; x < S; x++)
-            for (int y = 0; y < S; y++)
-            {
-                dst[PaddedIndex(x + 1, y + 1, dstZ)] = src[ArrayIndexing.ToIndex(x, y, srcZ)];
-            }
+            int x = axis == 0 ? destination : a + 1;
+            int y = axis == 1 ? destination : (axis == 0 ? a + 1 : b + 1);
+            int z = axis == 2 ? destination : b + 1;
+            padded[PaddedIndex(x, y, z)] = source[a + size * b];
         }
     }
     

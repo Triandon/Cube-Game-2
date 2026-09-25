@@ -26,7 +26,6 @@ namespace Core
         
         public ChunkManager chunkManager;
         public ChunkRendering renderer;
-        public MeshData meshData;
         public ChunkLOD lod;
 
         public Chunk(Vector3Int coord)
