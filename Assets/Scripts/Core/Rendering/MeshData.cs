@@ -1778,68 +1778,6 @@ public static class ChunkMeshGeneratorThreaded
             mesh.colors.Add(color);
     }
     
-
-}
-
-public class ChunkMeshGenerator
-{
-    
-    // Internal threaded mesher uses delegate getBlock. For compatibility we provide a simple wrapper that
-    // uses the chunk.GetBlock method on the main thread (same behavior as original).
-    public ChunkRendering.ChunkMeshData GenerateMesh(byte[] blocks, Chunk owner)
-    {
-        int lodScale = owner != null ? owner.GetLodScale() : 1;
-        
-        ChunkMeshGeneratorThreaded.NeighborLODInfo neighbors = new ChunkMeshGeneratorThreaded.NeighborLODInfo
-        {
-            posX = owner.chunkManager.GetChunk(owner.coord + Vector3Int.right)?.GetLodScale() ?? lodScale,
-            negX = owner.chunkManager.GetChunk(owner.coord + Vector3Int.left )?.GetLodScale() ?? lodScale,
-            posY = owner.chunkManager.GetChunk(owner.coord + Vector3Int.up   )?.GetLodScale() ?? lodScale,
-            negY = owner.chunkManager.GetChunk(owner.coord + Vector3Int.down )?.GetLodScale() ?? lodScale,
-            posZ = owner.chunkManager.GetChunk(owner.coord + Vector3Int.forward)?.GetLodScale() ?? lodScale,
-            negZ = owner.chunkManager.GetChunk(owner.coord + Vector3Int.back   )?.GetLodScale() ?? lodScale,
-        };
-        
-        // Provide the worker thread only a plain byte array (blocks)
-        Func<int,int,int,byte> getBlock = (x,y,z) =>
-        {
-            if (owner != null)
-            {
-                return owner.GetBlock(x, y, z);
-            }
-
-            return 0;
-        };
-
-        Func<int, int, int, BlockStateContainer> getState = (x, y, z) =>
-        {
-            if (owner != null)
-            {
-                return owner.GetStateAt(x, y, z);
-            }
-
-            return null;
-        };
-
-        // Use threaded mesher to produce plain MeshData (runs on main thread here)
-        MeshData meshData = ChunkMeshGeneratorThreaded.GenerateMeshData(getBlock,getState,lodScale, neighbors, owner?.specialMeshBlocks);
-
-        // Convert MeshData to Unity Mesh objects (this MUST be done on main thread)
-        return ConvertToChunkMeshData(meshData);
-    }
-
-    // Converts the plain MeshData -> ChunkRendering.ChunkMeshData with Unity Mesh objects.
-    // Uploads only the chunk vertex attributes the shader needs (position, normal, color, UV0 and atlas metadata).
-    private ChunkRendering.ChunkMeshData ConvertToChunkMeshData(MeshData md)
-    {
-        Mesh renderMesh = new Mesh();
-        MeshUtilityCustom.ApplyChunkMesh(renderMesh, md);
-
-        return new ChunkRendering.ChunkMeshData
-        {
-            renderingMesh = renderMesh,
-        };
-    }
 }
 
 

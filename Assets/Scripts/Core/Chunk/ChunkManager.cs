@@ -5,6 +5,7 @@ using System.Globalization;
 using System.Linq;
 using Core.Block;
 using Core.Block.TileEntities;
+using Core.Rendering;
 using Misc.InventoryHolders;
 using UnityEngine;
 
@@ -64,7 +65,20 @@ namespace Core
         private readonly Queue<Vector3Int> skyRepairQueue = new Queue<Vector3Int>();
         private readonly HashSet<Vector3Int> queuedSkyRepairs = new HashSet<Vector3Int>();
         private const float SkyOcclusionSaveDelay = 3f;
+        
+        [Header("Paged GPU Terrain Rendering")]
+        [SerializeField, Min(1)] private int pageVertexCapacity = 2097152;
+        [SerializeField, Min(1)] private int pageIndexCapacity = 8388608;
+        [SerializeField, Min(1)] private int pageCommandCapacity = 4096;
 
+        [Header("Paged GPU Runtime Diagnostics")]
+        [SerializeField] private int pagedPageCount;
+        [SerializeField] private int pagedResidentChunks;
+        [SerializeField] private long pagedUsedVertices;
+        [SerializeField] private long pagedUsedIndices;
+        
+        private PagedTerrainMeshStorage pagedTerrainStorage;
+        private float nextPagedDiagnosticsUpdate;
         
         //If a player moves (so the chunks also moves), then if the player increase render distance new chunks
         //gets generated and there forms a line where moved chunks arent getting re rendered :(
@@ -100,6 +114,13 @@ namespace Core
             threadedWorker = new ThreadedChunkWorker(Math.Max(1, SystemInfo.processorCount - 2));
             threadedWorker.Start();
 
+            Material pagedAtlasMaterial = Resources.Load<Material>("Materials/PagedAtlasMaterial");
+            pagedTerrainStorage = new PagedTerrainMeshStorage(
+                pageVertexCapacity, pageIndexCapacity, pageCommandCapacity, pagedAtlasMaterial);
+            if (!pagedTerrainStorage.CanRender)
+                throw new InvalidOperationException(
+                    "PagedAtlasMaterial could not be loaded; terrain rendering cannot start.");
+
             UpdatePlayerChunkCoord();
             UpdateChunks();
         }
@@ -123,11 +144,20 @@ namespace Core
             }
             
             SortChunksLists();
+            pagedTerrainStorage?.ProcessDeferredFrees(Time.frameCount);
+            UpdatePagedDiagnostics();
+        }
+
+        private void LateUpdate()
+        {
+            pagedTerrainStorage?.Render();
         }
 
         private void OnDestroy()
         {
             SaveSkyOcclusionMapIfDirty();
+            pagedTerrainStorage?.Dispose();
+            pagedTerrainStorage = null;
             if (threadedWorker != null)
             {
                 try
@@ -194,8 +224,25 @@ namespace Core
             // and let the scheduler submit exactly one up-to-date follow-up build.
             if (meshQue.Contains(chunk))
                 return;
+            
+            bool pagedUploadSucceeded = false;
+            try
+            {
+                Vector3 worldOrigin = (Vector3)(chunk.coord * Chunk.CHUNK_SIZE);
+                pagedUploadSucceeded = pagedTerrainStorage.TryUpload(chunk.coord,
+                    result.meshRevision, result.meshUploadData, worldOrigin);
+            }
+            catch (Exception exception)
+            {
+                Debug.LogException(exception);
+            }
 
-            chunk.renderer.ApplyMeshData(result.meshUploadData);
+            if (!pagedUploadSucceeded)
+            {
+                Debug.LogError($"Paged terrain upload failed for chunk {chunk.coord}; " +
+                               "the chunk will keep its previous paged allocation, if any.");
+            }
+            
             chunk.isColliderDirty = false;
             
             // A pooled renderer stays inactive while its replacement mesh is built.
@@ -557,6 +604,7 @@ namespace Core
 
         private void RemoveChunk(Chunk chunk, Vector3Int coord)
         {
+            pagedTerrainStorage?.Remove(coord);
             tickCaller?.UnregisterChunk(chunk);
             if (chunk.isDirty)
             {
@@ -623,6 +671,7 @@ namespace Core
 
                 if (distanceX > viewDistance || distanceY > viewDistance || distanceZ > viewDistance)
                 {
+                    pagedTerrainStorage?.Remove(coord);
                     tickCaller?.UnregisterChunk(chunk);
                     UnregisterBlockLightSources(chunk);
                     if (chunk.isDirty)
@@ -2191,6 +2240,28 @@ namespace Core
         private bool WasChunkLoadedFromDisk(Vector3Int coord)
         {
             return WorldSaveSystem.ChunkSaveExist(coord);
+        }
+        
+        private void UpdatePagedDiagnostics()
+        {
+            if (pagedTerrainStorage == null)
+            {
+                pagedPageCount = 0;
+                pagedResidentChunks = 0;
+                pagedUsedVertices = 0;
+                pagedUsedIndices = 0;
+                return;
+            }
+
+            if (Time.unscaledTime < nextPagedDiagnosticsUpdate)
+                return;
+
+            nextPagedDiagnosticsUpdate = Time.unscaledTime + 0.5f;
+            PagedTerrainMeshStorage.Statistics statistics = pagedTerrainStorage.GetStatistics();
+            pagedPageCount = statistics.PageCount;
+            pagedResidentChunks = statistics.ResidentChunks;
+            pagedUsedVertices = statistics.VertexCapacity - statistics.FreeVertices;
+            pagedUsedIndices = statistics.IndexCapacity - statistics.FreeIndices;
         }
         
     }

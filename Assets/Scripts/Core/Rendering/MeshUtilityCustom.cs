@@ -4,15 +4,7 @@ using UnityEngine.Rendering;
 
 public static class MeshUtilityCustom
 {
-    
-    private static readonly VertexAttributeDescriptor[] ChunkVertexLayout =
-    {
-        new VertexAttributeDescriptor(VertexAttribute.Position, VertexAttributeFormat.UInt16, 4),
-        new VertexAttributeDescriptor(VertexAttribute.Normal, VertexAttributeFormat.SNorm8, 4),
-        new VertexAttributeDescriptor(VertexAttribute.Color, VertexAttributeFormat.UNorm8, 4),
-        new VertexAttributeDescriptor(VertexAttribute.TexCoord0, VertexAttributeFormat.UInt16, 2),
-        new VertexAttributeDescriptor(VertexAttribute.TexCoord1, VertexAttributeFormat.UInt16, 2),
-    };
+    public static readonly int ChunkVertexStride = Marshal.SizeOf<ChunkVertex>();
 
     private static readonly Color32 DefaultVertexColor = new Color32(255, 255, 255, 255);
     
@@ -70,26 +62,6 @@ public static class MeshUtilityCustom
 
         return new ChunkMeshUploadData(vertices, meshData.triangles.ToArray(),
             CalculateDecodedBounds(meshData));
-    }
-    public static void ApplyChunkMesh(Mesh mesh, MeshData meshData)
-    {
-        ApplyChunkMesh(mesh, BuildUploadData(meshData));
-    }
-
-    public static void ApplyChunkMesh(Mesh mesh, ChunkMeshUploadData meshData)
-    {
-        int vertexCount = meshData.vertices.Length;
-        int indexCount = meshData.indices.Length;
-
-        mesh.Clear();
-        mesh.indexFormat = IndexFormat.UInt32;
-        mesh.SetVertexBufferParams(vertexCount, ChunkVertexLayout);
-        mesh.SetVertexBufferData(meshData.vertices, 0, 0, vertexCount, 0, MeshUpdateFlags.DontRecalculateBounds);
-        mesh.SetIndexBufferParams(indexCount, IndexFormat.UInt32);
-        mesh.SetIndexBufferData(meshData.indices, 0, 0, indexCount, MeshUpdateFlags.DontRecalculateBounds);
-        mesh.subMeshCount = 1;
-        mesh.SetSubMesh(0, new SubMeshDescriptor(0, indexCount, MeshTopology.Triangles), MeshUpdateFlags.DontRecalculateBounds);
-        mesh.bounds = meshData.bounds;
     }
     
     private static Bounds CalculateDecodedBounds(MeshData meshData)

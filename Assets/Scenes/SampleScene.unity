@@ -4542,7 +4542,7 @@ MonoBehaviour:
   groundProbeDistance: 0.05
   groundedGraceTime: 0.08
   maxStepHeight: 0.3
-  flySpeed: 8
+  flySpeed: 100
   runFlySpeed: 29
   creativeMode: 0
   chatBox: {fileID: 0}
@@ -7010,6 +7010,15 @@ MonoBehaviour:
   workerBacklogPerThread: 2
   visualChunksPerFrame: 4
   initialPoolSize: 30
+  enablePagedTerrainStorage: 1
+  usePagedIndirectRenderer: 1
+  pageVertexCapacity: 2097152
+  pageIndexCapacity: 8388608
+  pageCommandCapacity: 4096
+  pagedPageCount: 0
+  pagedResidentChunks: 0
+  pagedUsedVertices: 0
+  pagedUsedIndices: 0
 --- !u!4 &2008103919
 Transform:
   m_ObjectHideFlags: 0
