@@ -23,6 +23,7 @@ namespace Core.Rendering
         private readonly Queue<RetiredAllocation> retiredAllocations = new Queue<RetiredAllocation>();
         private readonly Material indirectMaterial;
         private readonly ComputeShader frustumCullingShader;
+        private readonly int hierarchyCullingKernel = -1;
         private readonly int frustumCullingKernel = -1;
         private readonly Plane[] frustumPlaneScratch = new Plane[6];
         private readonly Vector4[] frustumPlaneVectorScratch = new Vector4[6];
@@ -51,7 +52,11 @@ namespace Core.Rendering
 
             frustumCullingShader = frustumCullingShaderTemplate;
             if (frustumCullingShader != null)
+            {
+                hierarchyCullingKernel = frustumCullingShader.FindKernel("CullHierarchy");
                 frustumCullingKernel = frustumCullingShader.FindKernel("CullChunks");
+            }
+                
         }
 
         public bool TryUpload(Vector3Int coordinate, int revision,
@@ -115,9 +120,10 @@ namespace Core.Rendering
                     new Vector4(normal.x, normal.y, normal.z, plane.distance);
             }
             
-            for (int i = 0; i < pages.Count; i++)
+            for (int i = 0; i < pages.Count; i++) 
                 pages[i].Render(indirectMaterial, frustumCullingShader,
-                    frustumCullingKernel, camera, previewCamera, frustumPlaneVectorScratch);
+                    hierarchyCullingKernel, frustumCullingKernel, camera, previewCamera,
+                    frustumPlaneVectorScratch);
         }
 
         public void Remove(Vector3Int coordinate)
@@ -302,11 +308,19 @@ namespace Core.Rendering
             private readonly GraphicsBuffer chunkDataBuffer;
             private readonly GraphicsBuffer sourceCommandBuffer;
             private readonly GraphicsBuffer commandBuffer;
+            private readonly GraphicsBuffer hierarchyNodeBuffer;
+            private readonly GraphicsBuffer hierarchyStateBuffer;
+            private readonly GraphicsBuffer commandLeafBuffer;
             private readonly MaterialPropertyBlock materialProperties = new MaterialPropertyBlock();
             private readonly GraphicsBuffer.IndirectDrawIndexedArgs[] commandScratch =
                 new GraphicsBuffer.IndirectDrawIndexedArgs[1];
             private int[] rebasedIndexScratch = Array.Empty<int>();
             private uint[] vertexInstanceScratch = Array.Empty<uint>();
+            private readonly Dictionary<int, Vector3Int> coordinatesBySlot =
+                new Dictionary<int, Vector3Int>();
+            private readonly int[] hierarchyLevelOffsets = new int[4];
+            private readonly int[] hierarchyLevelCounts = new int[4];
+            private bool hierarchyDirty = true;
             private int liveAllocationCount;
             private int activeCommandCount;
             private int highestActiveCommand = -1;
@@ -347,6 +361,12 @@ namespace Core.Rendering
                 commandBuffer = new GraphicsBuffer(
                     GraphicsBuffer.Target.IndirectArguments | GraphicsBuffer.Target.Raw,
                     commandCapacity, GraphicsBuffer.IndirectDrawIndexedArgs.size);
+                hierarchyNodeBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured,
+                    commandCapacity * 4, Marshal.SizeOf<HierarchyNodeGpuData>());
+                hierarchyStateBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured,
+                    commandCapacity * 4, sizeof(uint));
+                commandLeafBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured,
+                    commandCapacity, sizeof(int));
 
                 // GraphicsBuffer contents are undefined after creation. Every unused
                 // command must explicitly start with zero instances.
@@ -415,6 +435,8 @@ namespace Core.Rendering
                 };
                 sourceCommandBuffer.SetData(commandScratch, 0, handle.CommandSlot, 1);
                 commandBuffer.SetData(commandScratch, 0, handle.CommandSlot, 1);
+                coordinatesBySlot[handle.CommandSlot] = handle.Coordinate;
+                hierarchyDirty = true;
                 activeCommandCount++;
                 highestActiveCommand = Math.Max(highestActiveCommand, handle.CommandSlot);
 
@@ -431,6 +453,8 @@ namespace Core.Rendering
 
             public void DisableCommand(int commandSlot)
             {
+                coordinatesBySlot.Remove(commandSlot);
+                hierarchyDirty = true;
                 commandScratch[0] = default;
                 sourceCommandBuffer.SetData(commandScratch, 0, commandSlot, 1);
                 commandBuffer.SetData(commandScratch, 0, commandSlot, 1);
@@ -440,12 +464,13 @@ namespace Core.Rendering
             }
 
             public void Render(Material material, ComputeShader cullingShader,
-                int cullingKernel, Camera camera, Camera previewCamera, Vector4[] frustumPlanes)
+                int hierarchyKernel, int cullingKernel, Camera camera, Camera previewCamera,
+                Vector4[] frustumPlanes)
             {
                 if (activeCommandCount == 0 || highestActiveCommand < 0 || !hasWorldBounds)
                     return;
 
-                CullCommands(cullingShader, cullingKernel, frustumPlanes);
+                CullCommands(cullingShader, hierarchyKernel, cullingKernel, frustumPlanes);
 
                 materialProperties.Clear();
                 materialProperties.SetBuffer("_Vertices", vertexBuffer);
@@ -496,18 +521,110 @@ namespace Core.Rendering
                 chunkDataBuffer?.Dispose();
                 sourceCommandBuffer?.Dispose();
                 commandBuffer?.Dispose();
+                hierarchyNodeBuffer?.Dispose();
+                hierarchyStateBuffer?.Dispose();
+                commandLeafBuffer?.Dispose();
             }
             
-            private void CullCommands(ComputeShader shader, int kernel, Vector4[] frustumPlanes)
+            private void CullCommands(ComputeShader shader, int hierarchyKernel, int chunkKernel,
+                Vector4[] frustumPlanes)
             {
                 const int threadGroupSize = 64;
+                
+                if (hierarchyDirty)
+                    RebuildHierarchy();
+
+                shader.SetVectorArray("_FrustumPlanes", frustumPlanes);
+                shader.SetBuffer(hierarchyKernel, "_HierarchyNodes", hierarchyNodeBuffer);
+                shader.SetBuffer(hierarchyKernel, "_HierarchyStates", hierarchyStateBuffer);
+                for (int level = 0; level < hierarchyLevelOffsets.Length; level++)
+                {
+                    int nodeCount = hierarchyLevelCounts[level];
+                    if (nodeCount == 0)
+                        continue;
+                    shader.SetInt("_NodeOffset", hierarchyLevelOffsets[level]);
+                    shader.SetInt("_NodeCount", nodeCount);
+                    shader.Dispatch(hierarchyKernel,
+                        (nodeCount + threadGroupSize - 1) / threadGroupSize, 1, 1);
+                }
+                
                 int commandCount = highestActiveCommand + 1;
                 shader.SetInt("_CommandCount", commandCount);
-                shader.SetVectorArray("_FrustumPlanes", frustumPlanes);
-                shader.SetBuffer(kernel, "_ChunkData", chunkDataBuffer);
-                shader.SetBuffer(kernel, "_SourceCommands", sourceCommandBuffer);
-                shader.SetBuffer(kernel, "_VisibleCommands", commandBuffer);
-                shader.Dispatch(kernel, (commandCount + threadGroupSize - 1) / threadGroupSize, 1, 1);
+                shader.SetBuffer(chunkKernel, "_ChunkData", chunkDataBuffer);
+                shader.SetBuffer(chunkKernel, "_SourceCommands", sourceCommandBuffer);
+                shader.SetBuffer(chunkKernel, "_VisibleCommands", commandBuffer);
+                shader.SetBuffer(chunkKernel, "_HierarchyStates", hierarchyStateBuffer);
+                shader.SetBuffer(chunkKernel, "_CommandLeafNodes", commandLeafBuffer);
+                shader.Dispatch(chunkKernel,
+                    (commandCount + threadGroupSize - 1) / threadGroupSize, 1, 1);
+            }
+            
+            private void RebuildHierarchy()
+            {
+                int[] sizes = { 32, 16, 8, 4 };
+                var keysByLevel = new HashSet<HierarchyNodeKey>[sizes.Length];
+                for (int level = 0; level < sizes.Length; level++)
+                    keysByLevel[level] = new HashSet<HierarchyNodeKey>();
+
+                foreach (Vector3Int coordinate in coordinatesBySlot.Values)
+                {
+                    for (int level = 0; level < sizes.Length; level++)
+                        keysByLevel[level].Add(new HierarchyNodeKey(
+                            AlignDown(coordinate, sizes[level]), sizes[level]));
+                }
+
+                int nodeCount = 0;
+                for (int level = 0; level < sizes.Length; level++)
+                {
+                    hierarchyLevelOffsets[level] = nodeCount;
+                    hierarchyLevelCounts[level] = keysByLevel[level].Count;
+                    nodeCount += keysByLevel[level].Count;
+                }
+
+                var nodes = new HierarchyNodeGpuData[nodeCount];
+                var indices = new Dictionary<HierarchyNodeKey, int>(nodeCount);
+                int writeIndex = 0;
+                for (int level = 0; level < sizes.Length; level++)
+                {
+                    foreach (HierarchyNodeKey key in keysByLevel[level])
+                    {
+                        int parentIndex = -1;
+                        if (level > 0)
+                        {
+                            var parentKey = new HierarchyNodeKey(
+                                AlignDown(key.Origin, sizes[level - 1]), sizes[level - 1]);
+                            parentIndex = indices[parentKey];
+                        }
+
+                        nodes[writeIndex] = new HierarchyNodeGpuData(key.Origin, key.Size,
+                            parentIndex);
+                        indices.Add(key, writeIndex++);
+                    }
+                }
+
+                int[] commandLeaves = new int[freeCommandSlots.Count + liveAllocationCount];
+                foreach (KeyValuePair<int, Vector3Int> entry in coordinatesBySlot)
+                {
+                    var leafKey = new HierarchyNodeKey(AlignDown(entry.Value, 4), 4);
+                    commandLeaves[entry.Key] = indices[leafKey];
+                }
+
+                if (nodeCount > 0)
+                    hierarchyNodeBuffer.SetData(nodes);
+                commandLeafBuffer.SetData(commandLeaves);
+                hierarchyDirty = false;
+            }
+
+            private static Vector3Int AlignDown(Vector3Int coordinate, int size)
+            {
+                return new Vector3Int(FloorToMultiple(coordinate.x, size),
+                    FloorToMultiple(coordinate.y, size), FloorToMultiple(coordinate.z, size));
+            }
+
+            private static int FloorToMultiple(int value, int size)
+            {
+                int remainder = value % size;
+                return value - (remainder < 0 ? remainder + size : remainder);
             }
             
 
@@ -518,6 +635,37 @@ namespace Core.Rendering
                 if (rebasedIndexScratch.Length < indexCount)
                     rebasedIndexScratch = new int[Mathf.NextPowerOfTwo(indexCount)];
             }
+            
+            private readonly struct HierarchyNodeKey : IEquatable<HierarchyNodeKey>
+            {
+                public readonly Vector3Int Origin;
+                public readonly int Size;
+
+                public HierarchyNodeKey(Vector3Int origin, int size)
+                {
+                    Origin = origin;
+                    Size = size;
+                }
+
+                public bool Equals(HierarchyNodeKey other)
+                {
+                    return Origin == other.Origin && Size == other.Size;
+                }
+
+                public override bool Equals(object obj)
+                {
+                    return obj is HierarchyNodeKey other && Equals(other);
+                }
+
+                public override int GetHashCode()
+                {
+                    unchecked
+                    {
+                        return (Origin.GetHashCode() * 397) ^ Size;
+                    }
+                }
+            }
+
         }
 
         private struct ChunkMeshHandle
@@ -545,5 +693,26 @@ namespace Core.Rendering
                 boundsExtents = new Vector4(bounds.extents.x, bounds.extents.y, bounds.extents.z, 0f);
             }
         }
+        
+        [StructLayout(LayoutKind.Sequential)]
+        private readonly struct HierarchyNodeGpuData
+        {
+            private readonly Vector4 boundsCenter;
+            private readonly Vector4 boundsExtents;
+            private readonly Vector4 metadata;
+
+            public HierarchyNodeGpuData(Vector3Int chunkOrigin, int size, int parentIndex)
+            {
+                float worldSize = size * Chunk.CHUNK_SIZE;
+                Vector3 minimum = (Vector3)(chunkOrigin * Chunk.CHUNK_SIZE);
+                Vector3 center = minimum + Vector3.one * (worldSize * 0.5f);
+                const float padding = 1f;
+                boundsCenter = new Vector4(center.x, center.y, center.z, 0f);
+                boundsExtents = new Vector4(worldSize * 0.5f + padding,
+                    worldSize * 0.5f + padding, worldSize * 0.5f + padding, 0f);
+                metadata = new Vector4(parentIndex, 0f, 0f, 0f);
+            }
+        }
+
     }
 }
