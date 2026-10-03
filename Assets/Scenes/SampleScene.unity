@@ -5477,7 +5477,7 @@ GameObject:
   - component: {fileID: 1672112036}
   m_Layer: 0
   m_Name: Camera
-  m_TagString: Untagged
+  m_TagString: MainCamera
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
@@ -7010,8 +7010,6 @@ MonoBehaviour:
   workerBacklogPerThread: 2
   visualChunksPerFrame: 4
   initialPoolSize: 30
-  enablePagedTerrainStorage: 1
-  usePagedIndirectRenderer: 1
   pageVertexCapacity: 2097152
   pageIndexCapacity: 8388608
   pageCommandCapacity: 4096
@@ -7019,6 +7017,8 @@ MonoBehaviour:
   pagedResidentChunks: 0
   pagedUsedVertices: 0
   pagedUsedIndices: 0
+  terrainCullingCamera: {fileID: 0}
+  previewPlayerCullingInSceneView: 1
 --- !u!4 &2008103919
 Transform:
   m_ObjectHideFlags: 0

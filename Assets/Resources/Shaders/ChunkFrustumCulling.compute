@@ -1,0 +1,72 @@
+#pragma kernel CullChunks
+#pragma target 5.0
+
+struct ChunkGpuData
+{
+    float4 origin;
+    float4 boundsCenter;
+    float4 boundsExtents;
+};
+
+struct IndirectDrawIndexedArgs
+{
+    uint indexCountPerInstance;
+    uint instanceCount;
+    uint startIndex;
+    uint baseVertexIndex;
+    uint startInstance;
+};
+
+StructuredBuffer<ChunkGpuData> _ChunkData;
+StructuredBuffer<IndirectDrawIndexedArgs> _SourceCommands;
+// Indirect-argument buffers have a raw R32 layout on DirectX 11. Writing them
+// as a structured UAV is not portable and can corrupt neighboring commands.
+RWByteAddressBuffer _VisibleCommands;
+
+float4 _FrustumPlanes[6];
+uint _CommandCount;
+
+[numthreads(64, 1, 1)]
+void CullChunks(uint3 dispatchThreadId : SV_DispatchThreadID)
+{
+    uint commandIndex = dispatchThreadId.x;
+    if (commandIndex >= _CommandCount)
+        return;
+
+    IndirectDrawIndexedArgs command = _SourceCommands[commandIndex];
+    if (command.instanceCount == 0)
+    {
+        uint byteOffset = commandIndex * 20;
+        _VisibleCommands.Store4(byteOffset, uint4(
+            command.indexCountPerInstance,
+            command.instanceCount,
+            command.startIndex,
+            command.baseVertexIndex));
+        _VisibleCommands.Store(byteOffset + 16, command.startInstance);
+        return;
+    }
+
+    float3 center = _ChunkData[commandIndex].boundsCenter.xyz;
+    float3 extents = _ChunkData[commandIndex].boundsExtents.xyz;
+
+    [unroll]
+    for (uint planeIndex = 0; planeIndex < 6; ++planeIndex)
+    {
+        float4 plane = _FrustumPlanes[planeIndex];
+        float projectedRadius = dot(abs(plane.xyz), extents);
+        float signedDistance = dot(plane.xyz, center) + plane.w;
+        if (signedDistance + projectedRadius < 0.0)
+        {
+            command.instanceCount = 0;
+            break;
+        }
+    }
+
+    uint byteOffset = commandIndex * 20;
+    _VisibleCommands.Store4(byteOffset, uint4(
+        command.indexCountPerInstance,
+        command.instanceCount,
+        command.startIndex,
+        command.baseVertexIndex));
+    _VisibleCommands.Store(byteOffset + 16, command.startInstance);
+}

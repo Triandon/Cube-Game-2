@@ -76,6 +76,14 @@ namespace Core
         [SerializeField] private int pagedResidentChunks;
         [SerializeField] private long pagedUsedVertices;
         [SerializeField] private long pagedUsedIndices;
+
+        [Tooltip("Camera that decides which chunks render. Leave empty to use Camera.main.")]
+        // You can set it manually if its empty then the code sets it auto
+        [SerializeField] private Camera terrainCullingCamera;
+        #if UNITY_EDITOR
+        [Tooltip("Show the chunks selected by the player camera in the freely movable Scene view.")]
+        [SerializeField] private bool previewPlayerCullingInSceneView = true;
+        #endif
         
         private PagedTerrainMeshStorage pagedTerrainStorage;
         private float nextPagedDiagnosticsUpdate;
@@ -115,11 +123,17 @@ namespace Core
             threadedWorker.Start();
 
             Material pagedAtlasMaterial = Resources.Load<Material>("Materials/PagedAtlasMaterial");
+            ComputeShader chunkFrustumCulling =
+                Resources.Load<ComputeShader>("Shaders/ChunkFrustumCulling");
+
             pagedTerrainStorage = new PagedTerrainMeshStorage(
-                pageVertexCapacity, pageIndexCapacity, pageCommandCapacity, pagedAtlasMaterial);
+                pageVertexCapacity, pageIndexCapacity, pageCommandCapacity, pagedAtlasMaterial,
+                chunkFrustumCulling);
+
             if (!pagedTerrainStorage.CanRender)
                 throw new InvalidOperationException(
-                    "PagedAtlasMaterial could not be loaded; terrain rendering cannot start.");
+                    "Paged terrain material or chunk culling compute shader could not be loaded; " +
+                    "terrain rendering cannot start");
 
             UpdatePlayerChunkCoord();
             UpdateChunks();
@@ -150,7 +164,17 @@ namespace Core
 
         private void LateUpdate()
         {
-            pagedTerrainStorage?.Render();
+            // The Scene camera never controls visibility. It only gets a second draw
+            // of the command list produced from this player-camera frustum.
+            Camera playerCamera = terrainCullingCamera != null ? terrainCullingCamera : Camera.main;
+            Camera editorPreviewCamera = null;
+
+            #if UNITY_EDITOR
+            if (previewPlayerCullingInSceneView && UnityEditor.SceneView.lastActiveSceneView != null)
+                editorPreviewCamera = UnityEditor.SceneView.lastActiveSceneView.camera;
+            #endif
+
+            pagedTerrainStorage?.Render(playerCamera, editorPreviewCamera);
         }
 
         private void OnDestroy()

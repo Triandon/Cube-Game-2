@@ -22,15 +22,19 @@ namespace Core.Rendering
             new Dictionary<Vector3Int, ChunkMeshHandle>();
         private readonly Queue<RetiredAllocation> retiredAllocations = new Queue<RetiredAllocation>();
         private readonly Material indirectMaterial;
+        private readonly ComputeShader frustumCullingShader;
+        private readonly int frustumCullingKernel = -1;
+        private readonly Plane[] frustumPlaneScratch = new Plane[6];
+        private readonly Vector4[] frustumPlaneVectorScratch = new Vector4[6];
         private int nextPageId;
         private bool disposed;
 
         public int PageCount => pages.Count;
         public int ResidentChunkCount => allocations.Count;
-        public bool CanRender => indirectMaterial != null;
+        public bool CanRender => indirectMaterial != null && frustumCullingShader != null;
 
         public PagedTerrainMeshStorage(int vertexCapacity, int indexCapacity, int commandCapacity,
-            Material indirectMaterialTemplate)
+            Material indirectMaterialTemplate, ComputeShader frustumCullingShaderTemplate)
         {
             standardVertexCapacity = Math.Max(1, vertexCapacity);
             standardIndexCapacity = Math.Max(1, indexCapacity);
@@ -44,6 +48,10 @@ namespace Core.Rendering
                     enableInstancing = true
                 };
             }
+
+            frustumCullingShader = frustumCullingShaderTemplate;
+            if (frustumCullingShader != null)
+                frustumCullingKernel = frustumCullingShader.FindKernel("CullChunks");
         }
 
         public bool TryUpload(Vector3Int coordinate, int revision,
@@ -66,7 +74,10 @@ namespace Core.Rendering
 
             replacement.Coordinate = coordinate;
             replacement.Revision = revision;
-            replacement.Bounds = TranslateBounds(meshData.bounds, worldOrigin);
+            // Cull against a stable logical chunk volume. Mesh bounds can change as
+            // neighboring chunks, lighting, or LOD rebuild the visible faces; using
+            // those transient bounds made chunks flicker at the edge of the frustum.
+            replacement.Bounds = CreateChunkCullingBounds(worldOrigin);
 
             try
             {
@@ -89,13 +100,24 @@ namespace Core.Rendering
             return true;
         }
 
-        public void Render()
+        public void Render(Camera camera, Camera previewCamera = null)
         {
-            if (disposed || indirectMaterial == null)
+            if (disposed || indirectMaterial == null || frustumCullingShader == null
+                || camera == null)
                 return;
-
+            
+            GeometryUtility.CalculateFrustumPlanes(camera, frustumPlaneScratch);
+            for (int i = 0; i < frustumPlaneScratch.Length; i++)
+            {
+                Plane plane = frustumPlaneScratch[i];
+                Vector3 normal = plane.normal;
+                frustumPlaneVectorScratch[i] =
+                    new Vector4(normal.x, normal.y, normal.z, plane.distance);
+            }
+            
             for (int i = 0; i < pages.Count; i++)
-                pages[i].Render(indirectMaterial);
+                pages[i].Render(indirectMaterial, frustumCullingShader,
+                    frustumCullingKernel, camera, previewCamera, frustumPlaneVectorScratch);
         }
 
         public void Remove(Vector3Int coordinate)
@@ -219,10 +241,13 @@ namespace Core.Rendering
             }
         }
 
-        private static Bounds TranslateBounds(Bounds localBounds, Vector3 origin)
+        private static Bounds CreateChunkCullingBounds(Vector3 worldOrigin)
         {
-            localBounds.center += origin;
-            return localBounds;
+            const float cullingPadding = 1f;
+            float chunkSize = Chunk.CHUNK_SIZE;
+            return new Bounds(
+                worldOrigin + Vector3.one * (chunkSize * 0.5f),
+                Vector3.one * (chunkSize + cullingPadding * 2f));
         }
 
         private static int NextPowerOfTwo(int value)
@@ -275,6 +300,7 @@ namespace Core.Rendering
             private readonly GraphicsBuffer vertexInstanceBuffer;
             private readonly GraphicsBuffer indexBuffer;
             private readonly GraphicsBuffer chunkDataBuffer;
+            private readonly GraphicsBuffer sourceCommandBuffer;
             private readonly GraphicsBuffer commandBuffer;
             private readonly MaterialPropertyBlock materialProperties = new MaterialPropertyBlock();
             private readonly GraphicsBuffer.IndirectDrawIndexedArgs[] commandScratch =
@@ -316,12 +342,17 @@ namespace Core.Rendering
                     indexCapacity, sizeof(int));
                 chunkDataBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured,
                     commandCapacity, Marshal.SizeOf<ChunkGpuData>());
-                commandBuffer = new GraphicsBuffer(GraphicsBuffer.Target.IndirectArguments,
+                sourceCommandBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured,
+                    commandCapacity, GraphicsBuffer.IndirectDrawIndexedArgs.size);
+                commandBuffer = new GraphicsBuffer(
+                    GraphicsBuffer.Target.IndirectArguments | GraphicsBuffer.Target.Raw,
                     commandCapacity, GraphicsBuffer.IndirectDrawIndexedArgs.size);
 
                 // GraphicsBuffer contents are undefined after creation. Every unused
                 // command must explicitly start with zero instances.
-                commandBuffer.SetData(new GraphicsBuffer.IndirectDrawIndexedArgs[commandCapacity]);
+                var emptyCommands = new GraphicsBuffer.IndirectDrawIndexedArgs[commandCapacity];
+                sourceCommandBuffer.SetData(emptyCommands);
+                commandBuffer.SetData(emptyCommands);
             }
 
             public bool TryAllocate(int vertexCount, int indexCount, out ChunkMeshHandle handle)
@@ -382,6 +413,7 @@ namespace Core.Rendering
                     baseVertexIndex = 0,
                     startInstance = 0
                 };
+                sourceCommandBuffer.SetData(commandScratch, 0, handle.CommandSlot, 1);
                 commandBuffer.SetData(commandScratch, 0, handle.CommandSlot, 1);
                 activeCommandCount++;
                 highestActiveCommand = Math.Max(highestActiveCommand, handle.CommandSlot);
@@ -400,16 +432,20 @@ namespace Core.Rendering
             public void DisableCommand(int commandSlot)
             {
                 commandScratch[0] = default;
+                sourceCommandBuffer.SetData(commandScratch, 0, commandSlot, 1);
                 commandBuffer.SetData(commandScratch, 0, commandSlot, 1);
                 activeCommandCount = Math.Max(0, activeCommandCount - 1);
                 // Keeping a conservative high-water mark avoids scanning all live
                 // allocations on every removal. Zeroed holes are skipped by the GPU.
             }
 
-            public void Render(Material material)
+            public void Render(Material material, ComputeShader cullingShader,
+                int cullingKernel, Camera camera, Camera previewCamera, Vector4[] frustumPlanes)
             {
                 if (activeCommandCount == 0 || highestActiveCommand < 0 || !hasWorldBounds)
                     return;
+
+                CullCommands(cullingShader, cullingKernel, frustumPlanes);
 
                 materialProperties.Clear();
                 materialProperties.SetBuffer("_Vertices", vertexBuffer);
@@ -422,10 +458,18 @@ namespace Core.Rendering
                 material.SetBuffer("_VertexInstance", vertexInstanceBuffer);
                 material.SetBuffer("_ChunkData", chunkDataBuffer);
 
+                SubmitDraw(material, camera);
+                if (previewCamera != null && previewCamera != camera)
+                    SubmitDraw(material, previewCamera);
+            }
+
+            private void SubmitDraw(Material material, Camera targetCamera)
+            {
                 RenderParams renderParams = new RenderParams(material)
                 {
                     matProps = materialProperties,
                     worldBounds = worldBounds,
+                    camera = targetCamera,
                     // This procedural shader does not have a ShadowCaster pass yet.
                     // Requesting one can schedule another draw without the page SRVs.
                     shadowCastingMode = ShadowCastingMode.Off,
@@ -433,8 +477,9 @@ namespace Core.Rendering
                 };
                 Graphics.RenderPrimitivesIndexedIndirect(renderParams, MeshTopology.Triangles,
                     indexBuffer, commandBuffer, highestActiveCommand + 1);
-            }
 
+            }
+            
             public void Free(ChunkMeshHandle handle)
             {
                 vertexAllocator.Free(handle.VertexRange);
@@ -449,8 +494,22 @@ namespace Core.Rendering
                 vertexInstanceBuffer?.Dispose();
                 indexBuffer?.Dispose();
                 chunkDataBuffer?.Dispose();
+                sourceCommandBuffer?.Dispose();
                 commandBuffer?.Dispose();
             }
+            
+            private void CullCommands(ComputeShader shader, int kernel, Vector4[] frustumPlanes)
+            {
+                const int threadGroupSize = 64;
+                int commandCount = highestActiveCommand + 1;
+                shader.SetInt("_CommandCount", commandCount);
+                shader.SetVectorArray("_FrustumPlanes", frustumPlanes);
+                shader.SetBuffer(kernel, "_ChunkData", chunkDataBuffer);
+                shader.SetBuffer(kernel, "_SourceCommands", sourceCommandBuffer);
+                shader.SetBuffer(kernel, "_VisibleCommands", commandBuffer);
+                shader.Dispatch(kernel, (commandCount + threadGroupSize - 1) / threadGroupSize, 1, 1);
+            }
+            
 
             private void EnsureUploadScratchCapacity(int vertexCount, int indexCount)
             {
