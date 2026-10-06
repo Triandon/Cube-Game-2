@@ -535,7 +535,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: 'Version nr: TestBuild19G
+  m_text: 'Version nr: TestBuild19H
 
 
 '
@@ -4542,7 +4542,7 @@ MonoBehaviour:
   groundProbeDistance: 0.05
   groundedGraceTime: 0.08
   maxStepHeight: 0.3
-  flySpeed: 8
+  flySpeed: 100
   runFlySpeed: 29
   creativeMode: 0
   chatBox: {fileID: 0}
@@ -5477,7 +5477,7 @@ GameObject:
   - component: {fileID: 1672112036}
   m_Layer: 0
   m_Name: Camera
-  m_TagString: Untagged
+  m_TagString: MainCamera
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
@@ -7010,6 +7010,15 @@ MonoBehaviour:
   workerBacklogPerThread: 2
   visualChunksPerFrame: 4
   initialPoolSize: 30
+  pageVertexCapacity: 2097152
+  pageIndexCapacity: 8388608
+  pageCommandCapacity: 4096
+  pagedPageCount: 0
+  pagedResidentChunks: 0
+  pagedUsedVertices: 0
+  pagedUsedIndices: 0
+  terrainCullingCamera: {fileID: 0}
+  previewPlayerCullingInSceneView: 1
 --- !u!4 &2008103919
 Transform:
   m_ObjectHideFlags: 0

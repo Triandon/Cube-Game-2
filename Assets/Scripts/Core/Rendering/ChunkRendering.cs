@@ -2,125 +2,16 @@ using System;
 using Core;
 using UnityEngine;
 
-[RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
-public class ChunkRendering : MonoBehaviour
+[DisallowMultipleComponent]
+public sealed class ChunkRendering : MonoBehaviour
 {
-    private static Material atlasMaterial;
-    
-    private MeshFilter meshFilter;
-    private MeshRenderer meshRenderer;
-    private Chunk chunk;
-    private ChunkMeshGenerator meshGenerator;
-
-    private Mesh shearedRenderMesh;
-    //private Mesh shearedColliderMesh;
-
-    public struct ChunkMeshData
-    {
-        public Mesh renderingMesh;
-    }
-
-    private void Awake()
-    {
-        meshFilter = GetComponent<MeshFilter>();
-        meshRenderer = GetComponent<MeshRenderer>();
-        
-        meshGenerator = new ChunkMeshGenerator();
-
-        if (atlasMaterial == null)
-        {
-            atlasMaterial = Resources.Load<Material>("Materials/AtlasMaterial");
-        }
-    }
-
-    private void OnDestroy()
-    {
-        if (meshFilter != null)
-        {
-            meshFilter.sharedMesh = null;
-        }
-
-        if (shearedRenderMesh != null)
-        {
-            Destroy(shearedRenderMesh);
-            shearedRenderMesh = null;
-        }
-    }
+    /// Lightweight host for a logical chunk GameObject. Terrain rendering is owned
+    /// entirely by PagedTerrainMeshStorage; this component remains only because chunk
+    /// pooling, transforms, and block-entity parenting use the host GameObject.
+    public Chunk Chunk { get; private set; }
 
     public void SetChunkData(Chunk chunkData)
     {
-        chunk = chunkData;
+        Chunk = chunkData;
     }
-
-    public void BuildChunkMesh()
-    {
-        if (chunk == null || chunk.blocks == null) return;
-
-        // Generate both render mesh & collider mesh
-        var meshData = meshGenerator.GenerateMesh(chunk.blocks, chunk);
-
-        // Assign render mesh to MeshFilter
-        meshFilter.sharedMesh = meshData.renderingMesh;
-        
-        // Material
-        if (atlasMaterial != null)
-        {
-            meshRenderer.sharedMaterial = atlasMaterial;
-        }
-    }
-
-    // modified chunk of your ChunkRendering class
-    public void ApplyMeshData(MeshData meshData)
-    {
-        if (meshData == null)
-            return;
-
-        ApplyMeshData(MeshUtilityCustom.BuildUploadData(meshData));
-    }
-    
-    public void ApplyMeshData(MeshUtilityCustom.ChunkMeshUploadData meshData)
-    {
-        if (meshData == null)
-            return;
-
-        // Render mesh
-        if (shearedRenderMesh == null)
-        {
-            shearedRenderMesh = new Mesh()
-            {
-                name = $"ChunkRenderMesh_{GetInstanceID()}",
-                indexFormat = UnityEngine.Rendering.IndexFormat.UInt32
-            };
-        }
-
-        MeshUtilityCustom.ApplyChunkMesh(shearedRenderMesh, meshData);
-        
-        meshFilter.sharedMesh = shearedRenderMesh;
-
-        if (atlasMaterial != null)
-        {
-            meshRenderer.sharedMaterial = atlasMaterial;
-        }
-    }
-
-    
-    public void Rebuild()
-    {
-        if (chunk == null || chunk.blocks == null)
-            return;
-
-        // Generate fresh MeshData
-        MeshData md = ChunkMeshGeneratorThreaded.GenerateMeshData(
-            (x,y,z) => chunk.GetBlock(x,y,z),
-            (x,y,z) => chunk.GetStateAt(x,y,z),
-            chunk.GetLodScale(),
-            chunk.chunkManager.GetNeighborLODInfo(chunk.coord),
-            chunk.specialMeshBlocks, (x,y,z) => chunk.GetSkyLight(x, y, z),
-            (x, y, z) => chunk.GetBlockLight(x, y, z)
-        );
-
-        // Apply render mesh
-        ApplyMeshData(md);
-    }
-    
 }

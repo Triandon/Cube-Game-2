@@ -1,0 +1,120 @@
+#pragma kernel CullHierarchy
+#pragma kernel CullChunks
+#pragma target 5.0
+
+struct ChunkGpuData
+{
+    float4 origin;
+    float4 boundsCenter;
+    float4 boundsExtents;
+};
+
+struct HierarchyNodeGpuData
+{
+    float4 boundsCenter;
+    float4 boundsExtents;
+    // x is the parent node index, or -1 for a 32-chunk root.
+    float4 metadata;
+};
+
+struct IndirectDrawIndexedArgs
+{
+    uint indexCountPerInstance;
+    uint instanceCount;
+    uint startIndex;
+    uint baseVertexIndex;
+    uint startInstance;
+};
+
+StructuredBuffer<ChunkGpuData> _ChunkData;
+StructuredBuffer<HierarchyNodeGpuData> _HierarchyNodes;
+StructuredBuffer<IndirectDrawIndexedArgs> _SourceCommands;
+StructuredBuffer<int> _CommandLeafNodes;
+RWStructuredBuffer<uint> _HierarchyStates;
+
+// Indirect-argument buffers have a raw R32 layout on DirectX 11. Writing them
+// as a structured UAV is not portable and can corrupt neighboring commands.
+RWByteAddressBuffer _VisibleCommands;
+
+float4 _FrustumPlanes[6];
+uint _NodeOffset;
+uint _NodeCount;
+uint _CommandCount;
+
+static const uint OUTSIDE = 0;
+static const uint INTERSECTING = 1;
+static const uint INSIDE = 2;
+
+uint ClassifyBounds(float3 center, float3 extents)
+{
+    bool fullyInside = true;
+    [unroll]
+    for (uint planeIndex = 0; planeIndex < 6; ++planeIndex)
+    {
+        float4 plane = _FrustumPlanes[planeIndex];
+        float projectedRadius = dot(abs(plane.xyz), extents);
+        float signedDistance = dot(plane.xyz, center) + plane.w;
+        if (signedDistance + projectedRadius < 0.0)
+            return OUTSIDE;
+        if (signedDistance - projectedRadius < 0.0)
+            fullyInside = false;
+    }
+    return fullyInside ? INSIDE : INTERSECTING;
+}
+
+[numthreads(64, 1, 1)]
+void CullHierarchy(uint3 dispatchThreadId : SV_DispatchThreadID)
+{
+    uint localIndex = dispatchThreadId.x;
+    if (localIndex >= _NodeCount)
+        return;
+
+    uint nodeIndex = _NodeOffset + localIndex;
+    HierarchyNodeGpuData node = _HierarchyNodes[nodeIndex];
+    int parentIndex = (int)node.metadata.x;
+
+    // A child inherits a conclusive parent result. Only branches crossing a
+    // frustum plane continue through the 32 -> 16 -> 8 -> 4 hierarchy.
+    if (parentIndex >= 0)
+    {
+        uint parentState = _HierarchyStates[parentIndex];
+        if (parentState != INTERSECTING)
+        {
+            _HierarchyStates[nodeIndex] = parentState;
+            return;
+        }
+    }
+
+    _HierarchyStates[nodeIndex] =
+    ClassifyBounds(node.boundsCenter.xyz, node.boundsExtents.xyz);
+}
+    
+[numthreads(64, 1, 1)]
+void CullChunks(uint3 dispatchThreadId : SV_DispatchThreadID)
+{
+    uint commandIndex = dispatchThreadId.x;
+    if (commandIndex >= _CommandCount)
+        return;
+
+    IndirectDrawIndexedArgs command = _SourceCommands[commandIndex];
+    if (command.instanceCount != 0)
+    {
+        uint leafState = _HierarchyStates[_CommandLeafNodes[commandIndex]];
+        if (leafState == OUTSIDE ||
+            (leafState == INTERSECTING &&
+             ClassifyBounds(_ChunkData[commandIndex].boundsCenter.xyz,
+                 _ChunkData[commandIndex].boundsExtents.xyz) == OUTSIDE))
+        {
+            command.instanceCount = 0;
+        }
+
+    }
+
+    uint byteOffset = commandIndex * 20;
+    _VisibleCommands.Store4(byteOffset, uint4(
+        command.indexCountPerInstance,
+        command.instanceCount,
+        command.startIndex,
+        command.baseVertexIndex));
+    _VisibleCommands.Store(byteOffset + 16, command.startInstance);
+}
