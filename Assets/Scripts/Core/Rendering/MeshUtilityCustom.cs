@@ -11,20 +11,40 @@ public static class MeshUtilityCustom
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
     public struct ChunkVertex
     {
-        public PackedVertexPosition position;
-        public int normal;
-        public Color32 color;
-        public PackedUv uv0;
-        public PackedAtlasTile uv1;
+        public uint positionXY;
+        public uint positionZLightTile;
+        public uint uv;
+        public uint normal;
 
         public ChunkVertex(PackedVertexPosition position, int normal,
-            PackedUv uv0, PackedAtlasTile uv1)
+            PackedUv uv0, ushort atlasTile, Color32 color)
         {
-            this.position = position;
-            this.normal = normal;
-            color = DefaultVertexColor;
-            this.uv0 = uv0;
-            this.uv1 = uv1;
+            // AddVertexLight stores the 0-15 light levels as multiples of 17.
+            // Quantize to the nearest level for callers supplying other byte values.
+            uint sky = (uint)(color.r + 8) / 17u;
+            uint block = (uint)(color.g + 8) / 17u;
+            positionXY = (uint)position.x | ((uint)position.y << 16);
+            positionZLightTile = (uint)position.z | (sky << 16) | (block << 20)
+                                 | ((uint)atlasTile << 24);
+            uv = (uint)uv0.u | ((uint)uv0.v << 16);
+            this.normal = PackGpuNormal(normal);
+        }
+        
+        private static uint PackGpuNormal(int packedNormal)
+        {
+            uint xyz = unchecked((uint)packedNormal) & 0x00ffffffu;
+            // Three-bit direction IDs, matching DecodePackedNormal in the shader.
+            switch (xyz)
+            {
+                case 0x007f00u: return 0u; // +Y
+                case 0x008100u: return 1u; // -Y
+                case 0x00007fu: return 2u; // +X
+                case 0x000081u: return 3u; // -X
+                case 0x7f0000u: return 4u; // +Z
+                case 0x810000u: return 5u; // -Z
+                // Tag 6 retains all three signed bytes for slopes and zero normals.
+                default: return (xyz << 8) | 6u;
+            }
         }
     }
     
@@ -51,13 +71,9 @@ public static class MeshUtilityCustom
         {
             int normal = i < meshData.normals.Count ? meshData.normals[i] : PackedNormal.Up;
             PackedUv uv0 = i < meshData.uvs.Count ? meshData.uvs.packedUvs[i] : default(PackedUv);
-            PackedAtlasTile tile = i < meshData.atlasTileIndexes.Count
-                ? new PackedAtlasTile(meshData.atlasTileIndexes[i])
-                : default(PackedAtlasTile);
-            vertices[i] = new ChunkVertex(meshData.vertices.packedPositions[i], normal, uv0, tile);
-
-            if (i < meshData.colors.Count)
-                vertices[i].color = meshData.colors[i];
+            ushort tile = i < meshData.atlasTileIndexes.Count ? meshData.atlasTileIndexes[i] : (ushort)0;
+            Color32 color = i < meshData.colors.Count ? meshData.colors[i] : DefaultVertexColor;
+            vertices[i] = new ChunkVertex(meshData.vertices.packedPositions[i], normal, uv0, tile, color);
         }
 
         return new ChunkMeshUploadData(vertices, meshData.triangles.ToArray(),
