@@ -1,197 +1,63 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Runtime.InteropServices;
 using Core;
 using Core.Block;
-using NUnit.Framework;
 using UnityEngine;
 
 //Todo In the lods, there CAN be a height bias for long distance chunks!
 
 public class MeshData
 {
-    public readonly VertexPositionList vertices = new VertexPositionList();
-    public List<int> triangles = new List<int>();
-    public readonly PackedUvList uvs = new PackedUvList();
-    public List<ushort> atlasTileIndexes = new List<ushort>();
-    public readonly PackedNormalList normals = new PackedNormalList();
-    public List<Color32> colors = new List<Color32>();
-}
+    private readonly List<MeshUtilityCustom.ChunkVertex> vertices = new List<MeshUtilityCustom.ChunkVertex>();
+    public readonly List<int> triangles = new List<int>();
+    private Vector3 minPosition;
+    private Vector3 maxPosition;
 
-public sealed class VertexPositionList
-{
-    public const float PositionScale = 100f;
-    private const float InversePositionScale = 1f / PositionScale;
+    public int VertexCount => vertices.Count;
+    public Vector3 GetPosition(int index) => vertices[index].Position;
 
-    public readonly List<PackedVertexPosition> packedPositions = new List<PackedVertexPosition>();
-
-    public int Count => packedPositions.Count;
-
-    public Vector3 this[int index] => packedPositions[index].ToVector3();
-
-    public void Add(Vector3 position)
+    public void AddVertex(Vector3 position, uint normal, uint uv, ushort atlasTile, byte light)
     {
-        packedPositions.Add(PackedVertexPosition.FromVector3(position));
+        var vertex = new MeshUtilityCustom.ChunkVertex(position, normal, uv, atlasTile, light);
+        // Use the quantized position for both culling bounds and geometry calculations.
+        Vector3 decodedPosition = vertex.Position;
+        if (vertices.Count == 0)
+        {
+            minPosition = decodedPosition;
+            maxPosition = decodedPosition;
+        }
+        else
+        {
+            minPosition = Vector3.Min(minPosition, decodedPosition);
+            maxPosition = Vector3.Max(maxPosition, decodedPosition);
+        }
+        vertices.Add(vertex);
     }
 
-    public static ushort PackAxis(float value)
+    public void SetFaceNormal(int firstVertex, int vertexCount, Vector3 normal)
     {
-        return (ushort)Mathf.Clamp(Mathf.RoundToInt(value * PositionScale), 0, ushort.MaxValue);
+        uint packedNormal = MeshUtilityCustom.ChunkVertex.PackNormal(normal);
+        for (int i = firstVertex; i < firstVertex + vertexCount; i++)
+        {
+            var vertex = vertices[i];
+            vertex.normal = packedNormal;
+            vertices[i] = vertex;
+        }
     }
 
-    public static float UnpackAxis(ushort value)
+    public Bounds Bounds
     {
-        return value * InversePositionScale;
+        get
+        {
+            if (vertices.Count == 0)
+                return new Bounds(Vector3.zero, Vector3.zero);
+            Bounds bounds = new Bounds();
+            bounds.SetMinMax(minPosition, maxPosition);
+            return bounds;
+        }
     }
-}
-
-[StructLayout(LayoutKind.Sequential, Pack = 1)]
-public struct PackedVertexPosition
-{
-    public ushort x;
-    public ushort y;
-    public ushort z;
-    public ushort w;
-
-    public PackedVertexPosition(ushort x, ushort y, ushort z)
-    {
-        this.x = x;
-        this.y = y;
-        this.z = z;
-        w = 0;
-    }
-
-    public static PackedVertexPosition FromVector3(Vector3 position)
-    {
-        return new PackedVertexPosition(
-            VertexPositionList.PackAxis(position.x),
-            VertexPositionList.PackAxis(position.y),
-            VertexPositionList.PackAxis(position.z));
-    }
-
-    public Vector3 ToVector3()
-    {
-        return new Vector3(
-            VertexPositionList.UnpackAxis(x),
-            VertexPositionList.UnpackAxis(y),
-            VertexPositionList.UnpackAxis(z));
-    }
-}
-
-public sealed class PackedUvList
-{
-    public const float UvScale = 100f;
-    private const float InverseUvScale = 1f / UvScale;
-
-    public readonly List<PackedUv> packedUvs = new List<PackedUv>();
-
-    public int Count => packedUvs.Count;
-
-    public Vector2 this[int index] => packedUvs[index].ToVector2();
-
-    public void Add(Vector2 uv)
-    {
-        packedUvs.Add(PackedUv.FromVector2(uv));
-    }
-
-    public static ushort PackAxis(float value)
-    {
-        return (ushort)Mathf.Clamp(Mathf.RoundToInt(value * UvScale), 0, ushort.MaxValue);
-    }
-
-    public static float UnpackAxis(ushort value)
-    {
-        return value * InverseUvScale;
-    }
-}
-
-[StructLayout(LayoutKind.Sequential, Pack = 1)]
-public struct PackedUv
-{
-    public ushort u;
-    public ushort v;
-
-    public PackedUv(ushort u, ushort v)
-    {
-        this.u = u;
-        this.v = v;
-    }
-
-    public static PackedUv FromVector2(Vector2 uv)
-    {
-        return new PackedUv(
-            PackedUvList.PackAxis(uv.x),
-            PackedUvList.PackAxis(uv.y));
-    }
-
-    public Vector2 ToVector2()
-    {
-        return new Vector2(
-            PackedUvList.UnpackAxis(u),
-            PackedUvList.UnpackAxis(v));
-    }
-}
-
-[StructLayout(LayoutKind.Sequential, Pack = 1)]
-public struct PackedAtlasTile
-{
-    public ushort tileIndex;
-    public ushort padding;
-
-    public PackedAtlasTile(ushort tileIndex)
-    {
-        this.tileIndex = tileIndex;
-        padding = 0;
-    }
-}
-
-public sealed class PackedNormalList
-{
-    public readonly List<int> packedNormals = new List<int>();
-
-    public int Count => packedNormals.Count;
-
-    public int this[int index] => packedNormals[index];
-
-    public void Add(Vector3 normal)
-    {
-        packedNormals.Add(PackedNormal.Pack(normal));
-    }
-}
-
-public static class PackedNormal
-{
-    public const int Up = 0x7F007F00;
-
-    private const int Right = 0x7F00007F;
-    private const int Left = 0x7F000081;
-    private const int Down = 0x7F008100;
-    private const int Forward = 0x7F7F0000;
-    private const int Back = 0x7F810000;
-
-    public static int Pack(Vector3 value)
-    {
-        // Fast path for the six normals emitted by regular voxel faces.
-        if (value == Vector3.right) return Right;
-        if (value == Vector3.left) return Left;
-        if (value == Vector3.up) return Up;
-        if (value == Vector3.down) return Down;
-        if (value == Vector3.forward) return Forward;
-        if (value == Vector3.back) return Back;
-
-        byte x = unchecked((byte)PackSNorm8(value.x));
-        byte y = unchecked((byte)PackSNorm8(value.y));
-        byte z = unchecked((byte)PackSNorm8(value.z));
-        byte w = unchecked((byte)127);
-
-        return x | (y << 8) | (z << 16) | (w << 24);
-    }
-
-    private static sbyte PackSNorm8(float value)
-    {
-        return (sbyte)Mathf.RoundToInt(Mathf.Clamp(value, -1f, 1f) * 127f);
-    }
+    
+    public MeshUtilityCustom.ChunkVertex[] CopyVertices() => vertices.ToArray();
 }
 
 public static class ChunkMeshGeneratorThreaded
@@ -1090,13 +956,16 @@ public static class ChunkMeshGeneratorThreaded
         if (atlasIndex < 0)
             return;
 
-        int baseIndex = mesh.vertices.Count;
+        int baseIndex = mesh.VertexCount;
+        ushort tileIndex = PackAtlasTileIndex(atlasIndex);
         for (int i = 0; i < indices.Length; i++)
-            mesh.vertices.Add(blockOffset + prismVerts[indices[i]]);
-
-        Vector3 faceNormal = ComputeFaceNormal(mesh.vertices, baseIndex, indices.Length, fallbackNormal);
-        for (int i = 0; i < indices.Length; i++)
-            mesh.normals.Add(faceNormal);
+        {
+            uint uv = MeshUtilityCustom.ChunkVertex.PackUv(i & 1, i >> 1);
+            mesh.AddVertex(blockOffset + prismVerts[indices[i]], 0u, uv, tileIndex, light);
+        }
+        
+        Vector3 faceNormal = ComputeFaceNormal(mesh, baseIndex, indices.Length, fallbackNormal);
+        mesh.SetFaceNormal(baseIndex, indices.Length, faceNormal);
 
         if (indices.Length == 4)
         {
@@ -1106,9 +975,7 @@ public static class ChunkMeshGeneratorThreaded
         {
             AddTriangle(mesh.triangles, baseIndex, 0, 1, 2, faceNormal, false, mesh, baseIndex);
         }
-
-        AddPrismFaceUV(indices.Length, atlasIndex, mesh);
-        AddVertexLight(mesh, indices.Length, light);
+        
     }
 
     private static ushort PackAtlasTileIndex(int textureID)
@@ -1116,34 +983,13 @@ public static class ChunkMeshGeneratorThreaded
         return (ushort)Mathf.Clamp(textureID, 0, ushort.MaxValue);
     }
 
-    private static void AddPrismFaceUV(int vertexCount, int textureID, MeshData mesh)
-    {
-        if (vertexCount == 3)
-        {
-            mesh.uvs.Add(new Vector2(0f, 0f));
-            mesh.uvs.Add(new Vector2(1f, 0f));
-            mesh.uvs.Add(new Vector2(0f, 1f));
-        }
-        else
-        {
-            mesh.uvs.Add(new Vector2(0f, 0f));
-            mesh.uvs.Add(new Vector2(1f, 0f));
-            mesh.uvs.Add(new Vector2(0f, 1f));
-            mesh.uvs.Add(new Vector2(1f, 1f));
-        }
-
-        ushort tileIndex = PackAtlasTileIndex(textureID);
-        for (int i = 0; i < vertexCount; i++)
-            mesh.atlasTileIndexes.Add(tileIndex);
-    }
-
-    private static Vector3 ComputeFaceNormal(VertexPositionList vertices, int baseIndex, int count, Vector3Int fallbackNormal)
+    private static Vector3 ComputeFaceNormal(MeshData mesh, int baseIndex, int count, Vector3Int fallbackNormal)
     {
         if (count < 3)
             return fallbackNormal;
 
-        Vector3 a = vertices[baseIndex + 1] - vertices[baseIndex];
-        Vector3 b = vertices[baseIndex + 2] - vertices[baseIndex];
+        Vector3 a = mesh.GetPosition(baseIndex + 1) - mesh.GetPosition(baseIndex);
+        Vector3 b = mesh.GetPosition(baseIndex + 2) - mesh.GetPosition(baseIndex);
         Vector3 normal = Vector3.Cross(a, b).normalized;
         if (normal.sqrMagnitude <= 0f)
             return fallbackNormal;
@@ -1154,8 +1000,8 @@ public static class ChunkMeshGeneratorThreaded
     private static void AddFaceTriangles(List<int> destination, int baseIndex, int i0, int i1, int i2, int i3, Vector3 normal, bool useAreaCheck = false, MeshData mesh = null, int vertexBase = 0)
     {
         if (Vector3.Dot(Vector3.Cross(
-                mesh != null ? mesh.vertices[vertexBase + i1] - mesh.vertices[vertexBase + i0] : Vector3.zero,
-                mesh != null ? mesh.vertices[vertexBase + i2] - mesh.vertices[vertexBase + i0] : Vector3.zero), normal) < 0f)
+                mesh != null ? mesh.GetPosition(vertexBase + i1) - mesh.GetPosition(vertexBase + i0) : Vector3.zero,
+                mesh != null ? mesh.GetPosition(vertexBase + i2) - mesh.GetPosition(vertexBase + i0) : Vector3.zero), normal) < 0f)
         {
             int t = i1;
             i1 = i2;
@@ -1180,8 +1026,8 @@ public static class ChunkMeshGeneratorThreaded
     private static void AddTriangle(List<int> destination, int baseIndex, int i0, int i1, int i2, Vector3 normal, bool useAreaCheck = false, MeshData mesh = null, int vertexBase = 0)
     {
         if (Vector3.Dot(Vector3.Cross(
-                mesh != null ? mesh.vertices[vertexBase + i1] - mesh.vertices[vertexBase + i0] : Vector3.zero,
-                mesh != null ? mesh.vertices[vertexBase + i2] - mesh.vertices[vertexBase + i0] : Vector3.zero), normal) < 0f)
+                mesh != null ? mesh.GetPosition(vertexBase + i1) - mesh.GetPosition(vertexBase + i0) : Vector3.zero,
+                mesh != null ? mesh.GetPosition(vertexBase + i2) - mesh.GetPosition(vertexBase + i0) : Vector3.zero), normal) < 0f)
         {
             int t = i1;
             i1 = i2;
@@ -1202,8 +1048,8 @@ public static class ChunkMeshGeneratorThreaded
         if (mesh == null)
             return true;
 
-        Vector3 a = mesh.vertices[vertexBase + i1] - mesh.vertices[vertexBase + i0];
-        Vector3 b = mesh.vertices[vertexBase + i2] - mesh.vertices[vertexBase + i0];
+        Vector3 a = mesh.GetPosition(vertexBase + i1) - mesh.GetPosition(vertexBase + i0);
+        Vector3 b = mesh.GetPosition(vertexBase + i2) - mesh.GetPosition(vertexBase + i0);
         return Vector3.Cross(a, b).sqrMagnitude * 0.25f > areaEpsilon;
     }
 
@@ -1338,11 +1184,9 @@ public static class ChunkMeshGeneratorThreaded
             quad[3] = new Vector3(min.x, max.y, min.z);
         }
 
-        int baseIndex = mesh.vertices.Count;
-        for (int i = 0; i < 4; i++)
-        {
-            mesh.vertices.Add(blockOffset + quad[i]);
-        }
+        int baseIndex = mesh.VertexCount;
+        bool stretchTexture = IsStretchy(blockId);
+        AddStateDrivenFaceVertices(dir, quad, blockOffset, atlasIndex, stretchTexture, GetFacing(state), light, mesh);
 
         int i0 = baseIndex + 0;
         int i1 = baseIndex + 1;
@@ -1352,8 +1196,8 @@ public static class ChunkMeshGeneratorThreaded
         int t0a = i0, t0b = i2, t0c = i1;
         int t1a = i2, t1b = i3, t1c = i1;
 
-        Vector3 A = mesh.vertices[t0b] - mesh.vertices[t0a];
-        Vector3 B = mesh.vertices[t0c] - mesh.vertices[t0a];
+        Vector3 A = mesh.GetPosition(t0b) - mesh.GetPosition(t0a);
+        Vector3 B = mesh.GetPosition(t0c) - mesh.GetPosition(t0a);
         Vector3 faceNormal = Vector3.Cross(A, B).normalized;
 
         if (faceNormal.sqrMagnitude <= 0f)
@@ -1368,8 +1212,7 @@ public static class ChunkMeshGeneratorThreaded
             faceNormal = -faceNormal;
         }
         
-        for (int i = 0; i < 4; i++)
-            mesh.normals.Add(faceNormal);
+        mesh.SetFaceNormal(baseIndex, 4, faceNormal);
 
         mesh.triangles.Add(t0a);
         mesh.triangles.Add(t0b);
@@ -1377,18 +1220,16 @@ public static class ChunkMeshGeneratorThreaded
         mesh.triangles.Add(t1a);
         mesh.triangles.Add(t1b);
         mesh.triangles.Add(t1c);
-
-        bool stretchTexture = IsStretchy(blockId);
-        AddStateDrivenFaceUV(dir, quad, atlasIndex, stretchTexture, GetFacing(state), mesh);
-        AddVertexLight(mesh, 4, light);
     }
 
-    private static void AddStateDrivenFaceUV(
+    private static void AddStateDrivenFaceVertices(
         Vector3Int dir,
         Vector3[] quad,
+        Vector3 blockOffset,
         int textureID,
         bool stretchTexture,
         string facing,
+        byte light,
         MeshData mesh)
     {
         
@@ -1438,7 +1279,8 @@ public static class ChunkMeshGeneratorThreaded
                 vScale = maxY - minY;
             }
         }
-        
+
+        ushort tileIndex = PackAtlasTileIndex(textureID);
         for (int i = 0; i < localQuad.Length; i++)
         {
             Vector3 p = localQuad[i];
@@ -1474,14 +1316,9 @@ public static class ChunkMeshGeneratorThreaded
             if (flipForDownFacing)
                 v = 1f - v;
 
-            mesh.uvs.Add(new Vector2(u * uScale, v * vScale));
+            uint uv = MeshUtilityCustom.ChunkVertex.PackUv(u * uScale, v * vScale);
+            mesh.AddVertex(blockOffset + quad[i], 0u, uv, tileIndex, light);
         }
-
-        ushort tileIndex = PackAtlasTileIndex(textureID);
-        mesh.atlasTileIndexes.Add(tileIndex);
-        mesh.atlasTileIndexes.Add(tileIndex);
-        mesh.atlasTileIndexes.Add(tileIndex);
-        mesh.atlasTileIndexes.Add(tileIndex);
     }
     
     private static byte SampleBlock(
@@ -1601,11 +1438,17 @@ public static class ChunkMeshGeneratorThreaded
             offset = new Vector3(bu, bv, bw + faceOffset);
 
 
-        int baseIndex = mesh.vertices.Count;
+        int baseIndex = mesh.VertexCount;
+        
+        uint packedNormal = MeshUtilityCustom.ChunkVertex.PackNormal(dir);
+        ushort tileIndex = PackAtlasTileIndex(atlasIndex);
+        uint packedU = MeshUtilityCustom.ChunkVertex.PackUv(dir.z != 0 ? height : width, 0f);
+        uint packedV = MeshUtilityCustom.ChunkVertex.PackUv(0f, dir.z != 0 ? width : height);
 
-        // Build the 4 world positions for this quad. Match original position math
-        foreach (Vector3 vert in faceVerts)
+        // Emit complete CPU/GPU vertices directly, packing shared face attributes once.
+        for (int i = 0; i < faceVerts.Length; i++)
         {
+            Vector3 vert = faceVerts[i];
             Vector3 pos;
             
             if (dir.x != 0)
@@ -1621,12 +1464,8 @@ public static class ChunkMeshGeneratorThreaded
                       + vert.x * Vector3.right * blockHeight
                       + vert.y * Vector3.up * blockWidth;
             
-            mesh.vertices.Add(pos);
-        }
-
-        for (int i = 0; i < 4; i++)
-        {
-            mesh.normals.Add(dir);
+            uint uv = ((i & 1) != 0 ? packedU : 0u) | ((i & 2) != 0 ? packedV : 0u);
+            mesh.AddVertex(pos, packedNormal, uv, tileIndex, light);
         }
 
 
@@ -1639,8 +1478,8 @@ public static class ChunkMeshGeneratorThreaded
         int t0a = i0, t0b = i2, t0c = i1;
         int t1a = i2, t1b = i3, t1c = i1;
 
-        Vector3 A = mesh.vertices[t0b] - mesh.vertices[t0a];
-        Vector3 B = mesh.vertices[t0c] - mesh.vertices[t0a];
+        Vector3 A = mesh.GetPosition(t0b) - mesh.GetPosition(t0a);
+        Vector3 B = mesh.GetPosition(t0c) - mesh.GetPosition(t0a);
         Vector3 triNormal = Vector3.Cross(A, B);
 
         if (Vector3.Dot(triNormal, (Vector3)dir) < 0f)
@@ -1658,38 +1497,9 @@ public static class ChunkMeshGeneratorThreaded
         mesh.triangles.Add(t1a);
         mesh.triangles.Add(t1b);
         mesh.triangles.Add(t1c);
-
-        // UVs and UV meta
-        AddFaceUV(dir, atlasIndex, width, height, mesh);
-        AddVertexLight(mesh, 4, light);
+        
     }
-
-
-
-    private static bool ISZFace(Vector3Int dir) => dir.z != 0;
-
-    private static void AddFaceUV(Vector3Int dir, int textureID, int width, int height, MeshData mesh)
-    {
-        float uScale = width;
-        float vScale = height;
-
-        if (ISZFace(dir))
-        {
-            uScale = height;
-            vScale = width;
-        }
-
-        mesh.uvs.Add(new Vector2(0f, 0f)); // vertex 0
-        mesh.uvs.Add(new Vector2(uScale, 0f)); // vertex 1
-        mesh.uvs.Add(new Vector2(0f, vScale)); // vertex 2
-        mesh.uvs.Add(new Vector2(uScale, vScale)); // vertex 3
-
-        ushort tileIndex = PackAtlasTileIndex(textureID);
-        mesh.atlasTileIndexes.Add(tileIndex);
-        mesh.atlasTileIndexes.Add(tileIndex);
-        mesh.atlasTileIndexes.Add(tileIndex);
-        mesh.atlasTileIndexes.Add(tileIndex);
-    }
+    
     
     private static int GetHorizontalTurnsToEastReference(string facing)
     {
@@ -1766,16 +1576,6 @@ public static class ChunkMeshGeneratorThreaded
             getSkyLight, getBlockLight,
             x + outwardDirection.x, y + outwardDirection.y, z + outwardDirection.z,
             x, y, z);
-    }
-
-    private static void AddVertexLight(MeshData mesh, int vertexCount, byte light)
-    {
-        byte sky = (byte)(VoxelLight.GetSky(light) * 17);
-        byte block = (byte)(VoxelLight.GetBlock(light) * 17);
-        Color32 color = new Color32(sky, block, 0, 255);
-        
-        for (int i = 0; i < vertexCount; i++)
-            mesh.colors.Add(color);
     }
     
 }
