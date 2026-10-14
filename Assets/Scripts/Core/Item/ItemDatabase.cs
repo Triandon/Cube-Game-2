@@ -73,6 +73,12 @@ namespace Core.Item
             
             //Roating Chest Item
             ItemRegistry.RegisterItem(new Item(id:21, itemName:"RotatingChestItem", isBlock:true, blockId:21, textureIndex:5,67));
+            
+            //Tree Log
+            ItemRegistry.RegisterItem(new Item(id:22, itemName:"TreeLog", isBlock:true, blockId:22, textureIndex:6,64));
+            
+            //Tree leaf
+            ItemRegistry.RegisterItem(new Item(id:23, itemName:"TreeLeaf", isBlock:true, blockId:23, textureIndex:48,64));
         }
     
         public static void Init(){}
