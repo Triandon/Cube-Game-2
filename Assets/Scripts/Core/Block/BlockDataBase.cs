@@ -7,6 +7,7 @@ namespace Core.Block
     {
         
         //Static block refrences
+        public static Block Air;
         public static Block GrassBlock;
         public static Block DirtBlock;
         public static Block StoneBlock;
@@ -38,6 +39,10 @@ namespace Core.Block
 
         private static void RegisterBlocks()
         {
+            // Air
+            //Air = new Block(0, "Air", 0, 0, 0);
+            //Air.isTransparent = true;
+            
             // Grass block
             GrassBlock = new Block(1, "Grass_Block", top: 2, side: 1, bottom: 0);
             BlockRegistry.RegisterBlock(GrassBlock);

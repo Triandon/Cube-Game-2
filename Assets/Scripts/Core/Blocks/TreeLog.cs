@@ -20,6 +20,7 @@ namespace Core.Blocks
 
         public override BlockStateContainer GetStateForPlacement(BlockPlacementContext context)
         {
+            growList[context.Pos] = 0;
             return CreateDefaultState().With(BlockStateKeys.WidthState, "0.1");
         }
 
@@ -27,6 +28,9 @@ namespace Core.Blocks
 
         public override void OnInstantTick(Vector3Int position, ChunkManager chunkManager)
         {
+            if(!growList.ContainsKey(position))
+                return;
+            
             BlockStateContainer state = chunkManager.GetBlockStateAtWorldPos(position);
             
             string sWidth = state.GetState(BlockStateKeys.WidthState);
@@ -37,27 +41,25 @@ namespace Core.Blocks
 
             if (width >= 1f)
             {
-                chunkManager.SetBlockState(position,BlockStateKeys.WidthState, 1.ToString(CultureInfo.InvariantCulture));
-                chunkManager.SetBlockAtWorldPos(position + Vector3Int.up, 23);
+                chunkManager.SetBlockState(position, BlockStateKeys.WidthState, "1");
+                if (chunkManager.GetBlockAtWorldPos(position + Vector3Int.up) == 0)
+                {
+                    chunkManager.SetBlockAtWorldPos(position + Vector3Int.up, 23);
+                }
                 growList.Remove(position);
                 return;
             }
-
+            
             growList.TryGetValue(position, out float growTime);
             growTime += Time.deltaTime;
-
-            if (growTime < GROWTIME)
-            {
-                growList[position] = growTime;
-                return;
-            }
+            growList[position] = growTime;
 
             if (growTime >= GROWTIME)
             {
                 growList[position] = 0;
+                width = width + 0.1f;
             }
             
-            width = width + 0.1f;
             chunkManager.SetBlockState(position,BlockStateKeys.WidthState, width.ToString(CultureInfo.InvariantCulture));
         }
     }
