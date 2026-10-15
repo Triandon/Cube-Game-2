@@ -18,6 +18,11 @@ namespace Core.Block
             SetState(name, value);
             return this;
         }
+
+        public void RemoveState(string name)
+        {
+            states.Remove(name);
+        }
         
         public BlockStateContainer Copy()
         {

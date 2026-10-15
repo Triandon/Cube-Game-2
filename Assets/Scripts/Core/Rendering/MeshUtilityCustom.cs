@@ -1,30 +1,82 @@
 using System.Runtime.InteropServices;
 using UnityEngine;
-using UnityEngine.Rendering;
 
 public static class MeshUtilityCustom
 {
     public static readonly int ChunkVertexStride = Marshal.SizeOf<ChunkVertex>();
-
-    private static readonly Color32 DefaultVertexColor = new Color32(255, 255, 255, 255);
     
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
     public struct ChunkVertex
     {
-        public PackedVertexPosition position;
-        public int normal;
-        public Color32 color;
-        public PackedUv uv0;
-        public PackedAtlasTile uv1;
+        public uint positionXY;
+        public uint positionZLightTile;
+        public uint uv;
+        public uint normal;
 
-        public ChunkVertex(PackedVertexPosition position, int normal,
-            PackedUv uv0, PackedAtlasTile uv1)
+        private const float CoordinateScale = 100f;
+        private const float InverseCoordinateScale = 1f / CoordinateScale;
+        
+        public ChunkVertex(Vector3 position, uint normal,
+            uint uv, ushort atlasTile, byte light)
         {
-            this.position = position;
+            positionXY = PackCoordinate(position.x) | (PackCoordinate(position.y) << 16);
+            // VoxelLight stores sky in the high nibble; the vertex stores it in bits 16-19.
+            positionZLightTile = PackCoordinate(position.z)
+                                 | ((uint)VoxelLight.GetSky(light) << 16)
+                                 | ((uint)VoxelLight.GetBlock(light) << 20)
+                                 | ((uint)atlasTile << 24);
+            this.uv = uv;
             this.normal = normal;
-            color = DefaultVertexColor;
-            this.uv0 = uv0;
-            this.uv1 = uv1;
+        }
+        
+        public Vector3 Position => new Vector3(
+            (positionXY & 0xffffu) * InverseCoordinateScale,
+            (positionXY >> 16) * InverseCoordinateScale,
+            (positionZLightTile & 0xffffu) * InverseCoordinateScale);
+
+        public static uint PackUv(float u, float v)
+        {
+            return PackCoordinate(u) | (PackCoordinate(v) << 16);
+        }
+
+        private static uint PackCoordinate(float value)
+        {
+            return (uint)Mathf.Clamp(Mathf.RoundToInt(value * CoordinateScale), 0, ushort.MaxValue);
+        }
+
+        public static uint PackNormal(Vector3 value)
+        {
+            // Avoid quantization for the six directions emitted by regular voxel faces.
+            if (value == Vector3.up) return 0u;
+            if (value == Vector3.down) return 1u;
+            if (value == Vector3.right) return 2u;
+            if (value == Vector3.left) return 3u;
+            if (value == Vector3.forward) return 4u;
+            if (value == Vector3.back) return 5u;
+
+            uint xyz = PackSNorm8(value.x) | (PackSNorm8(value.y) << 8) | (PackSNorm8(value.z) << 16);
+            return PackGpuNormal(xyz);
+        }
+
+        private static uint PackSNorm8(float value)
+        {
+            return unchecked((byte)(sbyte)Mathf.RoundToInt(Mathf.Clamp(value, -1f, 1f) * 127f));
+        }
+
+        private static uint PackGpuNormal(uint xyz)
+        {
+            // Three-bit direction IDs, matching DecodePackedNormal in the shader.
+            switch (xyz)
+            {
+                case 0x007f00u: return 0u; // +Y
+                case 0x008100u: return 1u; // -Y
+                case 0x00007fu: return 2u; // +X
+                case 0x000081u: return 3u; // -X
+                case 0x7f0000u: return 4u; // +Z
+                case 0x810000u: return 5u; // -Z
+                // Tag 6 retains all three signed bytes for slopes and zero normals.
+                default: return (xyz << 8) | 6u;
+            }
         }
     }
     
@@ -44,44 +96,7 @@ public static class MeshUtilityCustom
 
     public static ChunkMeshUploadData BuildUploadData(MeshData meshData)
     {
-        int vertexCount = meshData.vertices.Count;
-        ChunkVertex[] vertices = new ChunkVertex[vertexCount];
-
-        for (int i = 0; i < vertexCount; i++)
-        {
-            int normal = i < meshData.normals.Count ? meshData.normals[i] : PackedNormal.Up;
-            PackedUv uv0 = i < meshData.uvs.Count ? meshData.uvs.packedUvs[i] : default(PackedUv);
-            PackedAtlasTile tile = i < meshData.atlasTileIndexes.Count
-                ? new PackedAtlasTile(meshData.atlasTileIndexes[i])
-                : default(PackedAtlasTile);
-            vertices[i] = new ChunkVertex(meshData.vertices.packedPositions[i], normal, uv0, tile);
-
-            if (i < meshData.colors.Count)
-                vertices[i].color = meshData.colors[i];
-        }
-
-        return new ChunkMeshUploadData(vertices, meshData.triangles.ToArray(),
-            CalculateDecodedBounds(meshData));
-    }
-    
-    private static Bounds CalculateDecodedBounds(MeshData meshData)
-    {
-        int vertexCount = meshData.vertices.Count;
-        if (vertexCount == 0)
-            return new Bounds(Vector3.zero, Vector3.zero);
-
-        Vector3 min = meshData.vertices[0];
-        Vector3 max = min;
-
-        for (int i = 1; i < vertexCount; i++)
-        {
-            Vector3 position = meshData.vertices[i];
-            min = Vector3.Min(min, position);
-            max = Vector3.Max(max, position);
-        }
-
-        Bounds bounds = new Bounds();
-        bounds.SetMinMax(min, max);
-        return bounds;
+        // Snapshot the already-packed data for the upload queue; no attribute conversion pass.
+        return new ChunkMeshUploadData(meshData.CopyVertices(), meshData.triangles.ToArray(), meshData.Bounds);
     }
 }

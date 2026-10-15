@@ -40,11 +40,9 @@ Shader "Custom/PagedVoxelAtlas"
             struct PackedChunkVertex
             {
                 uint positionXY;
-                uint positionZW;
-                uint normal;
-                uint color;
+                uint positionZLightTile;
                 uint uv;
-                uint atlasTile;
+                uint normal;
             };
 
             struct ChunkGpuData
@@ -64,8 +62,35 @@ Shader "Custom/PagedVoxelAtlas"
                 float2 uvLocal : TEXCOORD0;
                 float4 atlasMeta : TEXCOORD1;
                 half2 light : TEXCOORD2;
-                float3 positionWS : TEXCOORD3;
+                nointerpolation float3 normalWS : TEXCOORD3;
             };
+            
+            float3 DecodePackedNormal(uint packedNormal)
+            {
+                // Cube faces use three-bit direction IDs and need no normalization.
+                static const float3 faceNormals[6] =
+                {
+                    float3(0, 1, 0), float3(0, -1, 0),
+                    float3(1, 0, 0), float3(-1, 0, 0),
+                    float3(0, 0, 1), float3(0, 0, -1)
+                };
+                uint direction = packedNormal & 7u;
+                if (direction < 6u)
+                    return faceNormals[direction];
+                if (direction != 6u)
+                    return float3(0, 0, 0); // Reserved/invalid tag, flagged in debug view.
+
+                // Tag 6: preserve the existing signed 8-bit XYZ for sloped faces.
+                packedNormal >>= 8;
+                int3 components = int3(
+                    (int)(packedNormal << 24) >> 24,
+                    (int)(packedNormal << 16) >> 24,
+                    (int)(packedNormal << 8) >> 24);
+                float3 normal = (float3)components;
+                // Normalize once per vertex to correct SNORM8 rounding on slopes.
+                // Keep zero normals zero so the debug view can flag invalid data.
+                return normal * rsqrt(max(dot(normal, normal), 1.0));
+            }
 
             v2f vert(uint vertexID : SV_VertexID)
             {
@@ -75,19 +100,19 @@ Shader "Custom/PagedVoxelAtlas"
 
                 uint positionX = vertex.positionXY & 0xffffu;
                 uint positionY = vertex.positionXY >> 16;
-                uint positionZ = vertex.positionZW & 0xffffu;
+                uint positionZ = vertex.positionZLightTile & 0xffffu;
                 float3 positionWS = float3(positionX, positionY, positionZ) / 100.0 + chunk.origin.xyz;
 
                 v2f output;
                 output.posCS = mul(UNITY_MATRIX_VP, float4(positionWS, 1.0));
-                output.positionWS = positionWS;
+                output.normalWS = DecodePackedNormal(vertex.normal);
 
                 uint packedU = vertex.uv & 0xffffu;
                 uint packedV = vertex.uv >> 16;
                 output.uvLocal = float2(packedU, packedV) / 100.0;
 
                 float tileSize = 1.0 / _AtlasTiles;
-                float tileIndex = (float)(vertex.atlasTile & 0xffffu);
+                float tileIndex = (float)(vertex.positionZLightTile >> 24);
                 float tileColumn = fmod(tileIndex, _AtlasTiles);
                 float tileRow = floor(tileIndex / _AtlasTiles);
                 float uMin = tileColumn * tileSize;
@@ -95,8 +120,8 @@ Shader "Custom/PagedVoxelAtlas"
                 output.atlasMeta = float4(uMin, vMax - tileSize, tileSize, tileSize);
 
                 output.light = half2(
-                    (half)(vertex.color & 0xffu),
-                    (half)((vertex.color >> 8) & 0xffu)) / 255.0h;
+                    (half)((vertex.positionZLightTile >> 16) & 0xfu),
+                    (half)((vertex.positionZLightTile >> 20) & 0xfu)) / 15.0h;
                 return output;
             }
 
@@ -108,15 +133,13 @@ Shader "Custom/PagedVoxelAtlas"
                     bool debugNormals = _NormalsDebugMode > 0.5;
                 #endif
 
-                float3 normalWS = cross(ddy(input.positionWS), ddx(input.positionWS));
-                float normalLengthSq = dot(normalWS, normalWS);
+                float3 normalWS = input.normalWS;
 
                 if (debugNormals)
                 {
-                    if (normalLengthSq < 1e-12)
+                    if (dot(normalWS, normalWS) < 1e-12)
                         return fixed4(1.0, 0.25, 0.0, 1.0);
-
-                    normalWS *= rsqrt(normalLengthSq);
+                    
                     float3 axis = abs(normalWS);
                     if (axis.x >= axis.y && axis.x >= axis.z)
                         return normalWS.x >= 0.0
@@ -130,8 +153,7 @@ Shader "Custom/PagedVoxelAtlas"
                         ? fixed4(0.0, 0.0, 1.0, 1.0)
                         : fixed4(1.0, 1.0, 0.0, 1.0);
                 }
-
-                normalWS *= rsqrt(max(normalLengthSq, 1e-12));
+                
                 float2 tileLocal = frac(input.uvLocal);
                 float2 baseUV = input.atlasMeta.xy;
                 float2 tileSize = input.atlasMeta.zw;
