@@ -1,3 +1,4 @@
+using Core.Block;
 using UnityEngine;
 
 namespace Core.Item
@@ -19,6 +20,13 @@ namespace Core.Item
             this.blockId = blockId;
             this.textureIndex = textureIndex;
             this.maxStackSize = maxStackSize;
+        }
+
+        // Called when a block is activated with a item
+        public virtual void OnBlockActivated(Vector3Int pos,
+            BlockStateContainer state, Block.Block block, Transform player)
+        {
+            
         }
     }
 }

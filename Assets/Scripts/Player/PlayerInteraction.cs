@@ -112,6 +112,10 @@ public class PlayerInteraction : MonoBehaviour
             if (hitBlock != null && hitBlock.id != 0)
             {
                 interactionConsumed = hitBlock.OnActivated(hitTarget,state,hitBlock,player);
+                if (stack != null && !stack.IsEmpty)
+                {
+                    stack.Item.OnBlockActivated(hitTarget, state, hitBlock, player);
+                }
             }
             
             if (interactionConsumed)

@@ -1,9 +1,14 @@
+using Core.Items;
 using UnityEngine;
 
 namespace Core.Item
 {
     public static class ItemDatabase
     {
+        // Static items
+        public static Item DebugLog;
+        
+        
         static ItemDatabase()
         {
             RegisterItems();
@@ -79,6 +84,11 @@ namespace Core.Item
             
             //Tree leaf
             ItemRegistry.RegisterItem(new Item(id:23, itemName:"TreeLeaf", isBlock:true, blockId:23, textureIndex:48,64));
+            
+            //Debug log
+            //Used to debug items
+            DebugLog = new DebugLog(id: 24, itemName: "DebugLog", isBlock: false, 0, textureIndex: 46, maxStackSize: 1);
+            ItemRegistry.RegisterItem(DebugLog);
         }
     
         public static void Init(){}
