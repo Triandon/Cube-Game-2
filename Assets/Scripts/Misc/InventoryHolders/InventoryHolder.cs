@@ -1,11 +1,12 @@
 using System.Collections.Generic;
 using Core;
 using Core.Item;
+using Misc.InventoryHolders;
 using UnityEngine;
 using UnityEngine.Events;
 
 [System.Serializable]
-public abstract class InventoryHolder : MonoBehaviour
+public abstract class InventoryHolder : MonoBehaviour, IInventoryOwner
 {
     public string ownerName;
     public int inventorySize;
@@ -14,9 +15,6 @@ public abstract class InventoryHolder : MonoBehaviour
     public Inventory Inventory => inventory;
     
     public abstract InventoryHolderType HolderType { get; }
-    
-    public static UnityAction<Inventory, InventoryHolder> OnInventoryDisplayRequested;
-    public static UnityAction<InventoryHolder> OnInventoryClosed;
 
     private Settings settings;
     protected virtual void Awake()
@@ -36,12 +34,12 @@ public abstract class InventoryHolder : MonoBehaviour
 
     public void OpenInventory()
     {
-        OnInventoryDisplayRequested?.Invoke(inventory, this);
+        InventoryEvents.Open(this);
     }
 
     public void CloseInventory()
     {
-        OnInventoryClosed?.Invoke(this);
+        InventoryEvents.Close(this);
     }
 
     public void SaveInventory()

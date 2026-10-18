@@ -1,12 +1,12 @@
 using System;
 using System.Collections.Generic;
+using Core.TileEntities;
 using UnityEngine;
 
 namespace Core.Block
 {
     public class Block
     {
-
         public byte id;
         public string blockName;
 
@@ -25,6 +25,8 @@ namespace Core.Block
         public int shapeIndex = (int)BlockShapes.Cube;
         
         public virtual bool HasBlockEntity => false;
+        public virtual bool HasTileEntity => TileEntityRegistry.HasTileEntity(id);
+        public virtual TileEntity CreateTileEntity() => TileEntityRegistry.Create(id);
         public virtual bool HasInstantTick => false;
         public virtual bool HasScheduledTick => false;
         public virtual bool HasRandomTick => false;

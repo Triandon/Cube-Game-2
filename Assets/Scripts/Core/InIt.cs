@@ -1,6 +1,7 @@
 using Core.Block;
 using Core.Block.TileEntities;
 using Core.Item;
+using Core.TileEntities;
 using UnityEngine;
 
 namespace Core
@@ -11,6 +12,7 @@ namespace Core
         {
             BlockDataBase.Init();
             BlockEntityDataBase.Init();
+            TileEntityDataBase.Init();
             // Load atlas
             Material itemAtlas = Resources.Load<Material>("Materials/AtlasMaterial");
             ItemRegistry.InitAtlas(

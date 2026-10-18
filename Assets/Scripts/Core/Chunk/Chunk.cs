@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Core.Block;
+using Core.TileEntities;
 using UnityEngine;
 using Random = System.Random;
 
@@ -14,6 +15,8 @@ namespace Core
         public byte[] blocks;
         public BlockStateContainer[] states;
         public Dictionary<Vector3Int, InventoryHolder> blockEntities = new Dictionary<Vector3Int, InventoryHolder>();
+        internal readonly Dictionary<Vector3Int, TileEntity> tileEntities = new Dictionary<Vector3Int, TileEntity>();
+        public IReadOnlyDictionary<Vector3Int, TileEntity> TileEntities => tileEntities;
         public HashSet<Vector3Int> specialMeshBlocks = new HashSet<Vector3Int>();
         
         //Lightning data

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Core.Item;
+using Misc.InventoryHolders;
 using Unity.VisualScripting;
 using UnityEngine;
 
@@ -28,13 +29,13 @@ public class InventoryViewManager : MonoBehaviour
 
     protected virtual void OnEnable()
     {
-        InventoryHolder.OnInventoryDisplayRequested += OnInventoryRequested;
+        InventoryEvents.OnInventoryDisplayRequested += OnInventoryRequested;
         tooltipUI = FindFirstObjectByType<TooltipUI>(FindObjectsInactive.Include);
     }
 
     protected virtual void OnDisable()
     {
-        InventoryHolder.OnInventoryDisplayRequested -= OnInventoryRequested;
+        InventoryEvents.OnInventoryDisplayRequested -= OnInventoryRequested;
 
         if (inventory != null)
             inventory.OnInventoryResized -= RebuildSlots;
@@ -48,7 +49,7 @@ public class InventoryViewManager : MonoBehaviour
             inventory.OnInventoryResized -= RebuildSlots;
     }
 
-    protected virtual void OnInventoryRequested(Inventory inv, InventoryHolder holder)
+    protected virtual void OnInventoryRequested(Inventory inv, IInventoryOwner holder)
     {
         if(this is HotBarUI && holder is not IPlayerInventory)
             return;

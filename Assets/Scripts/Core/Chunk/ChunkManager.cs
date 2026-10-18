@@ -6,6 +6,7 @@ using System.Linq;
 using Core.Block;
 using Core.Block.TileEntities;
 using Core.Rendering;
+using Core.TileEntities;
 using Misc.InventoryHolders;
 using UnityEngine;
 
@@ -179,6 +180,12 @@ namespace Core
 
         private void OnDestroy()
         {
+            foreach (Chunk chunk in chunks.Values)
+            {
+                tickCaller?.UnregisterChunk(chunk);
+                ClearTileEntities(chunk);
+            }
+            
             SaveSkyOcclusionMapIfDirty();
             pagedTerrainStorage?.Dispose();
             pagedTerrainStorage = null;
@@ -315,6 +322,10 @@ namespace Core
             }
 
             bool hasSavedBefore = WasChunkLoadedFromDisk(res.coord);
+            
+            // Remove old runtime logic while its block data is still available.
+            tickCaller?.UnregisterChunk(chunk);
+            ClearTileEntities(chunk);
 
             // Apply block data
             chunk.blocks = res.blocks ?? new byte[ArrayIndexing.Volume];
@@ -333,7 +344,7 @@ namespace Core
             chunk.RebuildSpecialMeshBlocks();
             lightQueue.Enqueue(chunk);
 
-            //Rebuilds block entities  AFTER chunk is ready, the entity is a GO
+            // Rebuild runtime instances on the main thread after block data is installed.
             if (res.blockEntityLocals != null && res.blockEntityLocals.Count > 0)
             {
                 //Clear old entities in case if they exist
@@ -355,6 +366,7 @@ namespace Core
                     if (block != null)
                     {
                         SpawnBlockEntityAtWorldPos(block, worldPos);
+                        SpawnTileEntityAtWorldPos(block, worldPos);
                     }
                 }
             }
@@ -630,6 +642,7 @@ namespace Core
         {
             pagedTerrainStorage?.Remove(coord);
             tickCaller?.UnregisterChunk(chunk);
+            ClearTileEntities(chunk);
             if (chunk.isDirty)
             {
                 WorldSaveSystem.SaveChunk(coord, chunk);
@@ -697,6 +710,7 @@ namespace Core
                 {
                     pagedTerrainStorage?.Remove(coord);
                     tickCaller?.UnregisterChunk(chunk);
+                    ClearTileEntities(chunk);
                     UnregisterBlockLightSources(chunk);
                     if (chunk.isDirty)
                     {
@@ -956,19 +970,25 @@ namespace Core
                     position: worldPos, state: state, player: player, placementFace: placementFace);
             }
 
-            if (id != 0 && block != null && block.HasBlockEntity)
-            {
-                SpawnBlockEntityAtWorldPos(block, worldPos);
-            }
-
             if (id == 0 && oldBlock != null && oldId != 0)
             {
                 oldBlock.OnMined(worldPos,oldState,player);
+            }
+
+            if (oldId != id)
+            {
+                RemoveTileEntityAtWorldPos(worldPos);
                 RemoveBlockEntityAtWorldPos(worldPos);
             }
             
             // Sets block at the local chunk
             chunk.SetBlockLocal(local, id, state);
+            if (id != 0 && block != null)
+            {
+                if (block.HasBlockEntity)
+                    SpawnBlockEntityAtWorldPos(block, worldPos);
+                SpawnTileEntityAtWorldPos(block, worldPos);
+            }
             meshQue.Add(chunk);
             EnqueueNeighborUpdates(chunk.coord, local);
             
@@ -1116,6 +1136,9 @@ namespace Core
         {
             if(chunk == null) return;
             
+            tickCaller?.UnregisterChunk(chunk);
+            ClearTileEntities(chunk);
+            
             chunk.blockEntities.Clear();
 
             for (int x = 0; x < Chunk.CHUNK_SIZE; x++)
@@ -1127,14 +1150,20 @@ namespace Core
                 if(id == 0) continue;
 
                 Block.Block block = BlockRegistry.GetBlock(id);
-                if(block == null || !block.HasBlockEntity) continue;
+                if(block == null) continue;
 
                 Vector3Int localPos = new Vector3Int(x, y, z);
 
                 Vector3Int worldPos =
                     chunk.coord * Chunk.CHUNK_SIZE + localPos;
+
+                if (block.HasBlockEntity)
+                {
+                    SpawnBlockEntityAtWorldPos(block, worldPos);
+                }
                 
-                SpawnBlockEntityAtWorldPos(block, worldPos);
+                SpawnTileEntityAtWorldPos(block, worldPos);
+                tickCaller?.OnBlockChanged(worldPos, 0, id);
             }
         }
 
@@ -1199,6 +1228,66 @@ namespace Core
         public bool CheckForVoxel(Vector3Int worldBlockPos)
         {
             return TryGetCollisionBlock(worldBlockPos, out _, out _, out _);
+        }
+        
+        public TileEntity GetTileEntity(Vector3Int worldPos)
+        {
+            Chunk chunk = GetChunkFromWorldPos(worldPos);
+            if (chunk == null)
+                return null;
+
+            chunk.tileEntities.TryGetValue(chunk.WorldToLocal(worldPos), out TileEntity tile);
+            return tile;
+        }
+
+        public T GetTileEntity<T>(Vector3Int worldPos) where T : TileEntity
+        {
+            return GetTileEntity(worldPos) as T;
+        }
+
+        private void SpawnTileEntityAtWorldPos(Block.Block block, Vector3Int worldPos)
+        {
+            Chunk chunk = GetChunkFromWorldPos(worldPos);
+            if (chunk == null || !block.HasTileEntity)
+                return;
+
+            Vector3Int local = chunk.WorldToLocal(worldPos);
+            if (chunk.tileEntities.ContainsKey(local))
+                return;
+
+            TileEntity tile = block.CreateTileEntity();
+            if (tile == null)
+                return;
+
+            tile.Attach(this, worldPos, block.id);
+            chunk.tileEntities.Add(local, tile);
+            tile.OnLoad();
+        }
+
+        private void RemoveTileEntityAtWorldPos(Vector3Int worldPos)
+        {
+            Chunk chunk = GetChunkFromWorldPos(worldPos);
+            if (chunk == null)
+                return;
+
+            Vector3Int local = chunk.WorldToLocal(worldPos);
+            if (!chunk.tileEntities.TryGetValue(local, out TileEntity tile))
+                return;
+
+            chunk.tileEntities.Remove(local);
+            tile.Remove(blockRemoved: true);
+        }
+
+        private static void ClearTileEntities(Chunk chunk)
+        {
+            if (chunk.tileEntities.Count == 0)
+                return;
+
+            // Detach before callbacks so lookups cannot return removed instances.
+            var removed = new List<TileEntity>(chunk.tileEntities.Values);
+            chunk.tileEntities.Clear();
+            foreach (TileEntity tile in removed)
+                tile.Remove();
         }
 
         private bool TryGetCollisionBlock(Vector3Int worldBlockPos, out Chunk chunk, out Vector3Int local,

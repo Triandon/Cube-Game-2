@@ -31,6 +31,7 @@ namespace Core.Block
         public static Block RotatingChestBlock;
         public static Block TreeLog;
         public static Block TreeLeaf;
+        public static Block Chest2;
         
         static BlockDataBase()
         {
@@ -141,6 +142,11 @@ namespace Core.Block
             //Rotating Chest Block
             TreeLeaf = new TreeLeaf(23, "TreeLeaf", top: 48, side: 48, bottom: 48);
             BlockRegistry.RegisterBlock(TreeLeaf);
+            
+            //Chest Block 
+            Chest2 = new Chest2Block(24, "Chest2", top: 5, side: 4, bottom: 4);
+            Chest2.frontIndex = 5;
+            BlockRegistry.RegisterBlock(Chest2);
             
             Debug.Log("Blocks registered (static)");
         }

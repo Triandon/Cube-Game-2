@@ -392,7 +392,7 @@ public static class ThreadedChunkProcessor
             if (id == 0) continue;
 
             Block block = BlockRegistry.GetBlock(id);
-            if (block != null && block.HasBlockEntity)
+            if (block != null && (block.HasBlockEntity || block.HasTileEntity))
             {
                 result ??= new List<Vector3Int>();
                 result.Add(new Vector3Int(x, y, z));
@@ -429,7 +429,7 @@ public static class ThreadedChunkProcessor
 
             Vector3Int localPos = new Vector3Int(x, y, z);
 
-            if (block.HasBlockEntity)
+            if (block.HasBlockEntity || block.HasTileEntity)
             {
                 blockEntities ??= new List<Vector3Int>();
                 blockEntities.Add(localPos);

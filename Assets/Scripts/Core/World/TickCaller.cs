@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Core.Block;
+using Core.TileEntities;
 using UnityEngine;
 
 namespace Core
@@ -15,16 +16,24 @@ namespace Core
         [SerializeField] private int randomTicksPerInterval = 3;
 
         private readonly HashSet<Vector3Int> instantTickBlocks = new HashSet<Vector3Int>();
-        private readonly HashSet<Vector3Int> scheduledTickBlocks = new HashSet<Vector3Int>();
+        private readonly Dictionary<Vector3Int, ScheduledTick> scheduledTickBlocks =
+            new Dictionary<Vector3Int, ScheduledTick>();
         private readonly HashSet<Vector3Int> randomTickBlocks = new HashSet<Vector3Int>();
 
-        private readonly Queue<Vector3Int> scheduledQueue = new Queue<Vector3Int>();
-        private readonly Dictionary<Vector3Int, float> lastScheduledTickTime = new Dictionary<Vector3Int, float>();
+        // The registration identity prevents stale queue entries from ticking a replacement.
+        private sealed class ScheduledTick
+        {
+            public Vector3Int Position;
+            public float LastTime;
+        }
+
+        private readonly Queue<ScheduledTick> scheduledQueue = new Queue<ScheduledTick>();
 
         private readonly Dictionary<Vector3Int, HashSet<Vector3Int>> chunkTickPositions =
             new Dictionary<Vector3Int, HashSet<Vector3Int>>();
         
         private readonly List<Vector3Int> randomTickBuffer = new List<Vector3Int>();
+        private readonly List<Vector3Int> instantTickBuffer = new List<Vector3Int>();
         private readonly System.Random random = new System.Random();
 
         private ChunkManager chunkManager;
@@ -64,18 +73,18 @@ namespace Core
             RegisterTickPositions(origin, instantLocals, instantTickBlocks, chunkPositions);
             RegisterTickPositions(origin, randomLocals, randomTickBlocks, chunkPositions);
 
-            if (scheduledLocals == null || scheduledLocals.Count == 0)
-                return;
-
-            for (int i = 0; i < scheduledLocals.Count; i++)
+            if (scheduledLocals != null)
             {
-                Vector3Int worldPos = origin + scheduledLocals[i];
-                if (!scheduledTickBlocks.Add(worldPos))
-                    continue;
-
-                chunkPositions.Add(worldPos);
-                scheduledQueue.Enqueue(worldPos);
-                lastScheduledTickTime[worldPos] = Time.time;
+                for (int i = 0; i < scheduledLocals.Count; i++)
+                    RegisterScheduledPosition(origin + scheduledLocals[i]);
+            }
+            
+            // Tile tick flags belong to per-position instances, created on the main thread.
+            foreach (TileEntity tile in chunk.TileEntities.Values)
+            {
+                Block.Block block = BlockRegistry.GetBlock(tile.BlockId);
+                if (block != null)
+                    RegisterPositionForBlock(tile.Position, block);
             }
         }
 
@@ -122,24 +131,32 @@ namespace Core
 
         private void RegisterPositionForBlock(Vector3Int worldPos, Block.Block block)
         {
-            if (block.HasInstantTick)
+            TileEntity tile = chunkManager.GetTileEntity(worldPos);
+            if (block.HasInstantTick || (tile?.HasInstantTick ?? false))
             {
                 instantTickBlocks.Add(worldPos);
                 TrackChunkPosition(worldPos);
             }
 
-            if (block.HasScheduledTick && scheduledTickBlocks.Add(worldPos))
-            {
-                TrackChunkPosition(worldPos);
-                scheduledQueue.Enqueue(worldPos);
-                lastScheduledTickTime[worldPos] = Time.time;
-            }
+            if (block.HasScheduledTick || (tile?.HasScheduledTick ?? false))
+                RegisterScheduledPosition(worldPos);
 
-            if (block.HasRandomTick)
+            if (block.HasRandomTick || (tile?.HasRandomTick ?? false))
             {
                 randomTickBlocks.Add(worldPos);
                 TrackChunkPosition(worldPos);
             }
+        }
+        
+        private void RegisterScheduledPosition(Vector3Int worldPos)
+        {
+            if (scheduledTickBlocks.ContainsKey(worldPos))
+                return;
+
+            var entry = new ScheduledTick { Position = worldPos, LastTime = Time.time };
+            scheduledTickBlocks.Add(worldPos, entry);
+            scheduledQueue.Enqueue(entry);
+            TrackChunkPosition(worldPos);
         }
 
         private void UnregisterPosition(Vector3Int worldPos)
@@ -147,7 +164,6 @@ namespace Core
             instantTickBlocks.Remove(worldPos);
             scheduledTickBlocks.Remove(worldPos);
             randomTickBlocks.Remove(worldPos);
-            lastScheduledTickTime.Remove(worldPos);
 
             Vector3Int chunkCoord = WorldToChunkCoord(worldPos);
             if (!chunkTickPositions.TryGetValue(chunkCoord, out HashSet<Vector3Int> chunkSet))
@@ -170,7 +186,6 @@ namespace Core
                 instantTickBlocks.Remove(worldPos);
                 scheduledTickBlocks.Remove(worldPos);
                 randomTickBlocks.Remove(worldPos);
-                lastScheduledTickTime.Remove(worldPos);
             }
 
             chunkTickPositions.Remove(chunkCoord);
@@ -205,18 +220,30 @@ namespace Core
         {
             if (instantTickBlocks.Count == 0)
                 return;
+            
+            // Callbacks may place or remove blocks, changing the registrations.
+            instantTickBuffer.Clear();
+            instantTickBuffer.AddRange(instantTickBlocks);
 
-            foreach (Vector3Int worldPos in instantTickBlocks)
+            foreach (Vector3Int worldPos in instantTickBuffer)
             {
+                if (!instantTickBlocks.Contains(worldPos))
+                    continue;
+                
                 byte id = chunkManager.GetBlockAtWorldPos(worldPos);
                 if (id == 0)
                     continue;
 
                 Block.Block block = BlockRegistry.GetBlock(id);
-                if (block == null || !block.HasInstantTick)
+                if (block == null)
                     continue;
 
-                block.OnInstantTick(worldPos, chunkManager);
+                TileEntity tile = chunkManager.GetTileEntity(worldPos);
+                if (block.HasInstantTick)
+                    block.OnInstantTick(worldPos, chunkManager);
+                
+                if (IsCurrentTile(tile) && tile.HasInstantTick)
+                    tile.OnInstantTick();
             }
         }
 
@@ -229,30 +256,35 @@ namespace Core
 
             for (int i = 0; i < calls; i++)
             {
-                Vector3Int worldPos = scheduledQueue.Dequeue();
+                ScheduledTick entry = scheduledQueue.Dequeue();
+                Vector3Int worldPos = entry.Position;
 
-                if (!scheduledTickBlocks.Contains(worldPos))
+                if (!IsCurrentSchedule(entry))
                     continue;
 
                 byte id = chunkManager.GetBlockAtWorldPos(worldPos);
                 Block.Block block = BlockRegistry.GetBlock(id);
+                TileEntity tile = chunkManager.GetTileEntity(worldPos);
 
-                if (id == 0 || block == null || !block.HasScheduledTick)
+                if (id == 0 || block == null ||
+                    (!block.HasScheduledTick && !(tile?.HasScheduledTick ?? false)))
                 {
                     scheduledTickBlocks.Remove(worldPos);
-                    lastScheduledTickTime.Remove(worldPos);
                     continue;
                 }
 
                 float now = Time.time;
-                if (!lastScheduledTickTime.TryGetValue(worldPos, out float lastTime))
-                    lastTime = now;
-
-                float delta = Mathf.Max(0f, now - lastTime);
-                block.OnScheduledTick(worldPos, delta, chunkManager);
-
-                lastScheduledTickTime[worldPos] = now;
-                scheduledQueue.Enqueue(worldPos);
+                float delta = Mathf.Max(0f, now - entry.LastTime);
+                if (block.HasScheduledTick)
+                    block.OnScheduledTick(worldPos, delta, chunkManager);
+                if (IsCurrentTile(tile) && tile.HasScheduledTick)
+                    tile.OnScheduledTick(delta);
+                
+                if (IsCurrentSchedule(entry))
+                {
+                    entry.LastTime = now;
+                    scheduledQueue.Enqueue(entry);
+                }
             }
         }
 
@@ -277,17 +309,36 @@ namespace Core
                 Vector3Int worldPos = randomTickBuffer[index];
                 randomTickBuffer[index] = randomTickBuffer[randomTickBuffer.Count - 1];
                 randomTickBuffer.RemoveAt(randomTickBuffer.Count - 1);
+                
+                if (!randomTickBlocks.Contains(worldPos))
+                    continue;
 
                 byte id = chunkManager.GetBlockAtWorldPos(worldPos);
                 if (id == 0)
                     continue;
 
                 Block.Block block = BlockRegistry.GetBlock(id);
-                if (block == null || !block.HasRandomTick)
+                if (block == null)
                     continue;
 
-                block.OnRandomTick(worldPos, chunkManager);
+                TileEntity tile = chunkManager.GetTileEntity(worldPos);
+                if (block.HasRandomTick)
+                    block.OnRandomTick(worldPos, chunkManager);
+                if (IsCurrentTile(tile) && tile.HasRandomTick)
+                    tile.OnRandomTick();
             }
+        }
+        
+        private bool IsCurrentTile(TileEntity tile)
+        {
+            return tile != null && !tile.IsRemoved &&
+                   ReferenceEquals(chunkManager.GetTileEntity(tile.Position), tile);
+        }
+
+        private bool IsCurrentSchedule(ScheduledTick entry)
+        {
+            return scheduledTickBlocks.TryGetValue(entry.Position, out ScheduledTick current) &&
+                   ReferenceEquals(current, entry);
         }
     }
 }

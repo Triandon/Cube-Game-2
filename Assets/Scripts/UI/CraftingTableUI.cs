@@ -1,5 +1,6 @@
 using Core.Blocks.BlockLogic;
 using Core.Item;
+using Misc.InventoryHolders;
 using Unity.VisualScripting;
 using UnityEngine;
 
@@ -8,7 +9,7 @@ public class CraftingTableUI : InventoryViewManager
     [SerializeField] private GameObject root;
     private CraftingTableInventoryHolder currentHolder;
 
-    protected override void OnInventoryRequested(Inventory inv, InventoryHolder holder)
+    protected override void OnInventoryRequested(Inventory inv, IInventoryOwner holder)
     {
         if (holder.HolderType != InventoryHolderType.CraftingTable)
             return;
@@ -90,16 +91,16 @@ public class CraftingTableUI : InventoryViewManager
     protected override void OnEnable()
     {
         base.OnEnable();
-        InventoryHolder.OnInventoryClosed += OnInventoryClose;
+        InventoryEvents.OnInventoryClosed += OnInventoryClose;
     }
 
     protected override void OnDisable()
     {
         base.OnDisable();
-        InventoryHolder.OnInventoryClosed -= OnInventoryClose;
+        InventoryEvents.OnInventoryClosed -= OnInventoryClose;
     }
     
-    private void OnInventoryClose(InventoryHolder holder)
+    private void OnInventoryClose(IInventoryOwner holder)
     {
         if (holder == currentHolder)
         {

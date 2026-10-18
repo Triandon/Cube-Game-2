@@ -7,6 +7,7 @@ namespace Core.Item
     {
         // Static items
         public static Item DebugLog;
+        public static Item Chest2Item;
         
         
         static ItemDatabase()
@@ -89,6 +90,10 @@ namespace Core.Item
             //Used to debug items
             DebugLog = new DebugLog(id: 24, itemName: "DebugLog", isBlock: false, 0, textureIndex: 46, maxStackSize: 1);
             ItemRegistry.RegisterItem(DebugLog);
+            
+            //Chest2
+            Chest2Item = new Item(id: 25, itemName: "Chest2Item", isBlock: true, 24, textureIndex: 5, maxStackSize: 1);
+            ItemRegistry.RegisterItem(Chest2Item);
         }
     
         public static void Init(){}
