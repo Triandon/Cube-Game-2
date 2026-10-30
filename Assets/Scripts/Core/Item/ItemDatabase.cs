@@ -8,6 +8,7 @@ namespace Core.Item
         // Static items
         public static Item DebugLog;
         public static Item Chest2Item;
+        public static Item PipeBlockItem;
         
         
         static ItemDatabase()
@@ -94,6 +95,10 @@ namespace Core.Item
             //Chest2
             Chest2Item = new Item(id: 25, itemName: "Chest2Item", isBlock: true, 24, textureIndex: 5, maxStackSize: 1);
             ItemRegistry.RegisterItem(Chest2Item);
+            
+            // Pipe Block Item
+            PipeBlockItem = new Item(26, itemName: "PipeBlockItem", isBlock: true, blockId: 25, textureIndex: 6, maxStackSize: 64);
+            ItemRegistry.RegisterItem(PipeBlockItem);
         }
     
         public static void Init(){}

@@ -32,6 +32,7 @@ namespace Core.Block
         public static Block TreeLog;
         public static Block TreeLeaf;
         public static Block Chest2;
+        public static Block PipeBlock;
         
         static BlockDataBase()
         {
@@ -147,6 +148,10 @@ namespace Core.Block
             Chest2 = new Chest2Block(24, "Chest2", top: 5, side: 4, bottom: 4);
             Chest2.frontIndex = 5;
             BlockRegistry.RegisterBlock(Chest2);
+            
+            //Pipe Block
+            PipeBlock = new PipeBlock(25, "PipeBlock", top: 6, side: 6, bottom: 6);
+            BlockRegistry.RegisterBlock(PipeBlock);
             
             Debug.Log("Blocks registered (static)");
         }
