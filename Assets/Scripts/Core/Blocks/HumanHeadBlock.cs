@@ -26,7 +26,7 @@ namespace Core.Blocks
             state.SetState(BlockStateKeys.HeightState, "0.5");
         }
 
-        public override bool OnActivated(Vector3Int position, BlockStateContainer state, Block.Block block, Transform player)
+        public override bool OnActivated(Vector3Int position, BlockStateContainer state, Block.Block block, Transform player, ChunkManager cm)
         {
             Debug.Log("Clicked with state: " + state.GetState(BlockStateKeys.DirectionalFacing));
             

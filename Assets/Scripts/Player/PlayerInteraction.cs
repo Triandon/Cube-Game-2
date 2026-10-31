@@ -1,8 +1,10 @@
+using System;
 using Core;
 using Core.Block;
 using Core.Item;
 using Player;
 using UnityEngine;
+using Random = UnityEngine.Random;
 
 public class PlayerInteraction : MonoBehaviour
 {
@@ -26,16 +28,19 @@ public class PlayerInteraction : MonoBehaviour
     private bool hasHit;
     private Vector3Int lastHitBlockPos;
     private Vector3Int lastHitNormal;
-    
-    // Start is called once before the first execution of Update after the MonoBehaviour is created
-    void Start()
+
+    private void Awake()
     {
         chunkManager = FindAnyObjectByType<ChunkManager>();
         inventory = GetComponent<InventoryHolder>().Inventory;
         hotBarUI = FindAnyObjectByType<HotBarUI>();
         playerEntity = GetComponent<PlayerEntity>();
+    }
+
+    // Start is called once before the first execution of Update after the MonoBehaviour is created
+    void Start()
+    { 
         player = transform;
-        
         GetComponent<PlayerInventoryHolder>().OpenInventory();
     }
 
@@ -71,8 +76,10 @@ public class PlayerInteraction : MonoBehaviour
             if (block != null && block.id != 0)
             {
                 block?.OnClicked(target, state, block, player);
-                
-                Item item = ItemRegistry.GetItem(block.id);
+
+                Item item = ItemRegistry.GetItemFromBlock(block);
+                // You can also use this:
+                // Item item = ItemRegistry.GetItemFromBlockId;
 
                 if (item != null)
                 {
@@ -111,7 +118,7 @@ public class PlayerInteraction : MonoBehaviour
 
             if (hitBlock != null && hitBlock.id != 0)
             {
-                interactionConsumed = hitBlock.OnActivated(hitTarget,state,hitBlock,player);
+                interactionConsumed = hitBlock.OnActivated(hitTarget,state,hitBlock,player, chunkManager);
                 if (stack != null && !stack.IsEmpty)
                 {
                     stack.Item.OnBlockActivated(hitTarget, state, hitBlock, player);

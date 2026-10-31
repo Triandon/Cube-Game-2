@@ -40,6 +40,32 @@ namespace Core.Item
             itemsByName.TryGetValue(name, out Item item);
             return item;
         }
+
+        public static Item GetItemFromBlockId(byte blockId)
+        {
+            // Gets a item from a block id, note not all blocks have same id as the item
+            foreach (Item item in itemsById.Values)
+            {
+                if (item.isBlock && item.blockId == blockId)
+                    return item;
+            }
+
+            return null;
+        }
+
+        public static Item GetItemFromBlock(Block.Block block)
+        {
+            if (block == null) return null;
+            
+            byte id = block.id;
+            foreach (Item item in itemsById.Values)
+            {
+                if (item.isBlock && item.blockId == id)
+                    return item;
+            }
+
+            return null;
+        }
         
         // Get all registered items!
         public static IReadOnlyCollection<Item> getAllItems()

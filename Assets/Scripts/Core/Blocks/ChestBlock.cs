@@ -19,10 +19,8 @@ public class ChestBlock : Block
             GetHorizontalFacingTowardPlayer(context.Player));
     }
 
-    public override bool OnActivated(Vector3Int position, BlockStateContainer state, Block block, Transform player)
+    public override bool OnActivated(Vector3Int position, BlockStateContainer state, Block block, Transform player, ChunkManager cm)
     {
-        ChunkManager cm = Object.FindAnyObjectByType<ChunkManager>();
-        
         if(cm == null) return false;
 
         Chunk chunk = cm.GetChunkFromWorldPos(position);

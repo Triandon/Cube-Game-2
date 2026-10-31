@@ -42,6 +42,40 @@ public static class RecipeDataBase
             totalCrushingTime: 4,
             outputFactory: _ => new ItemStack(8, 1)
             ));
+        
+        RecipeManager.RegisterRecipe(new CraftingGridRecipe(
+            id: "wood_to_logs",
+            patternWidth: 1,
+            patternHeight: 1,
+            pattern: new[]
+            {
+                MakeIngredient(6)
+            },
+            outputFactory: _ => new ItemStack(27, 2)
+        ));
+        
+        RecipeManager.RegisterRecipe(new CraftingGridRecipe(
+            id: "logs_to_sticks",
+            patternWidth: 1,
+            patternHeight: 1,
+            pattern: new[]
+            {
+                MakeIngredient(27)
+            },
+            outputFactory: _ => new ItemStack(28, 2)
+        ));
+        
+        RecipeManager.RegisterRecipe(new CraftingGridRecipe(
+            id: "wood_to_planks",
+            patternWidth: 2,
+            patternHeight: 2,
+            pattern: new[]
+            {
+                MakeIngredient(6), MakeIngredient(6),
+                MakeIngredient(6), MakeIngredient(6)
+            },
+            outputFactory: _ => new ItemStack(29, 8)
+        ));
 
         
         Debug.Log("Blocks registered (static)");

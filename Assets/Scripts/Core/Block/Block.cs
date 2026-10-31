@@ -103,20 +103,8 @@ namespace Core.Block
         
         public virtual BlockStateContainer GetStateForPlacement(BlockPlacementContext context)
         {
-            if (!HasStates)
-            {
-                return null;
-            }
-            BlockStateContainer state = CreateDefaultState();
-
-            if (frontIndex >= 0 && state.HasState(BlockStateKeys.DirectionalFacing))
-            {
-                state.SetState(
-                    BlockStateKeys.DirectionalFacing,
-                    GetHorizontalFacingTowardPlayer(context.Player));
-            }
-
-            return state;
+            // Blocks opt into placement-dependent behavior by overriding this method.
+            return HasStates ? CreateDefaultState() : null;
         }
         
         protected static string GetHorizontalFacingTowardPlayer(Transform player)
@@ -135,7 +123,7 @@ namespace Core.Block
         
         // Called when a block is activated (right clicked)
         public virtual bool OnActivated(
-            Vector3Int position, BlockStateContainer state, Block block, Transform player)
+            Vector3Int position, BlockStateContainer state, Block block, Transform player, ChunkManager cm)
         {
             // true => interaction  false => default behavior
             return false;

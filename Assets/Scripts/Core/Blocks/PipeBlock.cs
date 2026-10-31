@@ -1,4 +1,6 @@
 using Core.Block;
+using Core.Item;
+using Player;
 using UnityEngine;
 
 namespace Core.Blocks
@@ -9,7 +11,6 @@ namespace Core.Blocks
         {
             SetDefaultState(new BlockStateContainer().With(BlockStateKeys.WidthState, "0.5").
                 With(BlockStateKeys.DirectionalFacing, DirectionalFacing.North));
-            isCentered = true;
             isStrechy = true;
             isTransparent = true;
         }
@@ -20,8 +21,15 @@ namespace Core.Blocks
                 With(BlockStateKeys.DirectionalFacing, GetHorizontalFacingTowardPlayer(context.Player));
         }
 
-        public override bool OnActivated(Vector3Int position, BlockStateContainer state, Block.Block block, Transform player)
+        public override bool OnActivated(Vector3Int position, BlockStateContainer state, Block.Block block, Transform player, ChunkManager cm)
         {
+            PlayerEntity playerE = player.GetComponent<PlayerEntity>();
+            ItemStack heldStack = playerE != null
+                ? playerE.GetHeldItemStack()
+                : ItemStack.Empty;
+
+            if (heldStack != null && !heldStack.IsEmpty) return false;
+            
             string facing = state.GetState(BlockStateKeys.DirectionalFacing);
             
             string newFacing = facing switch
@@ -29,13 +37,15 @@ namespace Core.Blocks
                 "north" => DirectionalFacing.East,
                 "east"  => DirectionalFacing.South,
                 "south" => DirectionalFacing.West,
-                "west"  => DirectionalFacing.North,
+                "west"  => DirectionalFacing.Up,
+                "up"    => DirectionalFacing.Down,
+                "down"  => DirectionalFacing.North,
                 _       => DirectionalFacing.North
             };
-            
-            state.SetState(BlockStateKeys.DirectionalFacing, newFacing);
 
-            return false;
+            cm.SetBlockState(position, BlockStateKeys.DirectionalFacing, newFacing);
+
+            return true;
         }
     }
 }

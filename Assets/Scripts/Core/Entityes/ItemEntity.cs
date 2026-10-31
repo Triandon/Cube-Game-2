@@ -36,7 +36,10 @@ public class ItemEntity : MonoBehaviour
     {
         this.stack = new ItemStack(stack.itemId, stack.count, stack.displayName, stack.composition);
 
-        Block block = BlockRegistry.GetBlock((byte)stack.itemId);
+        Item item = stack.Item;
+        if (item == null || !item.isBlock) return;
+
+        Block block = BlockRegistry.GetBlock(item.blockId);
         if(block == null) return;
 
         meshFilter.mesh = ItemMeshBuilder.BuildBlockItemMesh(block);

@@ -30,7 +30,7 @@ namespace Core.Blocks
             state.SetState(BlockStateKeys.WidthState, 0.5f.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture));
         }
 
-        public override bool OnActivated(Vector3Int position, BlockStateContainer state, Block.Block block, Transform player)
+        public override bool OnActivated(Vector3Int position, BlockStateContainer state, Block.Block block, Transform player, ChunkManager cm)
         {
             Debug.Log("Width: " + state.GetState(BlockStateKeys.WidthState));
             Debug.Log("Width: " + state.GetState(GrowTime));

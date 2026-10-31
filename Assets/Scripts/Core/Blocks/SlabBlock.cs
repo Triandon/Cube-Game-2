@@ -1,3 +1,4 @@
+using Core;
 using Core.Block;
 using UnityEngine;
 
@@ -42,7 +43,7 @@ public class SlabBlock : Block
         return CreateDefaultState().With(BlockStateKeys.DirectionalFacing, directionalFacing);
     }
 
-    public override bool OnActivated(Vector3Int position, BlockStateContainer state, Block block, Transform player)
+    public override bool OnActivated(Vector3Int position, BlockStateContainer state, Block block, Transform player, ChunkManager cm)
     {
         Debug.Log("Clicked a slab with state: " + state.GetState(BlockStateKeys.DirectionalFacing));
         
