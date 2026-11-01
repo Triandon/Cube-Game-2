@@ -1,3 +1,4 @@
+using Core.Block;
 using Core.Items;
 using UnityEngine;
 
@@ -12,6 +13,7 @@ namespace Core.Item
         public static Item LogItem;
         public static Item StickItem;
         public static Item PlankItem;
+        public static Item TreeTrunkItem;
         
         
         static ItemDatabase()
@@ -114,6 +116,10 @@ namespace Core.Item
             // Plank Item
             PlankItem = new Item(29, itemName: "Plank", isBlock: false, blockId: 0, textureIndex: 44, maxStackSize: 64);
             ItemRegistry.RegisterItem(PlankItem);
+            
+            //Tree trunk
+            TreeTrunkItem = new Item(30, itemName: "TreeTrunk", isBlock: true, BlockDataBase.TreeTrunk.id, textureIndex: 6, maxStackSize: 64);
+            ItemRegistry.RegisterItem(TreeTrunkItem);
         }
     
         public static void Init(){}

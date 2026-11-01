@@ -2377,5 +2377,25 @@ namespace Core
             pagedUsedIndices = statistics.IndexCapacity - statistics.FreeIndices;
         }
         
+        // Unlike GetBlockAtWorldPos, unknown/unloaded terrain is not reported as air.
+        // Growth may safely use known virtual air without overwriting unseen blocks.
+        public bool TryGetKnownBlockAtWorldPos(Vector3Int worldPos, out byte blockId)
+        {
+            blockId = 0;
+            Chunk chunk = GetChunkFromWorldPos(worldPos);
+            if (chunk?.blocks != null && chunk.states != null)
+            {
+                blockId = GetBlockAtWorldPos(worldPos);
+                return true;
+            }
+
+            Vector3Int coord = new Vector3Int(
+                Mathf.FloorToInt((float)worldPos.x / Chunk.CHUNK_SIZE),
+                Mathf.FloorToInt((float)worldPos.y / Chunk.CHUNK_SIZE),
+                Mathf.FloorToInt((float)worldPos.z / Chunk.CHUNK_SIZE));
+            return World.Instance != null && World.Instance.IsChunkInsideOfWorld(coord) &&
+                   knownAllAirChunks.Contains(coord);
+        }
+        
     }
 }

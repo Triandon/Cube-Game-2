@@ -33,6 +33,7 @@ namespace Core.Block
         public static Block TreeLeaf;
         public static Block Chest2;
         public static Block PipeBlock;
+        public static Block TreeTrunk;
         
         static BlockDataBase()
         {
@@ -152,6 +153,10 @@ namespace Core.Block
             //Pipe Block
             PipeBlock = new PipeBlock(25, "PipeBlock", top: 6, side: 6, bottom: 6);
             BlockRegistry.RegisterBlock(PipeBlock);
+            
+            //Tree Trunk Block
+            TreeTrunk = new TreeTrunkBlock(26, "TreeTrunk", top: 6, side: 6, bottom: 6);
+            BlockRegistry.RegisterBlock(TreeTrunk);
             
             Debug.Log("Blocks registered (static)");
         }

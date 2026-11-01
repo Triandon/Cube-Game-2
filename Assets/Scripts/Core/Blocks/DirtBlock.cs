@@ -6,7 +6,7 @@ namespace Core.Blocks
 {
     public class DirtBlock : Block.Block
     {
-        public override bool HasScheduledTick => true;
+        public override bool HasScheduledTick => false;
 
         private const string GrowTimeState = "grow_time";
         private const float TotalGrowTime = 32f;
