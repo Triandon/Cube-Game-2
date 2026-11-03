@@ -77,7 +77,18 @@ public class PlayerInteraction : MonoBehaviour
             {
                 block?.OnClicked(target, state, block, player);
 
-                Item item = ItemRegistry.GetItemFromBlock(block);
+                Item item = null;
+                byte dropItem = BlockRegistry.GetBlock(blockId).GetBlocksItemDrop();
+                if (dropItem == 0)
+                {
+                    item = ItemRegistry.GetItemFromBlock(block);
+                }
+                else
+                {
+                    item = ItemRegistry.GetItem(dropItem);
+                }
+                
+                
                 // You can also use this:
                 // Item item = ItemRegistry.GetItemFromBlockId;
 

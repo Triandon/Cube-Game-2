@@ -14,6 +14,8 @@ namespace Core.Block
         public int sideIndex;
         public int bottomIndex;
         public int frontIndex;
+
+        public byte dropItemId;
     
         public List<BlockState> states = new List<BlockState>();
         private BlockStateContainer deufaltState = new BlockStateContainer();
@@ -33,7 +35,7 @@ namespace Core.Block
 
         public virtual byte LightLevel { get; set; } = VoxelLight.Min;
 
-        public Block(byte id, string name, int top, int side, int bottom, int front = -1)
+        public Block(byte id, string name, int top, int side, int bottom, int front = -1, byte dropItemId = 0)
         {
             this.id = id;
             this.blockName = name;
@@ -41,6 +43,16 @@ namespace Core.Block
             this.sideIndex = side;
             this.bottomIndex = bottom;
             this.frontIndex = front;
+            this.dropItemId = dropItemId;
+        }
+
+        public byte GetBlocksItemDrop()
+        {
+            byte id = dropItemId;
+            if (id == 0)
+                return 0;
+
+            return id;
         }
 
         //Legacy now use SetDeufaltState

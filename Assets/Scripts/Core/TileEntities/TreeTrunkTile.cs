@@ -12,7 +12,7 @@ namespace Core.TileEntities
         public const float InitialWidth = 0.1f;
         public const float InitialHeight = 0.1f;
         public const float FullHeightWidth = 0.2f;
-        public const float SupportDifference = 0.2f;
+        public const float SupportDifference = 0.1f;
         public const float MaximumWidth = 1f;
         public const float GrowthIntervalSeconds = 0.75f;
         public const float WidthPerGrowthStep = 0.025f;

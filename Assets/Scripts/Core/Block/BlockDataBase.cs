@@ -5,7 +5,6 @@ namespace Core.Block
 {
     public static class BlockDataBase
     {
-        
         //Static block refrences
         public static Block Air;
         public static Block GrassBlock;
@@ -138,7 +137,7 @@ namespace Core.Block
             BlockRegistry.RegisterBlock(RotatingChestBlock);
             
             //Tree Log
-            TreeLog = new TreeLog(22, "TreeLog", top: 6, side: 6, bottom: 6);
+            TreeLog = new TreeLog(22, "TreeLog", top: 6, side: 6, bottom: 6, dropItemId: 6);
             BlockRegistry.RegisterBlock(TreeLog);
             
             //Rotating Chest Block
@@ -146,16 +145,17 @@ namespace Core.Block
             BlockRegistry.RegisterBlock(TreeLeaf);
             
             //Chest Block 
-            Chest2 = new Chest2Block(24, "Chest2", top: 5, side: 4, bottom: 4);
+            Chest2 = new Chest2Block(24, "Chest2", top: 6, side: 4, bottom: 4);
             Chest2.frontIndex = 5;
             BlockRegistry.RegisterBlock(Chest2);
             
             //Pipe Block
-            PipeBlock = new PipeBlock(25, "PipeBlock", top: 6, side: 6, bottom: 6);
+            PipeBlock = new PipeBlock(25, "PipeBlock", top: 12, side: 12, bottom: 12);
             BlockRegistry.RegisterBlock(PipeBlock);
             
             //Tree Trunk Block
             TreeTrunk = new TreeTrunkBlock(26, "TreeTrunk", top: 6, side: 6, bottom: 6);
+            TreeTrunk.dropItemId = 6;
             BlockRegistry.RegisterBlock(TreeTrunk);
             
             Debug.Log("Blocks registered (static)");

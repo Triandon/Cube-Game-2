@@ -2,7 +2,8 @@ namespace Core.Blocks
 {
     public class TreeTrunkBlock : Block.Block
     {
-        public TreeTrunkBlock(byte id, string name, int top, int side, int bottom, int front = -1) : base(id, name, top, side, bottom, front)
+        public TreeTrunkBlock(byte id, string name, int top, int side, int bottom, int front = -1, byte dropItemId = 0) : 
+            base(id, name, top, side, bottom, front, dropItemId)
         {
             SetDefaultState(TileEntities.TreeTrunkTile.CreateTrunkState());
             isTransparent = true;
