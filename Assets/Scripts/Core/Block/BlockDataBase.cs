@@ -68,7 +68,7 @@ namespace Core.Block
             BlockRegistry.RegisterBlock(ChestBlock);
             
             //Wood Block
-            WoodBlock = new Block(6, "Wood_Block", top: 6, side: 6, bottom: 6);
+            WoodBlock = new Block(6, "Wood_Block", top: 55, side: 6, bottom: 6);
             BlockRegistry.RegisterBlock(WoodBlock);
             
             //Snow block
