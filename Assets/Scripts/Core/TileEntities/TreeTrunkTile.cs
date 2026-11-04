@@ -17,6 +17,7 @@ namespace Core.TileEntities
         public const float GrowthIntervalSeconds = 0.75f;
         public const float WidthPerGrowthStep = 0.025f;
         public const float LeafDelaySeconds = 3f;
+        public const int MaxTreeHeight = 20;
         
         // Reserved inputs for a later environmental model. They do not gate growth.
         public const string SunlightState = "TreeSunlight";
@@ -93,7 +94,10 @@ namespace Core.TileEntities
             
             Vector3Int tipPosition = Position + Vector3Int.up * segments.Count;
             Vector3Int above = tipPosition + Vector3Int.up;
-            if (!World.TryGetKnownBlockAtWorldPos(above, out byte aboveId))
+            bool canGrowTaller = segments.Count + 1 < MaxTreeHeight;
+            byte aboveId = 0;
+            
+            if (canGrowTaller && !World.TryGetKnownBlockAtWorldPos(above, out aboveId))
                 return;
 
             string leafId = State.GetState(TipLeafState);
@@ -112,9 +116,18 @@ namespace Core.TileEntities
                 BlockStateContainer state = World.GetBlockStateAtWorldPos(position);
                 float width = ReadDimension(state, BlockStateKeys.WidthState, InitialWidth);
                 float height = ReadDimension(state, BlockStateKeys.HeightState, InitialHeight);
-                float limit = Mathf.Min(MaximumWidth, widthBelow - SupportDifference);
+                float limit = widthBelow >= MaximumWidth - Epsilon
+                    ? MaximumWidth
+                    : Mathf.Min(MaximumWidth, widthBelow - SupportDifference);
 
-                // A too-wide existing segment stays, but cannot grow until supported.
+                // Reserve a permanent taper toward the final treetop. The top can
+                // reach full height, and every lower level can support its child.
+                int levelsBelowTop = Mathf.Max(0, MaxTreeHeight - 1 - i);
+                float taperedMaximum = Mathf.Min(MaximumWidth,
+                    FullHeightWidth + levelsBelowTop * SupportDifference);
+                limit = Mathf.Min(limit, taperedMaximum);
+
+                // Preserve existing width; only grow within support and taper limits.
                 if (width + Epsilon < limit)
                 {
                     width = Mathf.Min(limit, width + WidthPerGrowthStep);
@@ -128,6 +141,11 @@ namespace Core.TileEntities
 
                 widthBelow = width;
             }
+            
+            // Segmets at the max can still be thicken but no new
+            if (!canGrowTaller)
+                return;
+            
             BlockStateContainer tip = World.GetBlockStateAtWorldPos(tipPosition);
             if (ReadDimension(tip, BlockStateKeys.HeightState, InitialHeight) < 1f - Epsilon)
                 return;
@@ -146,11 +164,15 @@ namespace Core.TileEntities
                 leafTimer = 0f;
                 return; // Keep a visible leaf stage even when support is already ample.
             }
+            
+            // Keep the final leaf permanently: converting it to a log would leave
+            // no room for a replacement leaf within the total height limit.
+            if (segments.Count + 2 >= MaxTreeHeight)
+                return;
 
             leafTimer += GrowthIntervalSeconds;
             float tipWidth = ReadDimension(tip, BlockStateKeys.WidthState, InitialWidth);
             // Require enough support for the child's FULL height, not just its seed.
-            // Max width 1 and a 0.4 gap naturally stop at 1 -> 0.6 -> 0.2.
             if (leafTimer < LeafDelaySeconds ||
                 tipWidth + Epsilon < FullHeightWidth + SupportDifference)
                 return;
