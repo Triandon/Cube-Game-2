@@ -11,7 +11,7 @@ namespace Core.Blocks
 
         private const string GrowTime = "grow_time";
 
-        public PoleBlock(byte id, string name, int top, int side, int bottom, int front = -1) : base(id, name, top, side, bottom, front)
+        public PoleBlock(byte id, string name, MaterialProperties material, int top, int side, int bottom, int front = -1) : base(id, name, material,top, side, bottom, front)
         {
             isTransparent = true;
             isStrechy = true;

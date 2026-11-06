@@ -14,6 +14,10 @@ namespace Core
         public Vector3Int coord;
         public byte[] blocks;
         public BlockStateContainer[] states;
+
+        internal Dictionary<int, int> blockDamage;
+        public int DamageBlockCount => blockDamage?.Count ?? 0;
+        
         public Dictionary<Vector3Int, InventoryHolder> blockEntities = new Dictionary<Vector3Int, InventoryHolder>();
         internal readonly Dictionary<Vector3Int, TileEntity> tileEntities = new Dictionary<Vector3Int, TileEntity>();
         public IReadOnlyDictionary<Vector3Int, TileEntity> TileEntities => tileEntities;
@@ -201,13 +205,17 @@ namespace Core
             
         }
 
-        public void SetBlockLocal(Vector3Int localPos, byte id, BlockStateContainer state)
+        public void SetBlockLocal(Vector3Int localPos, byte id, BlockStateContainer state,
+            bool preserveDamage = false)
         {
             int x = localPos.x;
             int y = localPos.y;
             int z = localPos.z;
 
-            blocks[ArrayIndexing.ToIndex(x, y, z)] = id;
+            int index = ArrayIndexing.ToIndex(x, y, z);
+            if (!preserveDamage || blocks[index] != id)
+                ClearBlockDamage(index);
+            blocks[index] = id;
 
             if (state != null && !state.IsStateless())
             {
@@ -222,6 +230,64 @@ namespace Core
             
             isDirty = true;
             isColliderDirty = true;
+        }
+        
+                public int GetBlockHealth(Vector3Int localPos)
+        {
+            if (!TryGetHealthIndex(localPos, out int index, out int maxHp))
+                return 0;
+
+            int damage = 0;
+            blockDamage?.TryGetValue(index, out damage);
+            return System.Math.Max(1, maxHp - damage);
+        }
+
+        // Called by ChunkManager, which removes the voxel when this returns destroyed=true.
+        // HP changes are save data only; they do not invalidate geometry or lighting.
+        internal bool TryDamageBlock(Vector3Int localPos, int damage, out bool destroyed)
+        {
+            destroyed = false;
+            if (damage <= 0 || !TryGetHealthIndex(localPos, out int index, out int maxHp))
+                return false;
+
+            int previousDamage = 0;
+            blockDamage?.TryGetValue(index, out previousDamage);
+            int remainingHp = System.Math.Max(1, maxHp - previousDamage);
+            destroyed = damage >= remainingHp;
+            if (destroyed)
+                ClearBlockDamage(index);
+            else
+            {
+                blockDamage ??= new Dictionary<int, int>();
+                blockDamage[index] = maxHp - remainingHp + damage;
+            }
+
+            isDirty = true;
+            return true;
+        }
+
+        private bool TryGetHealthIndex(Vector3Int localPos, out int index, out int maxHp)
+        {
+            index = 0;
+            maxHp = 0;
+            if (blocks == null || (uint)localPos.x >= CHUNK_SIZE ||
+                (uint)localPos.y >= CHUNK_SIZE || (uint)localPos.z >= CHUNK_SIZE)
+                return false;
+
+            index = ArrayIndexing.ToIndex(localPos.x, localPos.y, localPos.z);
+            if (blocks[index] == 0)
+                return false;
+            maxHp = BlockRegistry.GetBlock(blocks[index])?.MaxHp ?? 0;
+            return maxHp > 0;
+        }
+
+        private void ClearBlockDamage(int index)
+        {
+            if (blockDamage == null)
+                return;
+            blockDamage.Remove(index);
+            if (blockDamage.Count == 0)
+                blockDamage = null;
         }
 
         public void RebuildSpecialMeshBlocks()

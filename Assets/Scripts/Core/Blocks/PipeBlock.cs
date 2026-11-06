@@ -7,7 +7,7 @@ namespace Core.Blocks
 {
     public class PipeBlock : Block.Block
     {
-        public PipeBlock(byte id, string name, int top, int side, int bottom, int front = -1) : base(id, name, top, side, bottom, front)
+        public PipeBlock(byte id, string name, MaterialProperties material,int top, int side, int bottom, int front = -1) : base(id, name, material,top, side, bottom, front)
         {
             SetDefaultState(new BlockStateContainer().With(BlockStateKeys.WidthState, "0.5").
                 With(BlockStateKeys.DirectionalFacing, DirectionalFacing.North));

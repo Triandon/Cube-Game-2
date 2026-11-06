@@ -10,7 +10,7 @@ public class CrusherBlock : Block
     public override bool HasBlockEntity => true;
     public override bool HasScheduledTick => true;
 
-    public CrusherBlock(byte id, string name, int top, int side, int bottom, int front = -1) : base(id, name, top, side, bottom, front)
+    public CrusherBlock(byte id, string name, MaterialProperties material, int top, int side, int bottom, int front = -1) : base(id, name, material, top, side, bottom, front)
     {
         
     }

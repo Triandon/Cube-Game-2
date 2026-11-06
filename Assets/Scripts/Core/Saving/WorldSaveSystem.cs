@@ -9,7 +9,10 @@ namespace Core
 {
     public static class WorldSaveSystem
     {
-        private const int ChunkSaveVersion = 1;
+        // Version 1: The base line
+        // Version 2: Added block health and damage.
+        
+        private const int ChunkSaveVersion = 2;
         private const int SkyOcclusionSaveVersion = 1;
     
         private static string persistentDataPath;
@@ -197,6 +200,15 @@ namespace Core
                     writer.Write(state.value ?? string.Empty);
                 }
             }
+            writer.Write(chunk.DamageBlockCount);
+            if (chunk.blockDamage != null)
+            {
+                foreach (KeyValuePair<int, int> entry in chunk.blockDamage)
+                {
+                    writer.Write(entry.Key);
+                    writer.Write(entry.Key);
+                }
+            }
             
             Debug.Log("World saved successfully!");
         }
@@ -219,7 +231,7 @@ namespace Core
             if (version != ChunkSaveVersion)
             {
                 Debug.LogError($"Unsupported chunk save version {version} in chunk {coord} | File: {path}");
-                return false;
+                Debug.LogError("Not bitching and going forward");
             }
 
             if (chunkSize != Chunk.CHUNK_SIZE)
@@ -282,6 +294,36 @@ namespace Core
 
                 chunk.states[ArrayIndexing.ToIndex(pos.x, pos.y, pos.z)] = container;
             }
+            
+            // all its blocks start at full health.
+            // Version 1 of chunks has no damage
+            // We sett all block to full helth!
+            Dictionary<int, int> damage = null;
+            if (version >= 2)
+            {
+                int damageCount = reader.ReadInt32();
+                if (damageCount < 0 || damageCount > ArrayIndexing.Volume)
+                    throw new InvalidDataException($"Invalid block damage count in {path}.");
+
+                for (int i = 0; i < damageCount; i++)
+                {
+                    int index = reader.ReadInt32();
+                    int amount = reader.ReadInt32();
+                    if ((uint)index >= ArrayIndexing.Volume || amount <= 0)
+                        throw new InvalidDataException($"Invalid block damage entry in {path}.");
+
+                    if (chunk.blocks[index] == 0)
+                        continue;
+                    int maxHp = BlockRegistry.GetBlock(chunk.blocks[index])?.MaxHp ?? 0;
+                    // If materials were rebalanced, keep surviving blocks at least at 1 HP.
+                    amount = Math.Min(amount, maxHp - 1);
+                    if (amount <= 0)
+                        continue;
+                    damage ??= new Dictionary<int, int>();
+                    damage[index] = amount;
+                }
+            }
+            chunk.blockDamage = damage;
 
             chunk.isDirty = false;
             return true;

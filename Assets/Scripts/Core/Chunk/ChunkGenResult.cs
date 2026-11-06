@@ -7,6 +7,7 @@ public class ChunkGenResult
     public Vector3Int coord;
     public byte[] blocks; //Chunk_Size^3
     public BlockStateContainer[] states;
+    public Dictionary<int, int> blockDamage;
     public MeshData meshData;
     public MeshUtilityCustom.ChunkMeshUploadData meshUploadData;
     public List<Vector3Int> blockEntityLocals;

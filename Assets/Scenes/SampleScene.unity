@@ -4624,6 +4624,7 @@ MonoBehaviour:
   playerCamera: {fileID: 1672112038}
   pickupDistance: 3
   pickupRadius: 1.5
+  miningDamage: 25
   maxDistance: 6
 --- !u!114 &1344646480
 MonoBehaviour:

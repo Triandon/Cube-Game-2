@@ -9,6 +9,9 @@ namespace Core.Block
     {
         public byte id;
         public string blockName;
+        
+        public MaterialProperties Material { get; }
+        public int MaxHp => Material.MaxHp;
 
         public int topIndex;
         public int sideIndex;
@@ -35,10 +38,11 @@ namespace Core.Block
 
         public virtual byte LightLevel { get; set; } = VoxelLight.Min;
 
-        public Block(byte id, string name, int top, int side, int bottom, int front = -1, byte dropItemId = 0)
+        public Block(byte id, string name, MaterialProperties material,int top, int side, int bottom, int front = -1, byte dropItemId = 0)
         {
             this.id = id;
             this.blockName = name;
+            Material = material;
             this.topIndex = top;
             this.sideIndex = side;
             this.bottomIndex = bottom;

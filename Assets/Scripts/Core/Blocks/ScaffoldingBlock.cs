@@ -6,7 +6,7 @@ public class ScaffoldingBlock : Block
     public static float PlacementHeight { get; private set; } = 1f;
     public static bool PlaceVertical { get; private set; }
     
-    public ScaffoldingBlock(byte id, string name, int top, int side, int bottom, int front = -1) : base(id, name, top, side, bottom, front)
+    public ScaffoldingBlock(byte id, string name, MaterialProperties material, int top, int side, int bottom, int front = -1) : base(id, name, material, top, side, bottom, front)
     {
         isTransparent = true;
         isStrechy = true;

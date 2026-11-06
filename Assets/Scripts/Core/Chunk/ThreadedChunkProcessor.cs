@@ -14,7 +14,8 @@ public static class ThreadedChunkProcessor
     {
         const int S = CHUNK_SIZE;
         Vector3Int coord = req.coord;
-
+        Dictionary<int, int> loadedBlockDamage = null;
+            
         if (req.allowDiskLoad && req.blocks == null && !string.IsNullOrEmpty(req.chunkSavePath))
         {
             Chunk savedChunk = new Chunk(coord);
@@ -23,6 +24,7 @@ public static class ThreadedChunkProcessor
                 savedChunk.RebuildSpecialMeshBlocks();
                 req.blocks = savedChunk.blocks;
                 req.states = savedChunk.states;
+                loadedBlockDamage = savedChunk.blockDamage;
                 req.specialMeshBlocks = savedChunk.GetSpecialMeshBlocksSnapshot();
 
                 req.meshOnly = true;
@@ -79,6 +81,7 @@ public static class ThreadedChunkProcessor
                 skyLight, blockLight);
             emptyResult.isMeshRebuild = req.isMeshRebuild;
             emptyResult.meshRevision = req.meshRevision;
+            emptyResult.blockDamage = loadedBlockDamage;
 
             if (req.isMeshRebuild)
             {
@@ -96,7 +99,7 @@ public static class ThreadedChunkProcessor
         {
             return new ChunkGenResult(coord, center, req.states, null, blockEntities,
                 false, instantTickLocals, scheduledTickLocals, randomTickLocals,
-                skyLight, blockLight);
+                skyLight, blockLight) {blockDamage = loadedBlockDamage};
         }
         
         // ------------------------------------

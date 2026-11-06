@@ -46,115 +46,115 @@ namespace Core.Block
             //Air.isTransparent = true;
             
             // Grass block
-            GrassBlock = new Block(1, "Grass_Block", top: 2, side: 1, bottom: 0);
+            GrassBlock = new Block(1, "Grass_Block", MaterialDatabase.Dirt,top: 2, side: 1, bottom: 0);
             BlockRegistry.RegisterBlock(GrassBlock);
 
             // Dirt block
-            DirtBlock = new DirtBlock(2, "Dirt_Block", top: 0, side: 0, bottom: 0);
+            DirtBlock = new DirtBlock(2, "Dirt_Block", MaterialDatabase.Dirt,top: 0, side: 0, bottom: 0);
             BlockRegistry.RegisterBlock(DirtBlock);
         
             //Stone Block
-            StoneBlock = new Block(3, "Stone_Block", top: 3, side: 3, bottom: 3);
+            StoneBlock = new Block(3, "Stone_Block", MaterialDatabase.Granite, top: 3, side: 3, bottom: 3);
             BlockRegistry.RegisterBlock(StoneBlock);
         
             //Sigma Block 
-            Sigma = new Block(4, "Sigma_Block", top: 16, side: 16, bottom: 16);
+            Sigma = new Block(4, "Sigma_Block", MaterialDatabase.Metal, top: 16, side: 16, bottom: 16);
             Sigma.LightLevel = 15;
             BlockRegistry.RegisterBlock(Sigma);
             
             //Chest Block 
-            ChestBlock = new ChestBlock(5, "Chest_Block", top: 4, side: 4, bottom: 4);
+            ChestBlock = new ChestBlock(5, "Chest_Block", MaterialDatabase.Wood, top: 4, side: 4, bottom: 4);
             ChestBlock.frontIndex = 5;
             BlockRegistry.RegisterBlock(ChestBlock);
             
             //Wood Block
-            WoodBlock = new Block(6, "Wood_Block", top: 55, side: 6, bottom: 6);
+            WoodBlock = new Block(6, "Wood_Block", MaterialDatabase.Wood, top: 55, side: 6, bottom: 6);
             BlockRegistry.RegisterBlock(WoodBlock);
             
             //Snow block
-            SnowBlock = new Block(7, "Snow_Block", top: 8, side: 8, bottom: 8);
+            SnowBlock = new Block(7, "Snow_Block", MaterialDatabase.Snow, top: 8, side: 8, bottom: 8);
             BlockRegistry.RegisterBlock(SnowBlock);
             
             //SandStone Block
-            SandStoneBlock = new Block(8, "SandStone_Block", top: 7, side: 7, bottom: 7);
+            SandStoneBlock = new Block(8, "SandStone_Block", MaterialDatabase.Sandstone, top: 7, side: 7, bottom: 7);
             BlockRegistry.RegisterBlock(SandStoneBlock);
             
             //DeadGrass Block
-            DeadGrassBlock = new Block(9, "DeadGrass_Block", top: 9, side: 15, bottom: 0);
+            DeadGrassBlock = new Block(9, "DeadGrass_Block", MaterialDatabase.Dirt, top: 9, side: 15, bottom: 0);
             BlockRegistry.RegisterBlock(DeadGrassBlock);
             
             //Crafting table block
-            CraftingTableBlock = new CraftingTableBlock(10, "CraftingTable_Block", top: 11, side: 10, bottom: 11);
+            CraftingTableBlock = new CraftingTableBlock(10, "CraftingTable_Block", MaterialDatabase.Wood, top: 11, side: 10, bottom: 11);
             BlockRegistry.RegisterBlock(CraftingTableBlock);
             
             // Crusher
-            CrusherBlock = new CrusherBlock(11, "CrusherBlock", top: 13, side: 12, bottom: 12);
+            CrusherBlock = new CrusherBlock(11, "CrusherBlock", MaterialDatabase.Metal, top: 13, side: 12, bottom: 12);
             BlockRegistry.RegisterBlock(CrusherBlock);
             
             // SlabBlock
             // Slab block (fixed half-height slab with orientation)
-            SlabBlock = new SlabBlock(12, "SlabBlock", top: 12, side: 12, bottom: 12);
+            SlabBlock = new SlabBlock(12, "SlabBlock", MaterialDatabase.Granite, top: 12, side: 12, bottom: 12);
             BlockRegistry.RegisterBlock(SlabBlock);
             
             // ScaffoldingBlock
-            ScaffoldingBlock = new ScaffoldingBlock(13, "ScaffoldingBlock", top: 14, side: 14, bottom: 14);
+            ScaffoldingBlock = new ScaffoldingBlock(13, "ScaffoldingBlock", MaterialDatabase.Wood, top: 14, side: 14, bottom: 14);
             BlockRegistry.RegisterBlock(ScaffoldingBlock);
             
             // Pole block
-            PoleBlock = new PoleBlock(14, "PoleBlock", top: 16, side: 16, bottom: 16);
+            PoleBlock = new PoleBlock(14, "PoleBlock", MaterialDatabase.Wood, top: 16, side: 16, bottom: 16);
             BlockRegistry.RegisterBlock(PoleBlock);
             
             // Human Head block
-            HumanHeadBlock = new HumanHeadBlock(15, "HumanHeadBlock", top: 18, side: 19, bottom: 20);
+            HumanHeadBlock = new HumanHeadBlock(15, "HumanHeadBlock", MaterialDatabase.OrganicMatter ,top: 18, side: 19, bottom: 20);
             HumanHeadBlock.frontIndex = 17;
             BlockRegistry.RegisterBlock(HumanHeadBlock);
             
             // Ramp block
-            RampBlock = new RampBlock(16, "RampBlock", top: 6, side: 6, bottom: 6);
+            RampBlock = new RampBlock(16, "RampBlock", MaterialDatabase.Wood, top: 6, side: 6, bottom: 6);
             BlockRegistry.RegisterBlock(RampBlock);
             
             // Corner Ramp block
-            CornerRampBlock = new CornerRampBlock(17, "CornerRampBlock", top: 6, side: 6, bottom: 6);
+            CornerRampBlock = new CornerRampBlock(17, "CornerRampBlock", MaterialDatabase.Wood, top: 6, side: 6, bottom: 6);
             BlockRegistry.RegisterBlock(CornerRampBlock);
             
             // Pyramid block
-            PyramidBlock = new Block(18, "PyramidBlock", top: 6, side: 6, bottom: 6);
+            PyramidBlock = new Block(18, "PyramidBlock", MaterialDatabase.Wood, top: 6, side: 6, bottom: 6);
             PyramidBlock.shapeIndex = (int)BlockShapes.Pyramid;
             BlockRegistry.RegisterBlock(PyramidBlock);
             
             // Inverted Corner Ramp block
-            InvertedCornerTriangle = new InvertedCornerTriangle(19, "InvertedCornerTriangle", top: 6, side: 6, bottom: 6);
+            InvertedCornerTriangle = new InvertedCornerTriangle(19, "InvertedCornerTriangle", MaterialDatabase.Wood, top: 6, side: 6, bottom: 6);
             BlockRegistry.RegisterBlock(InvertedCornerTriangle);
             
             //Light block
-            LightBlock = new Block(20, "LightBlock", 43, 43, 43);
+            LightBlock = new Block(20, "LightBlock", MaterialDatabase.Wood, 43, 43, 43);
             LightBlock.LightLevel = 15;
             BlockRegistry.RegisterBlock(LightBlock);
             
             //Rotating Chest Block
-            RotatingChestBlock = new RotatingChest(21, "Rotating_Chest_Block", top: 4, side: 4, bottom: 4);
+            RotatingChestBlock = new RotatingChest(21, "Rotating_Chest_Block", MaterialDatabase.Wood, top: 4, side: 4, bottom: 4);
             RotatingChestBlock.frontIndex = 5;
             BlockRegistry.RegisterBlock(RotatingChestBlock);
             
             //Tree Log
-            TreeLog = new TreeLog(22, "TreeLog", top: 6, side: 6, bottom: 6, dropItemId: 6);
+            TreeLog = new TreeLog(22, "TreeLog", MaterialDatabase.Wood, top: 6, side: 6, bottom: 6, dropItemId: 6);
             BlockRegistry.RegisterBlock(TreeLog);
             
-            //Rotating Chest Block
-            TreeLeaf = new TreeLeaf(23, "TreeLeaf", top: 48, side: 48, bottom: 48);
+            //Leaf Block
+            TreeLeaf = new TreeLeaf(23, "TreeLeaf", MaterialDatabase.OrganicMatter, top: 48, side: 48, bottom: 48);
             BlockRegistry.RegisterBlock(TreeLeaf);
             
             //Chest Block 
-            Chest2 = new Chest2Block(24, "Chest2", top: 6, side: 4, bottom: 4);
+            Chest2 = new Chest2Block(24, "Chest2", MaterialDatabase.Wood, top: 6, side: 4, bottom: 4);
             Chest2.frontIndex = 5;
             BlockRegistry.RegisterBlock(Chest2);
             
             //Pipe Block
-            PipeBlock = new PipeBlock(25, "PipeBlock", top: 12, side: 12, bottom: 12);
+            PipeBlock = new PipeBlock(25, "PipeBlock", MaterialDatabase.Metal, top: 12, side: 12, bottom: 12);
             BlockRegistry.RegisterBlock(PipeBlock);
             
             //Tree Trunk Block
-            TreeTrunk = new TreeTrunkBlock(26, "TreeTrunk", top: 6, side: 6, bottom: 6);
+            TreeTrunk = new TreeTrunkBlock(26, "TreeTrunk", MaterialDatabase.Wood, top: 6, side: 6, bottom: 6);
             TreeTrunk.dropItemId = 6;
             BlockRegistry.RegisterBlock(TreeTrunk);
             

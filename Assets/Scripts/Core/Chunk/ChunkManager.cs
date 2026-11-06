@@ -330,6 +330,8 @@ namespace Core
             // Apply block data
             chunk.blocks = res.blocks ?? new byte[ArrayIndexing.Volume];
             chunk.states = res.states ?? new BlockStateContainer[ArrayIndexing.Volume];
+            if (res.blockDamage != null)
+                chunk.blockDamage = res.blockDamage;
             chunk.skyLight = res.skyLight ?? new byte[ArrayIndexing.Volume];
             chunk.blockLight = res.blockLight ?? new byte[ArrayIndexing.Volume];
             
@@ -1020,6 +1022,25 @@ namespace Core
             
             tickCaller?.OnBlockChanged(worldPos, oldId, id);
         }
+        
+        public int GetBlockHealthAtWorldPos(Vector3Int worldPos)
+        {
+            Chunk chunk = GetChunkFromWorldPos(worldPos);
+            return chunk != null ? chunk.GetBlockHealth(chunk.WorldToLocal(worldPos)) : 0;
+        }
+
+        // Returns true for an accepted hit. Destruction uses the existing mining lifecycle.
+        public bool DamageBlockAtWorldPos(Vector3Int worldPos, int damage, out bool destroyed)
+        {
+            destroyed = false;
+            Chunk chunk = GetChunkFromWorldPos(worldPos);
+            if (chunk == null || !chunk.TryDamageBlock(chunk.WorldToLocal(worldPos), damage, out destroyed))
+                return false;
+
+            if (destroyed)
+                SetBlockAtWorldPos(worldPos, 0);
+            return true;
+        }
 
         private void SpawnBlockEntityAtWorldPos(Block.Block block, Vector3Int worldPos)
         {
@@ -1120,7 +1141,7 @@ namespace Core
             // - updates special-mesh tracking
             // - marks the chunk dirty for saving
             // - marks the collider dirty
-            chunk.SetBlockLocal(local, blockId, state);
+            chunk.SetBlockLocal(local, blockId, state, preserveDamage: true);
                 
             // Rebuild this chunk so rendering reflects the state change.
             meshQue.Add(chunk);

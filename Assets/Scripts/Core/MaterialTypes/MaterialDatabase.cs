@@ -20,6 +20,12 @@ public static class MaterialDatabase
     public static MaterialProperties Quartz;
     public static MaterialProperties Mica;
     
+    // Building materials
+    public static MaterialProperties Wood;
+    public static MaterialProperties Metal;
+    public static MaterialProperties Snow;
+    public static MaterialProperties Sandstone;
+    
     static MaterialDatabase()
     {
         RegisterMaterials();
@@ -27,38 +33,47 @@ public static class MaterialDatabase
 
     private static void RegisterMaterials()
     {
-        Air = new MaterialProperties(materialId:0, materialName: "Air", category: MaterialCategory.Air,  isContinuous:true);
+        Air = new MaterialProperties(materialId:0, materialName: "Air", category: MaterialCategory.Air,  isContinuous:true, 0);
         MaterialRegistry.Register(Air);
         
         // Soils
-        Dirt = new MaterialProperties(materialId:1, materialName: "Dirt", category: MaterialCategory.Soil,  isContinuous:true);
+        Dirt = new MaterialProperties(materialId:1, materialName: "Dirt", category: MaterialCategory.Soil,  isContinuous:true, 50);
         MaterialRegistry.Register(Dirt);
         
-        SandGranite = new MaterialProperties(materialId:2, materialName: "Granite Sand", category: MaterialCategory.Soil,  isContinuous:true);
+        SandGranite = new MaterialProperties(materialId:2, materialName: "Granite Sand", category: MaterialCategory.Soil,  isContinuous:true, 50);
         MaterialRegistry.Register(SandGranite);
         
-        Clay = new MaterialProperties(materialId:3, materialName: "Clay", category: MaterialCategory.Soil,  isContinuous:true);
+        Clay = new MaterialProperties(materialId:3, materialName: "Clay", category: MaterialCategory.Soil,  isContinuous:true, 75);
         MaterialRegistry.Register(Clay);
         
         // Organic
-        OrganicMatter = new MaterialProperties(materialId:4, materialName: "Organic Matter", category: MaterialCategory.Soil,  isContinuous:true);
+        OrganicMatter = new MaterialProperties(materialId:4, materialName: "Organic Matter", category: MaterialCategory.Soil,  isContinuous:true, 50);
         MaterialRegistry.Register(OrganicMatter);
         
         // Pebbles
-        PebblesGranite = new MaterialProperties(materialId:5, materialName: "Granite Pebbles", category: MaterialCategory.Rock,  isContinuous:false, mergeTolerance:0.05f);
+        PebblesGranite = new MaterialProperties(materialId:5, materialName: "Granite Pebbles", category: MaterialCategory.Rock,  isContinuous:false, 150,mergeTolerance:0.05f);
         MaterialRegistry.Register(PebblesGranite);
         
         // Rocks
-        Granite = new MaterialProperties(materialId:6, materialName: "Granite", category: MaterialCategory.Rock,  isContinuous:false, mergeTolerance:0.05f);
+        Granite = new MaterialProperties(materialId:6, materialName: "Granite", category: MaterialCategory.Rock,  isContinuous:false, 260,mergeTolerance:0.05f);
         MaterialRegistry.Register(Granite);
         
-        Quartz = new MaterialProperties(materialId:7, materialName: "Quartz", category: MaterialCategory.Rock,  isContinuous:false, mergeTolerance:0.05f);
+        Quartz = new MaterialProperties(materialId:7, materialName: "Quartz", category: MaterialCategory.Rock,  isContinuous:false, 360,mergeTolerance:0.05f);
         MaterialRegistry.Register(Quartz);
         
-        Mica = new MaterialProperties(materialId:8, materialName: "Mica", category: MaterialCategory.Rock,  isContinuous:false, mergeTolerance:0.05f);
+        Mica = new MaterialProperties(materialId:8, materialName: "Mica", category: MaterialCategory.Rock,  isContinuous:false, 250,mergeTolerance:0.05f);
         MaterialRegistry.Register(Mica);
         
-        Debug.Log("Blocks registered (static)");
+        Wood = new MaterialProperties(9, "Wood", MaterialCategory.Organic, true, maxHp: 100);
+        MaterialRegistry.Register(Wood);
+        Metal = new MaterialProperties(10, "Metal", MaterialCategory.Metal, true, maxHp: 600);
+        MaterialRegistry.Register(Metal);
+        Snow = new MaterialProperties(11, "Snow", MaterialCategory.Soil, true, maxHp: 25);
+        MaterialRegistry.Register(Snow);
+        Sandstone = new MaterialProperties(12, "Sandstone", MaterialCategory.Rock, false, maxHp: 200);
+        MaterialRegistry.Register(Sandstone);
+        
+        Debug.Log("Materials registered (static)");
     }
 
     public static int GetMaterial(MaterialProperties material) => material.materialId;

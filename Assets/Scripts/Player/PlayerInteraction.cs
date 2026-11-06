@@ -13,6 +13,9 @@ public class PlayerInteraction : MonoBehaviour
     public float pickupDistance = 3f;
     public float pickupRadius = 1.5f;
 
+    [Header("Mining")] 
+    public int miningDamage = 25;
+    
     private Inventory inventory;
     private HotBarUI hotBarUI;
     private PlayerEntity playerEntity;
@@ -76,6 +79,9 @@ public class PlayerInteraction : MonoBehaviour
             if (block != null && block.id != 0)
             {
                 block?.OnClicked(target, state, block, player);
+                
+                if (!chunkManager.DamageBlockAtWorldPos(target, miningDamage, out bool destroyed) || !destroyed)
+                    return;
 
                 Item item = null;
                 byte dropItem = BlockRegistry.GetBlock(blockId).GetBlocksItemDrop();
@@ -111,7 +117,6 @@ public class PlayerInteraction : MonoBehaviour
                 }
             }
             
-            ModifyBlock(target,0);
         }
 
         //Place block

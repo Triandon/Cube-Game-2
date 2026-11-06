@@ -6,7 +6,7 @@ public class CraftingTableBlock : Block
 {
     public override bool HasBlockEntity => true;
 
-    public CraftingTableBlock(byte id, string name, int top, int side, int bottom, int front = -1) : base(id, name, top, side, bottom, front)
+    public CraftingTableBlock(byte id, string name, MaterialProperties material, int top, int side, int bottom, int front = -1) : base(id, name, material, top, side, bottom, front)
     {
         
     }

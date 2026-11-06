@@ -6,7 +6,8 @@ namespace Core.Blocks
 {
     public class RotatingChest : Block.Block
     {
-        public RotatingChest(byte id, string name, int top, int side, int bottom, int front = -1) : base(id, name, top, side, bottom, front)
+        public RotatingChest(byte id, string name, MaterialProperties material, int top, int side, int bottom, int front = -1) : 
+            base(id, name, material, top, side, bottom, front)
         {
             SetDefaultState(new BlockStateContainer().With(BlockStateKeys.DirectionalFacing,
                 DirectionalFacing.North).With("rotation_timer", "0"));

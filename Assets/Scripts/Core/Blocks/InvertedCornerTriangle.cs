@@ -5,7 +5,7 @@ namespace Core.Blocks
 {
     public class InvertedCornerTriangle : Block.Block
     {
-        public InvertedCornerTriangle(byte id, string name, int top, int side, int bottom, int front = -1) : base(id, name, top, side, bottom, front)
+        public InvertedCornerTriangle(byte id, string name, MaterialProperties material, int top, int side, int bottom, int front = -1) : base(id, name, material, top, side, bottom, front)
         {
             shapeIndex = (int)BlockShapes.InvertedCornerTriangle;
             AddState(BlockStateKeys.DirectionalFacing, DirectionalFacing.North);

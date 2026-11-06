@@ -9,7 +9,7 @@ public class SlabBlock : Block
 
     private readonly float slabHeight;
     
-    public SlabBlock(byte id, string name, int top, int side, int bottom, int front = -1) : base(id, name, top, side, bottom, front)
+    public SlabBlock(byte id, string name, MaterialProperties material,int top, int side, int bottom, int front = -1) : base(id, name, material,top, side, bottom, front)
     {
         slabHeight = 0.5f;
         isTransparent = true;
