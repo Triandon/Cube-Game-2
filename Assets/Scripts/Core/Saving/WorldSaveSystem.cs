@@ -206,7 +206,7 @@ namespace Core
                 foreach (KeyValuePair<int, int> entry in chunk.blockDamage)
                 {
                     writer.Write(entry.Key);
-                    writer.Write(entry.Key);
+                    writer.Write(entry.Value);
                 }
             }
             
@@ -230,8 +230,8 @@ namespace Core
 
             if (version != ChunkSaveVersion)
             {
-                Debug.LogError($"Unsupported chunk save version {version} in chunk {coord} | File: {path}");
-                Debug.LogError("Not bitching and going forward");
+                Debug.LogWarning($"Unsupported chunk save version {version} in chunk {coord} | File: {path}");
+                Debug.LogWarning("Not bitching and going forward");
             }
 
             if (chunkSize != Chunk.CHUNK_SIZE)

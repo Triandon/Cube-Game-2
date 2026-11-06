@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Core;
 using Core.Block;
+using Core.Rendering;
 using UnityEngine;
 
 //Todo In the lods, there CAN be a height bias for long distance chunks!
@@ -12,6 +13,34 @@ public class MeshData
     public readonly List<int> triangles = new List<int>();
     private Vector3 minPosition;
     private Vector3 maxPosition;
+    private readonly Dictionary<int, int> blockVertexHeads;
+    private readonly List<BlockCrackVertexData.VertexRange> blockVertexRanges;
+    
+    public MeshData(bool trackBlockVertices = false)
+    {
+        if (trackBlockVertices)
+        {
+            blockVertexHeads = new Dictionary<int, int>();
+            blockVertexRanges = new List<BlockCrackVertexData.VertexRange>();
+        }
+    }
+
+    public void RecordBlockVertices(int x, int y, int z, int firstVertex)
+    {
+        int count = VertexCount - firstVertex;
+        if (blockVertexHeads == null || count == 0)
+            return;
+        int blockIndex = ArrayIndexing.ToIndex(x, y, z);
+        int next = blockVertexHeads.TryGetValue(blockIndex, out int head) ? head : -1;
+        blockVertexHeads[blockIndex] = blockVertexRanges.Count;
+        blockVertexRanges.Add(new BlockCrackVertexData.VertexRange(firstVertex, count, next));
+    }
+
+    public BlockCrackVertexData CreateCrackVertexData(MeshUtilityCustom.ChunkVertex[] snapshot)
+    {
+        return blockVertexHeads == null ? null : new BlockCrackVertexData(snapshot,
+            new Dictionary<int, int>(blockVertexHeads), blockVertexRanges.ToArray());
+    }
 
     public int VertexCount => vertices.Count;
     public Vector3 GetPosition(int index) => vertices[index].Position;
@@ -40,7 +69,7 @@ public class MeshData
         for (int i = firstVertex; i < firstVertex + vertexCount; i++)
         {
             var vertex = vertices[i];
-            vertex.normal = packedNormal;
+            vertex.normal = packedNormal | (vertex.normal & 0xff000000u);
             vertices[i] = vertex;
         }
     }
@@ -85,7 +114,7 @@ public static class ChunkMeshGeneratorThreaded
         IReadOnlyCollection<Vector3Int> specialMeshBlocks = null,
         Func<int, int, int, byte> getSkyLight = null, Func<int, int, int, byte> getBlockLight = null)
     {
-        var mesh = new MeshData();
+        var mesh = new MeshData(lodScale == 1);
         bool hasSpecialMeshBlocks = lodScale == 1 && specialMeshBlocks != null && specialMeshBlocks.Count > 0;
         bool assumeOpaqueCubeOnly = lodScale == 1 && !hasSpecialMeshBlocks;
 
@@ -187,7 +216,9 @@ public static class ChunkMeshGeneratorThreaded
                     if (atlasIdx >= 0)
                     {
                         byte light = SampleFaceLight(getSkyLight, getBlockLight, x + dir.x, y + dir.y, z + dir.z, x, y, z);
+                        int firstVertex = mesh.VertexCount;
                         AddQuadFromMask(u, v, 1, 1, w, dir, atlasIdx, mesh, 1, light);
+                        mesh.RecordBlockVertices(x, y, z, firstVertex);
                     }
                 }
             }
@@ -682,27 +713,32 @@ public static class ChunkMeshGeneratorThreaded
             BlockStateContainer state = getState?.Invoke(x, y, z);
             if (!ShouldUseStateDrivenMesh(blockId))
                 continue;
-            
+
+            int firstVertex = mesh.VertexCount;
             Block block = GetBlockInfo(blockId);
             if (block != null && block.shapeIndex == (int)BlockShapes.Triangle)
             {
                 AddTrianglePrismMesh(getBlock, getState, getSkyLight, getBlockLight, x, y, z, blockId, state, mesh);
+                mesh.RecordBlockVertices(x, y, z, firstVertex);
                 continue;
             }
             if (block != null && block.shapeIndex == (int)BlockShapes.Pyramid)
             {
                 AddPyramidMesh(getBlock, getState, getSkyLight, getBlockLight, x, y, z, blockId, state, mesh);
+                mesh.RecordBlockVertices(x, y, z, firstVertex);
                 continue;
             }
 
             if (block != null && block.shapeIndex == (int)BlockShapes.CornerTriangle)
             {
                 AddCornerRampMesh(getBlock, getState, getSkyLight, getBlockLight, x, y, z, blockId, state, mesh);
+                mesh.RecordBlockVertices(x, y, z, firstVertex);
                 continue;
             }
             if (block != null && block.shapeIndex == (int)BlockShapes.InvertedCornerTriangle)
             {
                 AddInvertedCornerRampMesh(getBlock, getState, getSkyLight, getBlockLight, x, y, z, blockId, state, mesh);
+                mesh.RecordBlockVertices(x, y, z, firstVertex);
                 continue;
             }
 
@@ -722,6 +758,7 @@ public static class ChunkMeshGeneratorThreaded
                 byte light = SampleCustomFaceLight(getSkyLight, getBlockLight, x, y, z, dir);
                 AddStateDrivenQuad(new Vector3(x, y, z), min, max, dir, atlasIndex, mesh, blockId, state, light);
             }
+            mesh.RecordBlockVertices(x, y, z, firstVertex);
         }
 
 

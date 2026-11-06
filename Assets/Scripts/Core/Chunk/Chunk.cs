@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Core.Block;
+using Core.Rendering;
 using Core.TileEntities;
 using UnityEngine;
 using Random = System.Random;
@@ -232,7 +233,7 @@ namespace Core
             isColliderDirty = true;
         }
         
-                public int GetBlockHealth(Vector3Int localPos)
+        public int GetBlockHealth(Vector3Int localPos)
         {
             if (!TryGetHealthIndex(localPos, out int index, out int maxHp))
                 return 0;
@@ -243,7 +244,7 @@ namespace Core
         }
 
         // Called by ChunkManager, which removes the voxel when this returns destroyed=true.
-        // HP changes are save data only; they do not invalidate geometry or lighting.
+        // Partial hits update only the stage byte on existing vertices, never geometry or lighting.
         internal bool TryDamageBlock(Vector3Int localPos, int damage, out bool destroyed)
         {
             destroyed = false;
@@ -255,11 +256,14 @@ namespace Core
             int remainingHp = System.Math.Max(1, maxHp - previousDamage);
             destroyed = damage >= remainingHp;
             if (destroyed)
-                ClearBlockDamage(index);
+                ClearBlockDamage(index, updateVisual: false);
             else
             {
                 blockDamage ??= new Dictionary<int, int>();
                 blockDamage[index] = maxHp - remainingHp + damage;
+                byte stage = BlockCrackVertexData.CalculateStage(blockDamage[index], maxHp);
+                if (stage != BlockCrackVertexData.CalculateStage(previousDamage, maxHp))
+                    chunkManager?.UpdateBlockCrackStage(this, index, stage);
             }
 
             isDirty = true;
@@ -280,12 +284,28 @@ namespace Core
             maxHp = BlockRegistry.GetBlock(blocks[index])?.MaxHp ?? 0;
             return maxHp > 0;
         }
+        
+        // Called on the main thread immediately before uploading a freshly built mesh.
+        // New vertices start at zero; only sparse damage entries need stage calculation.
+        internal void RestoreCrackStages(BlockCrackVertexData vertices)
+        {
+            if (vertices == null || blockDamage == null)
+                return;
+            foreach (var entry in blockDamage)
+            {
+                int maxHp = BlockRegistry.GetBlock(blocks[entry.Key])?.MaxHp ?? 0;
+                vertices.SetStage(entry.Key, BlockCrackVertexData.CalculateStage(entry.Value, maxHp));
+            }
+        }
 
-        private void ClearBlockDamage(int index)
+        private void ClearBlockDamage(int index, bool updateVisual = true)
         {
             if (blockDamage == null)
                 return;
-            blockDamage.Remove(index);
+            
+            if (blockDamage.Remove(index) && updateVisual)
+                chunkManager?.UpdateBlockCrackStage(this, index, 0);
+            
             if (blockDamage.Count == 0)
                 blockDamage = null;
         }

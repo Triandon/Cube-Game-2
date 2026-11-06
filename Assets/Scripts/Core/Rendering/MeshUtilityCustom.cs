@@ -16,6 +16,12 @@ public static class MeshUtilityCustom
         private const float CoordinateScale = 100f;
         private const float InverseCoordinateScale = 1f / CoordinateScale;
         
+        public byte CrackStage
+        {
+            get => (byte)(normal >> 24);
+            set => normal = (normal & 0x00ffffffu) | ((uint)value << 24);
+        }
+        
         public ChunkVertex(Vector3 position, uint normal,
             uint uv, ushort atlasTile, byte light)
         {
@@ -46,16 +52,7 @@ public static class MeshUtilityCustom
 
         public static uint PackNormal(Vector3 value)
         {
-            // Avoid quantization for the six directions emitted by regular voxel faces.
-            if (value == Vector3.up) return 0u;
-            if (value == Vector3.down) return 1u;
-            if (value == Vector3.right) return 2u;
-            if (value == Vector3.left) return 3u;
-            if (value == Vector3.forward) return 4u;
-            if (value == Vector3.back) return 5u;
-
-            uint xyz = PackSNorm8(value.x) | (PackSNorm8(value.y) << 8) | (PackSNorm8(value.z) << 16);
-            return PackGpuNormal(xyz);
+            return PackSNorm8(value.x) | (PackSNorm8(value.y) << 8) | (PackSNorm8(value.z) << 16);
         }
 
         private static uint PackSNorm8(float value)
@@ -63,21 +60,7 @@ public static class MeshUtilityCustom
             return unchecked((byte)(sbyte)Mathf.RoundToInt(Mathf.Clamp(value, -1f, 1f) * 127f));
         }
 
-        private static uint PackGpuNormal(uint xyz)
-        {
-            // Three-bit direction IDs, matching DecodePackedNormal in the shader.
-            switch (xyz)
-            {
-                case 0x007f00u: return 0u; // +Y
-                case 0x008100u: return 1u; // -Y
-                case 0x00007fu: return 2u; // +X
-                case 0x000081u: return 3u; // -X
-                case 0x7f0000u: return 4u; // +Z
-                case 0x810000u: return 5u; // -Z
-                // Tag 6 retains all three signed bytes for slopes and zero normals.
-                default: return (xyz << 8) | 6u;
-            }
-        }
+        
     }
     
     public sealed class ChunkMeshUploadData
@@ -85,18 +68,23 @@ public static class MeshUtilityCustom
         public readonly ChunkVertex[] vertices;
         public readonly int[] indices;
         public readonly Bounds bounds;
+        public readonly Core.Rendering.BlockCrackVertexData cracks;
 
-        public ChunkMeshUploadData(ChunkVertex[] vertices, int[] indices, Bounds bounds)
+        public ChunkMeshUploadData(ChunkVertex[] vertices, int[] indices, Bounds bounds,
+            Core.Rendering.BlockCrackVertexData cracks = null)
         {
             this.vertices = vertices;
             this.indices = indices;
             this.bounds = bounds;
+            this.cracks = cracks;
         }
     }
 
     public static ChunkMeshUploadData BuildUploadData(MeshData meshData)
     {
         // Snapshot the already-packed data for the upload queue; no attribute conversion pass.
-        return new ChunkMeshUploadData(meshData.CopyVertices(), meshData.triangles.ToArray(), meshData.Bounds);
+        ChunkVertex[] vertices = meshData.CopyVertices();
+        return new ChunkMeshUploadData(vertices, meshData.triangles.ToArray(), meshData.Bounds,
+            meshData.CreateCrackVertexData(vertices));
     }
 }

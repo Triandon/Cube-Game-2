@@ -260,6 +260,7 @@ namespace Core
             try
             {
                 Vector3 worldOrigin = (Vector3)(chunk.coord * Chunk.CHUNK_SIZE);
+                chunk.RestoreCrackStages(result.meshUploadData?.cracks);
                 pagedUploadSucceeded = pagedTerrainStorage.TryUpload(chunk.coord,
                     result.meshRevision, result.meshUploadData, worldOrigin);
             }
@@ -330,8 +331,7 @@ namespace Core
             // Apply block data
             chunk.blocks = res.blocks ?? new byte[ArrayIndexing.Volume];
             chunk.states = res.states ?? new BlockStateContainer[ArrayIndexing.Volume];
-            if (res.blockDamage != null)
-                chunk.blockDamage = res.blockDamage;
+            chunk.blockDamage = res.blockDamage;
             chunk.skyLight = res.skyLight ?? new byte[ArrayIndexing.Volume];
             chunk.blockLight = res.blockLight ?? new byte[ArrayIndexing.Volume];
             
@@ -1027,6 +1027,11 @@ namespace Core
         {
             Chunk chunk = GetChunkFromWorldPos(worldPos);
             return chunk != null ? chunk.GetBlockHealth(chunk.WorldToLocal(worldPos)) : 0;
+        }
+        
+        internal void UpdateBlockCrackStage(Chunk chunk, int blockIndex, byte stage)
+        {
+            pagedTerrainStorage?.UpdateCrackStage(chunk.coord, blockIndex, stage);
         }
 
         // Returns true for an accepted hit. Destruction uses the existing mining lifecycle.

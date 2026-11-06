@@ -48,6 +48,13 @@ namespace Core.Rendering
                     name = "PagedTerrainMaterial",
                     enableInstancing = true
                 };
+                
+                Texture effectsAtlas = indirectMaterial.GetTexture("_EffectsAtlas");
+                if (effectsAtlas == null)
+                    effectsAtlas = Resources.Load<Texture2D>("Textures/EffectsAtlas");
+                if (effectsAtlas != null)
+                    indirectMaterial.SetTexture("_EffectsAtlas", effectsAtlas);
+                indirectMaterial.SetFloat("_EffectsEnabled", effectsAtlas != null ? 1f : 0f);
             }
 
             frustumCullingShader = frustumCullingShaderTemplate;
@@ -79,6 +86,7 @@ namespace Core.Rendering
 
             replacement.Coordinate = coordinate;
             replacement.Revision = revision;
+            replacement.Cracks = meshData.cracks;
             // Cull against a stable logical chunk volume. Mesh bounds can change as
             // neighboring chunks, lighting, or LOD rebuild the visible faces; using
             // those transient bounds made chunks flicker at the edge of the frustum.
@@ -103,6 +111,23 @@ namespace Core.Rendering
 
             allocations[coordinate] = replacement;
             return true;
+        }
+        
+        public void UpdateCrackStage(Vector3Int coordinate, int blockIndex, byte stage)
+        {
+            if (disposed || !allocations.TryGetValue(coordinate, out ChunkMeshHandle allocation) ||
+                allocation.Cracks == null)
+                return; // Higher LODs have no mapping or retained CPU vertex data.
+
+            TerrainMeshPage page = FindPage(allocation.PageId);
+            if (page == null)
+                return;
+            int head = allocation.Cracks.SetStage(blockIndex, stage);
+            for (int r = head; r >= 0; r = allocation.Cracks.Ranges[r].Next)
+            {
+                var range = allocation.Cracks.Ranges[r];
+                page.UpdateVertices(allocation, allocation.Cracks.Vertices, range.Start, range.Count);
+            }
         }
 
         public void Render(Camera camera, Camera previewCamera = null)
@@ -214,6 +239,7 @@ namespace Core.Rendering
 
         private void Retire(ChunkMeshHandle handle)
         {
+            handle.Cracks = null;
             retiredAllocations.Enqueue(new RetiredAllocation(
                 handle, Time.frameCount + DeferredFreeFrames));
         }
@@ -397,6 +423,14 @@ namespace Core.Rendering
                 };
                 liveAllocationCount++;
                 return true;
+            }
+            
+            public void UpdateVertices(ChunkMeshHandle handle,
+                MeshUtilityCustom.ChunkVertex[] vertices, int start, int count)
+            {
+                // Structured SetData operates in 16-byte vertex elements. Only these
+                // block-owned ranges are copied; indices, lighting, and commands are untouched.
+                vertexBuffer.SetData(vertices, start, handle.VertexRange.Offset + start, count);
             }
 
             public void Upload(ChunkMeshHandle handle,
@@ -677,6 +711,7 @@ namespace Core.Rendering
             public int CommandSlot;
             public int Revision;
             public Bounds Bounds;
+            public BlockCrackVertexData Cracks;
         }
 
         [StructLayout(LayoutKind.Sequential)]

@@ -4,6 +4,8 @@ Shader "Custom/PagedVoxelAtlas"
     {
         _MainTex("Texture Atlas", 2D) = "white" {}
         _AtlasTiles("Tiles Per Row", Float) = 16
+        _EffectsAtlas("EffectsAtlas (4 x 4, RGBA)", 2D) = "" {}
+        [HideInInspector] _EffectsEnabled("Effects Enabled", Float) = 0
         [Range(1.0, 3.0)] _LightCurve("Light Curve", Float) = 1.5
         [Range(0.0, 1.0)] _HemisphereStrength("Hemisphere Strength", Float) = 0.3
         [Range(0.0, 1.0)] _GroundAmbient("Downward Face Brightness", Float) = 0.65
@@ -28,6 +30,9 @@ Shader "Custom/PagedVoxelAtlas"
             #include "UnityCG.cginc"
 
             sampler2D _MainTex;
+            sampler2D _EffectsAtlas;
+            float4 _EffectsAtlas_TexelSize;
+            float _EffectsEnabled;
             float _AtlasTiles;
             float _SunLight;
             float _LightingDebugMode;
@@ -63,25 +68,12 @@ Shader "Custom/PagedVoxelAtlas"
                 float4 atlasMeta : TEXCOORD1;
                 half2 light : TEXCOORD2;
                 nointerpolation float3 normalWS : TEXCOORD3;
+                nointerpolation uint crackStage : TEXCOORD4;
             };
             
             float3 DecodePackedNormal(uint packedNormal)
             {
-                // Cube faces use three-bit direction IDs and need no normalization.
-                static const float3 faceNormals[6] =
-                {
-                    float3(0, 1, 0), float3(0, -1, 0),
-                    float3(1, 0, 0), float3(-1, 0, 0),
-                    float3(0, 0, 1), float3(0, 0, -1)
-                };
-                uint direction = packedNormal & 7u;
-                if (direction < 6u)
-                    return faceNormals[direction];
-                if (direction != 6u)
-                    return float3(0, 0, 0); // Reserved/invalid tag, flagged in debug view.
-
-                // Tag 6: preserve the existing signed 8-bit XYZ for sloped faces.
-                packedNormal >>= 8;
+                // Three signed normal bytes; the high byte is the CPU-calculated crack stage.
                 int3 components = int3(
                     (int)(packedNormal << 24) >> 24,
                     (int)(packedNormal << 16) >> 24,
@@ -106,6 +98,7 @@ Shader "Custom/PagedVoxelAtlas"
                 v2f output;
                 output.posCS = mul(UNITY_MATRIX_VP, float4(positionWS, 1.0));
                 output.normalWS = DecodePackedNormal(vertex.normal);
+                output.crackStage = vertex.normal >> 24;
 
                 uint packedU = vertex.uv & 0xffffu;
                 uint packedV = vertex.uv >> 16;
@@ -171,6 +164,19 @@ Shader "Custom/PagedVoxelAtlas"
                 }
 
                 fixed4 color = tex2D(_MainTex, baseUV + tileLocal * tileSize);
+                                [branch]
+                if (input.crackStage > 0u && _EffectsEnabled > 0.5)
+                {
+                    // Stages 1-3 occupy the first three tiles, left to right in the top row.
+                    // Reuse each face's existing UVs, including rotated/sloped/custom geometry.
+                    float effectTile = (float)(min(input.crackStage, 3u) - 1u);
+                    float2 inset = 0.5 * _EffectsAtlas_TexelSize.xy * 4.0;
+                    float2 effectLocal = clamp(tileLocal, inset, 1.0 - inset);
+                    float2 effectUV = (float2(effectTile, 3.0) + effectLocal) * 0.25;
+                    // Explicit LOD avoids derivatives across stage branches and tile mip bleeding.
+                    fixed4 cracks = tex2Dlod(_EffectsAtlas, float4(effectUV, 0, 0));
+                    color.rgb = lerp(color.rgb, cracks.rgb, cracks.a);
+                }
                 half hemisphere = (half)normalWS.y * 0.5h + 0.5h;
                 half hemisphereLight = lerp((half)_GroundAmbient, (half)_TopAmbient, hemisphere);
                 half faceBrightness = lerp(1.0h, hemisphereLight, (half)_HemisphereStrength);
